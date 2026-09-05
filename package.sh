@@ -90,8 +90,7 @@ if [ -f /home/so95/.config/unikey/config ] && [ ! -f /home/so95/.config/gotiengv
   cp /home/so95/.config/unikey/config /home/so95/.config/gotiengviet/config || true
   chown so95:so95 /home/so95/.config/gotiengviet/config 2>/dev/null || true
 fi
-sudo -u so95 env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus gsettings set org.gnome.desktop.input-sources sources "[('xkb','us'),('ibus','gotiengviet')]" 2>/dev/null || true
-(ibus restart 2>/dev/null &) || true
+sudo -u so95 env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus ibus restart 2>/dev/null || true
 echo "GoTiengViet $VERSION installed."
 POST
 chmod 755 /tmp/gotiengviet-deb/DEBIAN/postinst

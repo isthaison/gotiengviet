@@ -1,9 +1,6 @@
 package engine
 
-import (
-	"strings"
-	"unicode"
-)
+import "strings"
 
 // Từ điển tối thiểu cho spell check - có thể mở rộng từ file
 var vietDict = map[string]bool{
@@ -36,11 +33,7 @@ func IsValidVietnameseWord(word string) bool {
 }
 
 func isEnglishWord(s string) bool {
-	// Nếu chứa w, j, z đơn lẻ hoặc cluster st, sh, th không phải tiếng Việt
-	if strings.Contains(s, "w") && !strings.Contains(s, "ươ") && !strings.Contains(s, "oa") {
-		// w đơn trong tiếng Anh như "test" có s, nhưng tiếng Việt cũng có w trong telex
-	}
-	// Đơn giản: nếu từ có chữ cái tiếng Anh thuần và không có dấu tiếng Việt thì coi là English
+	// Nếu không có dấu tiếng Việt và chứa pattern tiếng Anh thì là English
 	hasVietDiacritic := false
 	for _, r := range s {
 		if r == 'ă' || r == 'â' || r == 'ê' || r == 'ô' || r == 'ơ' || r == 'ư' || r == 'đ' ||
@@ -91,27 +84,89 @@ func isEnglishWord(s string) bool {
 }
 
 func isValidSyllableStructure(s string) bool {
-	// Kiểm tra cấu trúc: onset + nucleus + coda
-	// Đơn giản: phải có ít nhất 1 nguyên âm
-	hasVowel := false
-	for _, r := range s {
+	runes := []rune(s)
+	if len(runes) == 0 {
+		return true
+	}
+
+	firstV := -1
+	lastV := -1
+	vCount := 0
+	tone := ToneNone
+
+	for i, r := range runes {
 		if isVowel(r) {
-			hasVowel = true
-			break
+			if firstV == -1 {
+				firstV = i
+			}
+			lastV = i
+			vCount++
+		}
+		t := getTone(r)
+		if t != ToneNone {
+			if tone != ToneNone && tone != t {
+				return false // 2 thanh điệu xung đột trong 1 từ
+			}
+			tone = t
 		}
 	}
-	if !hasVowel {
+
+	if vCount == 0 {
 		return false
 	}
-	// Phụ âm cuối hợp lệ: c, m, n, p, t, ch, ng, nh
-	// Nếu kết thúc bằng phụ âm không hợp lệ như s, f, j, w, z thì không hợp lệ (trừ khi là tiếng Anh đã loại)
-	last := rune(s[len(s)-1])
-	if unicode.IsLetter(last) && !isVowel(last) {
-		validFinals := []rune{'c', 'm', 'n', 'p', 't', 'o', 'u', 'i', 'y', 'a', 'e'} // nới lỏng
-		// Thực chất tiếng Việt final chỉ: c, ch, m, n, ng, nh, p, t
-		// Nhưng để không quá chặt, cho phép
-		_ = validFinals
+
+	// Kiểm tra phụ âm đầu (onset)
+	onset := string(runes[:firstV])
+	if len(onset) > 0 {
+		firstVBare := bareLower(runes[firstV])
+		if onset == "k" {
+			if firstVBare != 'i' && firstVBare != 'e' && firstVBare != 'y' {
+				return false
+			}
+		} else if onset == "c" {
+			if firstVBare == 'i' || firstVBare == 'e' || firstVBare == 'y' {
+				return false
+			}
+		} else if onset == "gh" {
+			if firstVBare != 'i' && firstVBare != 'e' {
+				return false
+			}
+		} else if onset == "ngh" {
+			if firstVBare != 'i' && firstVBare != 'e' && firstVBare != 'y' {
+				return false
+			}
+		} else if onset == "ng" {
+			if firstVBare == 'i' || firstVBare == 'e' || firstVBare == 'y' {
+				return false
+			}
+		}
 	}
+
+	// Kiểm tra phụ âm cuối (coda)
+	codaRunes := runes[lastV+1:]
+	coda := string(codaRunes)
+	if len(coda) > 0 {
+		validCodas := map[string]bool{
+			"c": true, "ch": true, "m": true, "n": true, "ng": true, "nh": true, "p": true, "t": true,
+		}
+		if !validCodas[coda] {
+			return false
+		}
+		// Quy tắc âm tắc vô thanh cuối c, ch, p, t chỉ đi với thanh SẮC hoặc NẶNG
+		if coda == "c" || coda == "ch" || coda == "p" || coda == "t" {
+			if tone == ToneHuyen || tone == ToneHoi || tone == ToneNga {
+				return false
+			}
+		}
+	} else {
+		// ă, â không bao giờ đứng cuối âm tiết mở
+		lastBare := bareLower(runes[lastV])
+		lastDiac := getDiacritic(runes[lastV])
+		if lastBare == 'a' && (lastDiac == DiacriticBreve || lastDiac == DiacriticCircumflex) {
+			return false
+		}
+	}
+
 	return true
 }
 

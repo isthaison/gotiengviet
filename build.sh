@@ -10,7 +10,7 @@ echo "[2/4] Build Go binaries (CGO)..."
 CGO_ENABLED=1 go build -o /tmp/gotiengviet-demo ./cmd/demo
 echo "  demo -> /tmp/gotiengviet-demo"
 CGO_ENABLED=1 go build -o /tmp/ibus-setup-gotiengviet ./cmd/setup
-echo "  setup -> /tmp/ibus-setup-gotiengviet (Go + gtk+-3.0)"
+echo "  setup -> /tmp/ibus-setup-gotiengviet (Go + gtk+-3.0 + appindicator, 1 app duy nhất)"
 CGO_ENABLED=1 go build -o /tmp/ibus-engine-gotiengviet-go ./cmd/gotiengviet-ibus
 echo "  gotiengviet-ibus (Go CGO demo) -> /tmp/ibus-engine-gotiengviet-go"
 

@@ -1,8 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <rect width="48" height="48" rx="8" fill="#d32f2f"/>
-  <!-- Stylized G with diacritic -->
-  <text x="24" y="28" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="20" font-weight="bold" fill="white">Gõ</text>
-  <text x="24" y="40" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="8" fill="white" opacity="0.9">TV</text>
-  <!-- Small accent mark -->
-  <path d="M 18 10 L 22 6 L 26 10" stroke="white" stroke-width="1.5" fill="none" opacity="0.8"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E53935"/>
+      <stop offset="1" stop-color="#B71C1C"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="44" height="44" rx="9" fill="url(#bg)"/>
+  <rect x="2.75" y="2.75" width="42.5" height="42.5" rx="8" fill="none" stroke="#7F0000" stroke-width="1.5" opacity="0.55"/>
+  <!-- Glyph Ắ: nhận diện ngay gõ tiếng Việt, rõ ở 16px -->
+  <text x="24" y="34.5" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="26" font-weight="bold" fill="#FFFFFF">Ắ</text>
+  <!-- Gạch vàng dưới: điểm nhấn -->
+  <rect x="14" y="38" width="20" height="2.4" rx="1.2" fill="#FFEB3B" opacity="0.95"/>
 </svg>

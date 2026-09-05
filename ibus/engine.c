@@ -6,6 +6,7 @@
 #include <glib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/stat.h>
 
 #define ENGINE_NAME "gotiengviet"
 
@@ -32,15 +33,6 @@ typedef struct {
 /* Global maps */
 static GHashTable *char_info_map = NULL; // gunichar (as gpointer) -> CharInfo*
 static GHashTable *reverse_map = NULL;   // key string "bare:dia:tone:upper" -> gunichar
-
-static guint charinfo_hash(gconstpointer k){
-    const CharInfo *c = k;
-    return (guint)(c->bare*31 + c->diacritic*17 + c->tone*7 + (c->is_upper?1:0));
-}
-static gboolean charinfo_equal(gconstpointer a, gconstpointer b){
-    const CharInfo *x=a, *y=b;
-    return x->bare==y->bare && x->diacritic==y->diacritic && x->tone==y->tone && x->is_upper==y->is_upper;
-}
 
 static gchar* reverse_key(gunichar bare, int dia, int tone, gboolean upper){
     return g_strdup_printf("%u:%d:%d:%d", (guint)bare, dia, tone, upper?1:0);
@@ -344,6 +336,340 @@ static gboolean try_remove(GArray *buf){
     return FALSE;
 }
 
+/* ---- Spellcheck & gợi ý: từ điển chung + levenshtein (port từ engine/spell.go) ---- */
+static const char *viet_dict_true[] = {
+ "chào","xin","cảm","ơn","tiếng","việt","được","hoặc","không","có","của","và","là",
+ "trong","người","một","những","các","đã","sẽ","đang","này","kia","đó","gì","nào",
+ "sao","thế","rất","quá","lắm","cũng","vẫn","còn","hết","nữa","đi","đến","về",
+ "lại","lên","xuống","ra","vào","làm","việc","học","tập","yêu","thương","nhà",
+ "trường","lớp","bạn","thầy","cô","gia","đình","bố","mẹ","anh","chị","em","con",
+ "ăn","uống","ngủ","chơi","đọc","viết","nghe","nói","biết","hiểu","muốn","thích",
+ "cần","phải","nên","đừng","giúp","cho","tặng","mua","bán","tiền","cơm","nước",
+ "xe","đường","phố","chợ","sông","núi","biển","cây","hoa","trời","đất","nắng",
+ "mưa","gió","ngày","đêm","sáng","tối","giờ","hôm","nay","mai","tuần","tháng",
+ "năm","xuân","tết","đẹp","xấu","tốt","mới","cũ","lớn","nhỏ","cao","thấp","dài",
+ "ngắn","nhanh","chậm","mạnh","vui","buồn","khỏe","mệt","đói","nóng","lạnh",
+ "sạch","ngon","đông","yên","tĩnh","hòa","hoà","hóa","hoá","thưa","thừa",
+ "dạ","vâng","ơi","nhé","nha","chứ","mà","thì","rằng","nếu","vì","nhưng",
+ "hay","với","giữa","trên","dưới","trước","sau","bên","ngoài","khắp",
+ "mọi","mỗi","mấy","bao","nhiêu","đâu","ai","khi","ở","từ","do","để","như",
+ "bằng","hơn","nhất","cả","dù","ngay","vừa","đều","bác","bạc","bàn","bàng","bà",
+ "hóc","hòn","hòng","hò","công","ca","ke","kê","ki","nga","ngo","ghe","ghê","ga","go",
+ "tha","thơm","thơ","test","thử","nghiệm","máy","tính","phần","mềm","hệ","thống",
+ "cài","đặt","chính","tả","gợi","ý","dấu","thanh","kiểm","tra","văn","bản",
+ "tin","nhắn","điện","thoại","chú","chủ","chúng","tôi","ta","họ","nó","mình",
+ NULL
+};
+/* Từ sai đã biết -> luôn gợi ý sửa */
+static const char *viet_dict_false[] = { "hoăc", "bàc", "vièt", "hòc", "kông", "ngha", "chàol", "tếst", "đượck", "thuaw", NULL };
+
+static int dict_lookup(const char *lower_utf8){
+    for(int i=0; viet_dict_false[i]; i++) if(strcmp(lower_utf8, viet_dict_false[i])==0) return 0;
+    for(int i=0; viet_dict_true[i]; i++) if(strcmp(lower_utf8, viet_dict_true[i])==0) return 1;
+    return -1;
+}
+
+static gboolean is_valid_coda(const char *coda, int coda_len){
+    if(coda_len == 0) return TRUE;
+    if(coda_len == 1){
+        char c = coda[0];
+        return (c=='c' || c=='m' || c=='n' || c=='p' || c=='t');
+    }
+    if(coda_len == 2){
+        return ((coda[0]=='c' && coda[1]=='h') ||
+                (coda[0]=='n' && coda[1]=='g') ||
+                (coda[0]=='n' && coda[1]=='h'));
+    }
+    return FALSE;
+}
+
+static gboolean is_valid_onset(const gunichar *ucs, glong first_v){
+    if(first_v <= 0) return TRUE;
+    if(first_v == 1){
+        gunichar c = bare_lower(ucs[0]);
+        if(c=='b'||c=='c'||c=='d'||c=='g'||c=='h'||c=='k'||c=='l'||c=='m'||
+           c=='n'||c=='p'||c=='r'||c=='s'||c=='t'||c=='v'||c=='x'||ucs[0]==0x0111||ucs[0]==0x0110)
+            return TRUE;
+        return FALSE;
+    }
+    if(first_v == 2){
+        gunichar c0 = bare_lower(ucs[0]), c1 = bare_lower(ucs[1]);
+        if(c0=='c'&&c1=='h') return TRUE;
+        if(c0=='g'&&c1=='h') return TRUE;
+        if(c0=='g'&&c1=='i') return TRUE;
+        if(c0=='k'&&c1=='h') return TRUE;
+        if(c0=='n'&&c1=='g') return TRUE;
+        if(c0=='n'&&c1=='h') return TRUE;
+        if(c0=='p'&&c1=='h') return TRUE;
+        if(c0=='q'&&c1=='u') return TRUE;
+        if(c0=='t'&&c1=='h') return TRUE;
+        if(c0=='t'&&c1=='r') return TRUE;
+        return FALSE;
+    }
+    if(first_v == 3){
+        gunichar c0 = bare_lower(ucs[0]), c1 = bare_lower(ucs[1]), c2 = bare_lower(ucs[2]);
+        if(c0=='n'&&c1=='g'&&c2=='h') return TRUE;
+        return FALSE;
+    }
+    return FALSE;
+}
+
+static gboolean spell_word_valid(const char *utf8){
+    if(!utf8 || !*utf8) return TRUE;
+    glong len = 0;
+    gunichar *ucs = g_utf8_to_ucs4(utf8, -1, NULL, &len, NULL);
+    if(!ucs) return TRUE;
+    if(len < 2){ g_free(ucs); return TRUE; }
+
+    for(glong i=0; i<len; i++){
+        if(g_ascii_isdigit((gchar)ucs[i]) || !g_unichar_isalpha(ucs[i])){
+            g_free(ucs); return TRUE;
+        }
+    }
+
+    gchar *lower = g_utf8_strdown(utf8, -1);
+    int d = dict_lookup(lower);
+    if(d == 0){ g_free(lower); g_free(ucs); return FALSE; }
+    if(d == 1){ g_free(lower); g_free(ucs); return TRUE; }
+    g_free(lower);
+
+    gboolean has_mark = FALSE;
+    for(glong i=0; i<len; i++){
+        CharInfo *info = get_info(ucs[i]);
+        if(info && (info->diacritic != DIAC_NONE || info->tone != TONE_NONE)){
+            has_mark = TRUE; break;
+        }
+        if(ucs[i] == 0x0111 || ucs[i] == 0x0110){ has_mark = TRUE; break; }
+    }
+    if(!has_mark){
+        gunichar last_c = bare_lower(ucs[len-1]);
+        if(last_c == 'w' || last_c == 'f' || last_c == 'j' || last_c == 'z'){
+            g_free(ucs); return FALSE;
+        }
+        g_free(ucs); return TRUE;
+    }
+
+    glong first_v = -1, last_v = -1;
+    int v_count = 0;
+    int tone = TONE_NONE;
+
+    for(glong i=0; i<len; i++){
+        if(is_vowel(ucs[i])){
+            if(first_v == -1) first_v = i;
+            last_v = i;
+            v_count++;
+        }
+        int t = get_tone(ucs[i]);
+        if(t != TONE_NONE){
+            if(tone != TONE_NONE && tone != t){ g_free(ucs); return FALSE; }
+            tone = t;
+        }
+    }
+
+    if(v_count == 0){ g_free(ucs); return FALSE; }
+
+    glong eff_first_v = first_v;
+    if(first_v == 1 && bare_lower(ucs[0]) == 'g' && bare_lower(ucs[1]) == 'i' && len > 2 && is_vowel(ucs[2])){
+        eff_first_v = 2;
+    } else if(first_v == 1 && bare_lower(ucs[0]) == 'q' && bare_lower(ucs[1]) == 'u' && len > 2 && is_vowel(ucs[2])){
+        eff_first_v = 2;
+    }
+    for(glong i=eff_first_v; i<=last_v; i++){
+        if(!is_vowel(ucs[i])){ g_free(ucs); return FALSE; }
+    }
+
+    if(!is_valid_onset(ucs, eff_first_v)){ g_free(ucs); return FALSE; }
+
+    gunichar first_v_bare = bare_lower(ucs[eff_first_v]);
+    gunichar first_c = bare_lower(ucs[0]);
+    if(eff_first_v == 1){
+        if(first_c == 'k'){
+            if(first_v_bare != 'i' && first_v_bare != 'e' && first_v_bare != 'y'){
+                g_free(ucs); return FALSE;
+            }
+        } else if(first_c == 'c'){
+            if(first_v_bare == 'i' || first_v_bare == 'e' || first_v_bare == 'y'){
+                g_free(ucs); return FALSE;
+            }
+        }
+    } else if(eff_first_v == 2){
+        gunichar second_c = bare_lower(ucs[1]);
+        if(first_c == 'g' && second_c == 'h'){
+            if(first_v_bare != 'i' && first_v_bare != 'e'){ g_free(ucs); return FALSE; }
+        } else if(first_c == 'g' && second_c != 'i'){
+            if(first_v_bare == 'e'){ g_free(ucs); return FALSE; }
+        } else if(first_c == 'n' && second_c == 'g'){
+            if(first_v_bare == 'i' || first_v_bare == 'e' || first_v_bare == 'y'){ g_free(ucs); return FALSE; }
+        }
+    } else if(eff_first_v == 3){
+        if(first_v_bare != 'i' && first_v_bare != 'e' && first_v_bare != 'y'){ g_free(ucs); return FALSE; }
+    }
+
+    glong coda_len = len - 1 - last_v;
+    char coda_buf[16] = {0};
+    if(coda_len > 0){
+        if(coda_len > 2){ g_free(ucs); return FALSE; }
+        for(glong i=0; i<coda_len; i++){
+            coda_buf[i] = (char)bare_lower(ucs[last_v + 1 + i]);
+        }
+        if(!is_valid_coda(coda_buf, (int)coda_len)){ g_free(ucs); return FALSE; }
+    }
+
+    if(coda_len > 0){
+        gboolean is_voiceless_stop = FALSE;
+        if(coda_len == 1 && (coda_buf[0]=='c' || coda_buf[0]=='p' || coda_buf[0]=='t')) is_voiceless_stop = TRUE;
+        if(coda_len == 2 && coda_buf[0]=='c' && coda_buf[1]=='h') is_voiceless_stop = TRUE;
+
+        if(is_voiceless_stop){
+            if(tone == TONE_HUYEN || tone == TONE_HOI || tone == TONE_NGA){
+                g_free(ucs); return FALSE;
+            }
+        }
+    }
+
+    if(coda_len == 0){
+        gunichar last_v_bare = bare_lower(ucs[last_v]);
+        int last_v_diac = get_diac(ucs[last_v]);
+        if(last_v_bare == 'a' && (last_v_diac == DIAC_BREVE || last_v_diac == DIAC_CIRCUMFLEX)){
+            g_free(ucs); return FALSE;
+        }
+    }
+
+    g_free(ucs);
+    return TRUE;
+}
+
+static int lev_ucs4(const gunichar *a, glong la, const gunichar *b, glong lb){
+    if(la==0) return (int)lb;
+    if(lb==0) return (int)la;
+    int *prev=g_new(int, lb+1), *cur=g_new(int, lb+1);
+    for(glong j=0;j<=lb;j++) prev[j]=(int)j;
+    for(glong i=1;i<=la;i++){
+        cur[0]=(int)i;
+        for(glong j=1;j<=lb;j++){
+            int c=(a[i-1]==b[j-1])?0:1;
+            int m=prev[j]+1;
+            if(cur[j-1]+1<m) m=cur[j-1]+1;
+            if(prev[j-1]+c<m) m=prev[j-1]+c;
+            cur[j]=m;
+        }
+        int *t=prev; prev=cur; cur=t;
+    }
+    int r=prev[lb];
+    g_free(prev); g_free(cur);
+    return r;
+}
+
+static void add_candidate_unique(GPtrArray *out, const char *cand){
+    if(!cand || !*cand) return;
+    for(guint k=0; k<out->len; k++){
+        if(strcmp((char*)out->pdata[k], cand) == 0) return;
+    }
+    g_ptr_array_add(out, g_strdup(cand));
+}
+
+static GPtrArray* get_suggestions(const char *utf8){
+    GPtrArray *out = g_ptr_array_new_with_free_func(g_free);
+    if(!utf8 || !*utf8) return out;
+    gchar *lower = g_utf8_strdown(utf8, -1);
+    glong llen = 0;
+    gunichar *lu = g_utf8_to_ucs4(lower, -1, NULL, &llen, NULL);
+    if(!lu){ g_free(lower); return out; }
+
+    // 1. Đặc trị các lỗi gõ Telex kẹt phím ở đuôi:
+    if(strcmp(lower, "hoăc") == 0 || strcmp(lower, "hoacw") == 0){
+        add_candidate_unique(out, "hoặc");
+    }
+    if(strcmp(lower, "thuaw") == 0){
+        add_candidate_unique(out, "thưa");
+        add_candidate_unique(out, "thừa");
+    }
+
+    // 2. Thử cắt bỏ phụ âm thừa ở đuôi:
+    if(llen >= 3){
+        gunichar last_c = bare_lower(lu[llen-1]);
+        if(last_c=='s' || last_c=='f' || last_c=='r' || last_c=='x' || last_c=='j' ||
+           last_c=='k' || last_c=='l' || last_c=='w' || last_c=='z'){
+            gchar *truncated = g_ucs4_to_utf8(lu, llen-1, NULL, NULL, NULL);
+            if(truncated){
+                if(spell_word_valid(truncated)){
+                    add_candidate_unique(out, truncated);
+                }
+                g_free(truncated);
+            }
+        }
+    }
+
+    // 3. Đổi dấu thanh cho âm tắc c, ch, p, t:
+    glong first_v = -1, last_v = -1;
+    int tone_pos = -1;
+    for(glong i=0; i<llen; i++){
+        if(is_vowel(lu[i])){
+            if(first_v == -1) first_v = i;
+            last_v = i;
+            if(get_tone(lu[i]) != TONE_NONE) tone_pos = (int)i;
+        }
+    }
+    if(last_v != -1 && last_v < llen - 1 && tone_pos != -1){
+        CharInfo *v_info = get_info(lu[tone_pos]);
+        if(v_info && (v_info->tone == TONE_HUYEN || v_info->tone == TONE_HOI || v_info->tone == TONE_NGA)){
+            int try_tones[] = {TONE_SAC, TONE_NANG, 0};
+            for(int ti=0; try_tones[ti]; ti++){
+                gunichar new_v;
+                if(lookup_char(v_info->bare, v_info->diacritic, try_tones[ti], v_info->is_upper, &new_v)){
+                    gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+                    alt_ucs[tone_pos] = new_v;
+                    gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+                    if(alt_str){
+                        if(spell_word_valid(alt_str)){
+                            add_candidate_unique(out, alt_str);
+                        }
+                        g_free(alt_str);
+                    }
+                    g_free(alt_ucs);
+                }
+            }
+        }
+    }
+
+    // 4. Sửa phụ âm đầu k/c, ngh/ng, gh/g:
+    if(llen >= 2 && bare_lower(lu[0]) == 'k'){
+        gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+        alt_ucs[0] = 'c';
+        gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+        if(alt_str){
+            if(spell_word_valid(alt_str)) add_candidate_unique(out, alt_str);
+            g_free(alt_str);
+        }
+        g_free(alt_ucs);
+    } else if(llen >= 3 && bare_lower(lu[0]) == 'n' && bare_lower(lu[1]) == 'g' && bare_lower(lu[2]) == 'h'){
+        gunichar *alt_ucs = g_new(gunichar, llen - 1);
+        alt_ucs[0] = 'n'; alt_ucs[1] = 'g';
+        for(glong i=3; i<llen; i++) alt_ucs[i-1] = lu[i];
+        gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen - 1, NULL, NULL, NULL);
+        if(alt_str){
+            if(spell_word_valid(alt_str)) add_candidate_unique(out, alt_str);
+            g_free(alt_str);
+        }
+        g_free(alt_ucs);
+    }
+
+    // 5. Tìm trong từ điển bằng khoảng cách Levenshtein:
+    for(int i=0; viet_dict_true[i] && out->len < 5; i++){
+        glong dlen = 0;
+        gunichar *du = g_utf8_to_ucs4(viet_dict_true[i], -1, NULL, &dlen, NULL);
+        if(!du) continue;
+        glong diff = llen > dlen ? llen - dlen : dlen - llen;
+        if(diff <= 2 && lev_ucs4(lu, llen, du, dlen) <= 2){
+            add_candidate_unique(out, viet_dict_true[i]);
+        }
+        g_free(du);
+    }
+
+    g_free(lu); g_free(lower);
+    return out;
+}
+
 /* Telex helpers */
 static gboolean telex_is_tone(gunichar k, int *out){
     switch(to_lower_g(k)){
@@ -363,10 +689,6 @@ static gboolean telex_transform(GArray *buf, gunichar key, gboolean modern){
     }
     if(buf->len==0 && key=='w'){ gunichar c=0x01B0; g_array_append_val(buf,c); return TRUE; }
     if(buf->len==0 && key=='W'){ gunichar c=0x01AF; g_array_append_val(buf,c); return TRUE; }
-    if(buf->len==0 && (key=='w'||key=='W')){
-        gunichar w = (key=='w')? 0x01B0 : 0x01AF;
-        g_array_set_size(buf,0); g_array_append_val(buf,w); return TRUE;
-    }
     if(to_lower_g(key)=='d' && buf->len>0){
         gunichar last=g_array_index(buf,gunichar,buf->len-1);
         if(bare_lower(last)=='d'){
@@ -578,31 +900,177 @@ static void ucs4_to_gstring(GArray *arr, GString *s){
 /* IBus Engine definition */
 typedef struct _GoTiengVietEngine IBusGoTiengVietEngine;
 typedef struct _GoTiengVietEngineClass IBusGoTiengVietEngineClass;
-struct _GoTiengVietEngine { IBusEngine parent; GString *preedit; gboolean mode_telex; gboolean modern; gboolean spellcheck; };
+struct _GoTiengVietEngine { IBusEngine parent; GString *preedit; gboolean mode_telex; gboolean modern; gboolean spellcheck; gchar **candidates; int n_candidates; int cand_cursor; };
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
 G_DEFINE_TYPE(IBusGoTiengVietEngine, ibus_gotiengviet_engine, IBUS_TYPE_ENGINE)
 
+/* ---- Macro & emoji: gõ tắt + space -> mở rộng (port từ engine/macro.go) ---- */
+static const char *macro_pairs[][2] = {
+    {"vn","Việt Nam"}, {"hn","Hà Nội"}, {"hcm","Hồ Chí Minh"},
+    {"dc","được"}, {"ko","không"}, {"ntn","như thế nào"},
+    {"cx","cũng"}, {"cb","chuẩn bị"},
+    {NULL, NULL}
+};
+static const char *emoji_pairs[][2] = {
+    {":smile:","😊"}, {":heart:","❤️"}, {":laugh:","😂"},
+    {":sad:","😢"}, {":angry:","😠"}, {":thumbsup:","👍"},
+    {":fire:","🔥"}, {":star:","⭐"}, {":check:","✅"}, {":vim:","💚"},
+    {NULL, NULL}
+};
+/* Trả về chuỗi mới (caller g_free) — đã expand macro/emoji, hoặc bản sao nguyên văn */
+static gchar* expand_word(const char *word){
+    if(!word) return g_strdup("");
+    gchar *lower=g_utf8_strdown(word,-1);
+    for(int i=0; macro_pairs[i][0]; i++){
+        if(strcmp(lower, macro_pairs[i][0])==0){ gchar *r=g_strdup(macro_pairs[i][1]); g_free(lower); return r; }
+    }
+    for(int i=0; emoji_pairs[i][0]; i++){
+        if(strcmp(word, emoji_pairs[i][0])==0 || strcmp(lower, emoji_pairs[i][0])==0){
+            gchar *r=g_strdup(emoji_pairs[i][1]); g_free(lower); return r;
+        }
+    }
+    g_free(lower);
+    return g_strdup(word);
+}
+static void clear_candidates(IBusGoTiengVietEngine *e){
+    if(e->candidates){
+        for(int i=0;i<e->n_candidates;i++) g_free(e->candidates[i]);
+        g_free(e->candidates);
+        e->candidates=NULL;
+    }
+    e->n_candidates=0;
+    e->cand_cursor=0;
+}
+static void hide_suggest(IBusGoTiengVietEngine *e, IBusEngine *engine){
+    clear_candidates(e);
+    ibus_engine_hide_lookup_table(engine);
+}
+/* Đẩy preedit + gạch đỏ từ sai + bảng gợi ý (Tab chọn, Up/Down di chuyển, Esc bỏ) */
+static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cursor, gboolean visible){
+    glong plen=g_utf8_strlen(e->preedit->str, -1);
+    gboolean bad=(e->spellcheck && plen>=2 && !spell_word_valid(e->preedit->str));
+    IBusText *t=ibus_text_new_from_string(e->preedit->str);
+    if(bad) ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_ERROR, 0, (gint)plen);
+    ibus_engine_update_preedit_text(engine,t,cursor,visible);
+    clear_candidates(e);
+    if(!bad){ ibus_engine_hide_lookup_table(engine); return; }
+    GPtrArray *sugs=get_suggestions(e->preedit->str);
+    if(sugs->len==0){ ibus_engine_hide_lookup_table(engine); g_ptr_array_free(sugs,TRUE); return; }
+    e->n_candidates=(int)sugs->len;
+    e->cand_cursor=0;
+    e->candidates=g_new(gchar*, sugs->len);
+    IBusLookupTable *table=ibus_lookup_table_new(5, 0, TRUE, FALSE);
+    for(guint i=0;i<sugs->len;i++){
+        e->candidates[i]=g_strdup((char*)sugs->pdata[i]);
+        ibus_lookup_table_append_candidate(table, ibus_text_new_from_string(e->candidates[i]));
+    }
+    g_ptr_array_free(sugs,TRUE);
+    ibus_engine_update_lookup_table(engine, table, TRUE);
+    g_object_unref(table);
+}
 static void ibus_gotiengviet_engine_reset(IBusGoTiengVietEngine *e){
     if(e->preedit) g_string_assign(e->preedit,"");
 }
+// Tray đổi method khi đang gõ không gây focus_in, nên reload config theo mtime mỗi phím
+static time_t cfg_mtime_cache = 0;
+static void reload_config_if_changed(IBusGoTiengVietEngine *e){
+    gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+    struct stat st;
+    if(stat(path, &st) == 0 && st.st_mtime != cfg_mtime_cache){
+        cfg_mtime_cache = st.st_mtime;
+        // load_config đã có ở dưới (forward); gọi trực tiếp qua GKeyFile để tránh phụ thuộc thứ tự
+        GKeyFile *kf = g_key_file_new();
+        if(g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)){
+            gchar *m = g_key_file_get_string(kf, "input", "method", NULL);
+            if(m){ e->mode_telex = (g_strcmp0(m, "vni") != 0 && g_strcmp0(m, "VNI") != 0); g_free(m); }
+            gchar *mo = g_key_file_get_string(kf, "input", "modern", NULL);
+            if(mo){ e->modern = !(g_strcmp0(mo, "false") == 0 || g_strcmp0(mo, "0") == 0); g_free(mo); }
+            gchar *sp = g_key_file_get_string(kf, "input", "spellcheck", NULL);
+            if(sp){ e->spellcheck = !(g_strcmp0(sp, "false") == 0 || g_strcmp0(sp, "0") == 0); g_free(sp); }
+        }
+        g_key_file_free(kf);
+    }
+    g_free(path);
+}
 static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, guint keyval, guint keycode, guint modifiers){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    reload_config_if_changed(e);
     if(modifiers & IBUS_RELEASE_MASK) return FALSE;
+    // Phím tắt Ctrl/Alt/Super (Ctrl+C/V/X/Z, Ctrl+S...) — commit chữ đang dở rồi nhường cho app
+    if(modifiers & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK | IBUS_SUPER_MASK | IBUS_HYPER_MASK | IBUS_META_MASK)){
+        if(e->preedit->len>0){
+            IBusText *t=ibus_text_new_from_string(e->preedit->str);
+            ibus_engine_commit_text(engine,t);
+            ibus_gotiengviet_engine_reset(e);
+            IBusText *empty=ibus_text_new_from_string("");
+            ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+            hide_suggest(e, engine);
+        }
+        return FALSE;
+    }
+    // Tab chọn gợi ý, 1..5 chọn nhanh, Up/Down di chuyển, Enter commit gợi ý, Esc bỏ bảng gợi ý
+    if(e->n_candidates>0 && e->candidates){
+        if(keyval==IBUS_Tab){
+            g_string_assign(e->preedit, e->candidates[e->cand_cursor]);
+            push_preedit(e, engine, e->preedit->len, TRUE);
+            return TRUE;
+        }
+        if((keyval>=IBUS_1 && keyval<=IBUS_5) || (keyval>=IBUS_KP_1 && keyval<=IBUS_KP_5)){
+            int idx = (keyval>=IBUS_1 && keyval<=IBUS_5) ? (keyval - IBUS_1) : (keyval - IBUS_KP_1);
+            if(idx < e->n_candidates){
+                g_string_assign(e->preedit, e->candidates[idx]);
+                gchar *word=expand_word(e->preedit->str);
+                IBusText *t=ibus_text_new_from_string(word);
+                g_free(word);
+                ibus_engine_commit_text(engine,t);
+                ibus_gotiengviet_engine_reset(e);
+                IBusText *empty=ibus_text_new_from_string("");
+                ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+                hide_suggest(e, engine);
+                return TRUE;
+            }
+        }
+        if(keyval==IBUS_Up || keyval==IBUS_Down){
+            if(keyval==IBUS_Down) e->cand_cursor=(e->cand_cursor+1)%e->n_candidates;
+            else e->cand_cursor=(e->cand_cursor+e->n_candidates-1)%e->n_candidates;
+            IBusLookupTable *table=ibus_lookup_table_new(5, (guint)e->cand_cursor, TRUE, FALSE);
+            for(int i=0;i<e->n_candidates;i++)
+                ibus_lookup_table_append_candidate(table, ibus_text_new_from_string(e->candidates[i]));
+            ibus_engine_update_lookup_table(engine, table, TRUE);
+            g_object_unref(table);
+            return TRUE;
+        }
+        if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
+            g_string_assign(e->preedit, e->candidates[e->cand_cursor]);
+            gchar *word=expand_word(e->preedit->str);
+            IBusText *t=ibus_text_new_from_string(word);
+            g_free(word);
+            ibus_engine_commit_text(engine,t);
+            ibus_gotiengviet_engine_reset(e);
+            IBusText *empty=ibus_text_new_from_string("");
+            ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+            hide_suggest(e, engine);
+            return TRUE;
+        }
+        if(keyval==IBUS_Escape){
+            hide_suggest(e, engine);
+            return TRUE;
+        }
+    }
     // Backspace
     if(keyval==IBUS_BackSpace){
         if(e->preedit->len>0){
             // remove last utf8 char
             gchar *prev = g_utf8_prev_char(e->preedit->str + e->preedit->len);
             g_string_truncate(e->preedit, prev - e->preedit->str);
-            IBusText *t=ibus_text_new_from_string(e->preedit->str);
-            ibus_engine_update_preedit_text(engine,t,e->preedit->len,TRUE);
+            push_preedit(e, engine, e->preedit->len, TRUE);
             return TRUE;
         }
         return FALSE;
     }
     if(keyval==IBUS_space){
         if(e->preedit->len>0){
-            gchar *commit = g_strdup(e->preedit->str);
+            gchar *commit = expand_word(e->preedit->str);
             gchar *with_space = g_strdup_printf("%s ",commit);
             IBusText *t=ibus_text_new_from_string(with_space);
             ibus_engine_commit_text(engine,t);
@@ -610,6 +1078,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             ibus_gotiengviet_engine_reset(e);
             IBusText *empty=ibus_text_new_from_string("");
             ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+            hide_suggest(e, engine);
             return TRUE;
         }
         return FALSE;
@@ -619,13 +1088,16 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         // if preedit has content, commit it + punctuation
         if(e->preedit->len>0 && (keyval==IBUS_comma || keyval==IBUS_period || keyval==IBUS_question || keyval==IBUS_exclam || keyval==IBUS_colon || keyval==IBUS_semicolon)){
             gchar c=(gchar)keyval;
-            gchar *commit=g_strdup_printf("%s%c",e->preedit->str,c);
+            gchar *word=expand_word(e->preedit->str);
+            gchar *commit=g_strdup_printf("%s%c",word,c);
+            g_free(word);
             IBusText *t=ibus_text_new_from_string(commit);
             ibus_engine_commit_text(engine,t);
             g_free(commit);
             ibus_gotiengviet_engine_reset(e);
             IBusText *empty=ibus_text_new_from_string("");
             ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+            hide_suggest(e, engine);
             return TRUE;
         }
     }
@@ -642,16 +1114,14 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         }
         if(consumed){
             ucs4_to_gstring(buf, e->preedit);
-            IBusText *t=ibus_text_new_from_string(e->preedit->str);
-            ibus_engine_update_preedit_text(engine,t,e->preedit->len,TRUE);
+            push_preedit(e, engine, e->preedit->len, TRUE);
             g_array_free(buf,TRUE);
             return TRUE;
         }
         g_array_free(buf,TRUE);
         // not consumed -> append
         g_string_append_c(e->preedit,c);
-        IBusText *t=ibus_text_new_from_string(e->preedit->str);
-        ibus_engine_update_preedit_text(engine,t,e->preedit->len,TRUE);
+        push_preedit(e, engine, e->preedit->len, TRUE);
         return TRUE;
     }
     if(keyval>=IBUS_A && keyval<=IBUS_Z){
@@ -662,15 +1132,13 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         if(e->mode_telex) consumed=telex_transform(buf, gc, e->modern);
         if(consumed){
             ucs4_to_gstring(buf, e->preedit);
-            IBusText *t=ibus_text_new_from_string(e->preedit->str);
-            ibus_engine_update_preedit_text(engine,t,e->preedit->len,TRUE);
+            push_preedit(e, engine, e->preedit->len, TRUE);
             g_array_free(buf,TRUE);
             return TRUE;
         }
         g_array_free(buf,TRUE);
         g_string_append_c(e->preedit,c);
-        IBusText *t=ibus_text_new_from_string(e->preedit->str);
-        ibus_engine_update_preedit_text(engine,t,e->preedit->len,TRUE);
+        push_preedit(e, engine, e->preedit->len, TRUE);
         return TRUE;
     }
     // digits for VNI mode or letter d?
@@ -748,8 +1216,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             }
             if(consumed){
                 ucs4_to_gstring(buf, e->preedit);
-                IBusText *t=ibus_text_new_from_string(e->preedit->str);
-                ibus_engine_update_preedit_text(engine,t,e->preedit->len,TRUE);
+                push_preedit(e, engine, e->preedit->len, TRUE);
                 g_array_free(buf,TRUE);
                 return TRUE;
             }
@@ -757,29 +1224,34 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         }
         // if not consumed, append digit (or commit?)
         g_string_append_c(e->preedit,c);
-        IBusText *t=ibus_text_new_from_string(e->preedit->str);
-        ibus_engine_update_preedit_text(engine,t,e->preedit->len,TRUE);
+        push_preedit(e, engine, e->preedit->len, TRUE);
         return TRUE;
     }
     // Enter -> commit
     if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
         if(e->preedit->len>0){
-            IBusText *t=ibus_text_new_from_string(e->preedit->str);
+            gchar *word=expand_word(e->preedit->str);
+            IBusText *t=ibus_text_new_from_string(word);
+            g_free(word);
             ibus_engine_commit_text(engine,t);
             ibus_gotiengviet_engine_reset(e);
             IBusText *empty=ibus_text_new_from_string("");
             ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+            hide_suggest(e, engine);
             return TRUE;
         }
         return FALSE;
     }
     // Other keys: commit preedit and forward
     if(e->preedit->len>0){
-        IBusText *t=ibus_text_new_from_string(e->preedit->str);
+        gchar *word=expand_word(e->preedit->str);
+        IBusText *t=ibus_text_new_from_string(word);
+        g_free(word);
         ibus_engine_commit_text(engine,t);
         ibus_gotiengviet_engine_reset(e);
         IBusText *empty=ibus_text_new_from_string("");
         ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+        hide_suggest(e, engine);
     }
     return FALSE;
 }
@@ -818,15 +1290,39 @@ static gboolean load_config(gboolean *is_telex, gboolean *modern, gboolean *spel
 }
 static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
-    gboolean telex, modern;
-    load_config(&telex, &modern, NULL);
+    gboolean telex, modern, spell;
+    load_config(&telex, &modern, &spell);
     e->mode_telex=telex;
     e->modern=modern;
+    e->spellcheck=spell;
+    // Một engine duy nhất "gotiengviet": chuyển Telex/VNI trên indicator của app GoTiengViet
+    // Đồng bộ cache mtime để reload_config_if_changed không load lại ngay
+    gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+    struct stat st;
+    if(stat(path, &st) == 0) cfg_mtime_cache = st.st_mtime;
+    g_free(path);
+    hide_suggest(e, engine);
+}
+static void ibus_gotiengviet_engine_candidate_clicked(IBusEngine *engine, guint index, guint button, guint state){
+    (void)button; (void)state;
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    if(index < (guint)e->n_candidates && e->candidates){
+        g_string_assign(e->preedit, e->candidates[index]);
+        gchar *word=expand_word(e->preedit->str);
+        IBusText *t=ibus_text_new_from_string(word);
+        g_free(word);
+        ibus_engine_commit_text(engine,t);
+        ibus_gotiengviet_engine_reset(e);
+        IBusText *empty=ibus_text_new_from_string("");
+        ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+        hide_suggest(e, engine);
+    }
 }
 static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass){
     IBusEngineClass *ec=IBUS_ENGINE_CLASS(klass);
     ec->process_key_event=ibus_gotiengviet_engine_process_key_event;
     ec->focus_in=ibus_gotiengviet_engine_focus_in;
+    ec->candidate_clicked=ibus_gotiengviet_engine_candidate_clicked;
 }
 static void ibus_gotiengviet_engine_init(IBusGoTiengVietEngine *e){
     e->preedit=g_string_new("");
@@ -844,10 +1340,12 @@ static IBusEngine* create_engine_cb(IBusFactory *f, const gchar *engine_name, gp
     if(!engine) return NULL;
     g_object_ref_sink(engine);
     IBusGoTiengVietEngine *ue = (IBusGoTiengVietEngine*)engine;
-    if(g_strcmp0(engine_name, "gotiengviet-vni")==0) ue->mode_telex=FALSE;
-    else ue->mode_telex=TRUE;
-    gboolean mod=TRUE, spell=TRUE;
-    load_config(NULL, &mod, &spell);
+    // Một engine duy nhất "gotiengviet"; giữ tương thích tên cũ khi user còn sót config
+    gboolean telex = TRUE, mod = TRUE, spell = TRUE;
+    load_config(&telex, &mod, &spell);
+    if(g_strcmp0(engine_name, "gotiengviet-vni") == 0) telex = FALSE;
+    else if(g_strcmp0(engine_name, "gotiengviet-telex") == 0) telex = TRUE;
+    ue->mode_telex = telex;
     ue->modern=mod;
     ue->spellcheck=spell;
     return engine;
@@ -891,14 +1389,14 @@ static void install_crash_handlers(void){
 
 static void bus_connected_cb(IBusBus *b, gpointer user_data){
     IBusComponent *c=ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.1.0","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
-    IBusEngineDesc *d1=ibus_engine_desc_new("gotiengviet-telex","Telex","Telex: s f r x j, aa aw dd - github.com/isthaison/gotiengviet","vi","GPL","GoTiengViet","/usr/share/gotiengviet/icons/gotiengviet.svg","us");
-    IBusEngineDesc *d2=ibus_engine_desc_new("gotiengviet-vni","VNI","VNI: 1-5, 6-9, 0 - github.com/isthaison/gotiengviet","vi","GPL","GoTiengViet","/usr/share/gotiengviet/icons/gotiengviet.svg","us");
-    ibus_component_add_engine(c,d1);
-    ibus_component_add_engine(c,d2);
+    IBusEngineDesc *d=ibus_engine_desc_new("gotiengviet","GoTiengViet","GoTiengViet: Telex/VNI (đổi Telex/VNI trên indicator của app) - github.com/isthaison/gotiengviet","vi","GPL","GoTiengViet","gotiengviet","us");
+    ibus_component_add_engine(c,d);
     ibus_bus_register_component(bus,c);
     if(!factory){
         factory=ibus_factory_new(ibus_bus_get_connection(bus));
         g_signal_connect(factory, "create-engine", G_CALLBACK(create_engine_cb), NULL);
+        ibus_factory_add_engine(factory, "gotiengviet", ibus_gotiengviet_engine_get_type());
+        // Giữ tên cũ để máy đã cài không mất engine khi chưa re-login
         ibus_factory_add_engine(factory, "gotiengviet-telex", ibus_gotiengviet_engine_get_type());
         ibus_factory_add_engine(factory, "gotiengviet-vni", ibus_gotiengviet_engine_get_type());
     }

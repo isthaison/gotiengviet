@@ -163,12 +163,6 @@ func (e *Engine) ProcessKey(key rune) (newComposing string, backspaces int, comm
 		newBuf, consumed = TelexTransform(e.buffer, key, e.Modern)
 		if consumed {
 			e.buffer = newBuf
-			// Calculate backspaces: need to delete old buffer length and replace with new?
-			// For IBus, we return backspaces = oldLen (to delete) and newComposing = new buffer
-			// But if transform was tone replacement, old and new len same, still need to delete? IBus can handle replace.
-			// We'll return backspaces = oldLen if new != old, else 0?
-			// Simpler: return len difference handling via IBus caller deleting appropriately.
-			// We'll compute: if newBuffer != oldStr, need to backspace oldLen and type new.
 			if string(newBuf) == oldStr {
 				return string(newBuf), 0, ""
 			}
@@ -201,21 +195,3 @@ func (e *Engine) ProcessKey(key rune) (newComposing string, backspaces int, comm
 
 	return string(e.buffer), 0, ""
 }
-
-// FeedString helper: feed whole string via ProcessKey (handles macro/emoji on space)
-func (e *Engine) FeedString(s string) string {
-	e.Reset()
-	var last string
-	for _, r := range []rune(s) {
-		_, _, commit := e.ProcessKey(r)
-		if commit != "" {
-			last += commit
-		}
-	}
-	last += e.Buffer()
-	return last
-}
-
-// Transform helper standalone (stateless)
-func TransformTelex(s string) string { return TransformStringTelex(s, true) }
-func TransformVNI(s string) string   { return TransformStringVNI(s, true) }

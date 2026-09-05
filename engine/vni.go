@@ -95,12 +95,6 @@ func TransformStringVNI(input string, modern bool) string {
 		if consumed {
 			buf = newBuf
 		} else {
-			// If key is digit but not consumed (no vowel), append digit as literal?
-			// Check if key is VNI control digit and not consumed -> we should append digit literally only if not transformed
-			// For consistency, if it's a digit that could be VNI but buffer has no vowel, treat as literal digit?
-			// We'll append r anyway except when r is control that was consumed
-			// But our VNITransform already returned false for those, so we append r below
-			// For letters, just append
 			buf = append(buf, r)
 		}
 	}

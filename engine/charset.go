@@ -102,11 +102,6 @@ func init() {
 	// Also register plain consonants as themselves? For isVowel check we use map
 }
 
-func getInfo(r rune) (CharInfo, bool) {
-	info, ok := charInfoMap[r]
-	return info, ok
-}
-
 func lookup(bare rune, dia, tone int, isUpper bool) (rune, bool) {
 	info := CharInfo{Bare: bare, Diacritic: dia, Tone: tone, IsUpper: isUpper}
 	r, ok := reverseMap[info]
@@ -155,26 +150,6 @@ func applyToneAt(word []rune, pos int, tone int) []rune {
 	}
 	// Preserve diacritic, change tone
 	newRune, ok := lookup(info.Bare, info.Diacritic, tone, info.IsUpper)
-	if !ok {
-		return word
-	}
-	word[pos] = newRune
-	return word
-}
-
-func stripTone(word []rune, pos int) []rune {
-	if pos < 0 || pos >= len(word) {
-		return word
-	}
-	r := word[pos]
-	info, ok := charInfoMap[r]
-	if !ok {
-		return word
-	}
-	if info.Tone == ToneNone {
-		return word
-	}
-	newRune, ok := lookup(info.Bare, info.Diacritic, ToneNone, info.IsUpper)
 	if !ok {
 		return word
 	}

@@ -326,32 +326,7 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 			newBuf = append(newBuf, r)
 			return newBuf, true
 		}
-		// Also special case uow -> ươ? Actually sequence "u" + "o" + "w" -> need to produce "ươ"?
-		// The ow/uw handling above already did o+ w -> ơ and u+w -> ư. But "uow" should become "ươ" ?
-		// That would require two transforms: u + o -> "uo", + w -> should convert o -> ơ => "uơ" ? Not yet "ươ".
-		// But spec mentions uow -> ươ as shortcut. We can handle: if buf ends with "uo" and key w, transform to "ươ"
-		// Simplified: if buf len >=2 and last two are 'u','o' (case-insensitive) then w -> convert both to ươ?
-		if len(buf) >= 2 {
-			secondLast := buf[len(buf)-2]
-			last := buf[len(buf)-1]
-			if bareLower(secondLast) == 'u' && bareLower(last) == 'o' {
-				// Try to convert both: u->ư, o->ơ
-				// Check diacritics none
-				if getDiacritic(secondLast) == DiacriticNone && getDiacritic(last) == DiacriticNone {
-					newBuf := make([]rune, len(buf))
-					copy(newBuf, buf)
-					if nr1, ok1 := toggleHorn(secondLast); ok1 {
-						newBuf[len(newBuf)-2] = nr1
-					}
-					if nr2, ok2 := toggleHorn(last); ok2 {
-						newBuf[len(newBuf)-1] = nr2
-					}
-					return newBuf, true
-				}
-			}
-		}
 	}
-
 	// No transform consumed
 	return buf, false
 }
@@ -360,29 +335,11 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 func TransformStringTelex(input string, modern bool) string {
 	buf := []rune{}
 	for _, r := range []rune(input) {
-		// If r is space/punct we would commit, but for string transform we treat them as literal append
-		if isLetter(r) || r == 'd' || r == 'D' {
-			newBuf, consumed := TelexTransform(buf, r, modern)
-			if consumed {
-				buf = newBuf
-			} else {
-				buf = append(buf, r)
-			}
+		newBuf, consumed := TelexTransform(buf, r, modern)
+		if consumed {
+			buf = newBuf
 		} else {
-			// For transform string, if key is telex control (s,f,r,x,j,w,z) we attempt transform even if not letter?
-			// But we already handled above with isLetter check - need to also try control
-			// So always try transform first
-			newBuf, consumed := TelexTransform(buf, r, modern)
-			if consumed {
-				buf = newBuf
-			} else {
-				// check if tone key etc consumed but not letter? still handle
-				// If not consumed, append if isLetter else if tone key without vowel, append tone key as is
-				// For simplicity append r as is if not consumed and not control?
-				// But for input string like "as" we need telex transform to apply. 's' is not letter? It is letter 's', so covered.
-				// For VNI digits similar
-				buf = append(buf, r)
-			}
+			buf = append(buf, r)
 		}
 	}
 	return string(buf)

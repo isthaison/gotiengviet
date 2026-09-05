@@ -51,9 +51,3 @@ func ExpandEmoji(word string) (string, bool) {
 	}
 	return word, false
 }
-
-// LoadMacroFromConfig có thể mở rộng để đọc file macro
-
-func init() {
-	// Có thể load thêm macro từ file config nếu cần
-}

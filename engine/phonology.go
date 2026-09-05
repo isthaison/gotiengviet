@@ -1,6 +1,6 @@
 package engine
 
-import "unicode"
+import "strings"
 
 // findTonePosition returns index in word where tone should be placed
 // modern=true uses new style (Bộ GD 2018), false old style (not fully implemented difference mainly oa/oe)
@@ -132,7 +132,7 @@ func findTonePosition(word []rune, modern bool) int {
 	specialPairsModern := []string{"oa", "oe", "uy"}
 	specialPairsOther := []string{"oo", "uo", "ie", "ua", "uơ", "ươ"}
 	for _, p := range specialPairsModern {
-		if contains(vowelStrLower, p) {
+		if strings.Contains(vowelStrLower, p) {
 			if modern {
 				// Modern: hoà, hoè, thuỳ
 				if len(vowelIndices) == 2 {
@@ -155,7 +155,7 @@ func findTonePosition(word []rune, modern bool) int {
 		}
 	}
 	for _, p := range specialPairsOther {
-		if contains(vowelStrLower, p) {
+		if strings.Contains(vowelStrLower, p) {
 			if len(vowelIndices) == 2 {
 				return vowelIndices[1]
 			}
@@ -205,31 +205,4 @@ func findTonePosition(word []rune, modern bool) int {
 		return vowelIndices[1]
 	}
 	return vowelIndices[0]
-}
-
-func contains(s, substr string) bool {
-	// simple contains
-	if len(substr) > len(s) {
-		return false
-	}
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-func hasFinalConsonant(word []rune) bool {
-	if len(word) == 0 {
-		return false
-	}
-	last := word[len(word)-1]
-	if isVowel(last) {
-		return false
-	}
-	if unicode.IsLetter(last) {
-		return true
-	}
-	return false
 }

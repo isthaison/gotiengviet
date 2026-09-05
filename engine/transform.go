@@ -1,8 +1,6 @@
 package engine
 
-// Core transform helpers used by both Telex and VNI
-
-// tryMarkTelex/VNI common: apply tone to word buffer
+// applyMark applies tone to word buffer
 func applyMark(buf []rune, tone int, modern bool) ([]rune, bool) {
 	if tone == ToneNone {
 		return buf, false

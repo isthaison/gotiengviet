@@ -13,9 +13,7 @@ import (
 // AIProvider interface cho AI local nhẹ (qwen2:0.5b) + fallback Rule
 type AIProvider interface {
 	Suggest(preedit, ctx string) []string
-	Translate(vi string) string
 	IsAvailable() bool
-	GetModel() string
 }
 
 type OllamaProvider struct {
@@ -68,8 +66,6 @@ func (o *OllamaProvider) IsAvailable() bool {
 	return resp.StatusCode == 200
 }
 
-func (o *OllamaProvider) GetModel() string { return o.Model }
-
 func (o *OllamaProvider) Suggest(preedit, ctx string) []string {
 	if !o.IsAvailable() {
 		return (&RuleProvider{}).Suggest(preedit, ctx)
@@ -97,34 +93,7 @@ func (o *OllamaProvider) Suggest(preedit, ctx string) []string {
 	return (&RuleProvider{}).Suggest(preedit, ctx)
 }
 
-func (o *OllamaProvider) Translate(vi string) string {
-	if !o.IsAvailable() {
-		return vi
-	}
-	prompt := "Dịch comment code tiếng Việt sang tiếng Anh, chỉ trả về bản dịch: '" + vi + "'"
-	payload := map[string]interface{}{"model": o.Model, "prompt": prompt, "stream": false}
-	data, _ := json.Marshal(payload)
-	client := http.Client{Timeout: 1500 * time.Millisecond}
-	resp, err := client.Post(o.URL+"/api/generate", "application/json", bytes.NewBuffer(data))
-	if err != nil {
-		return vi
-	}
-	defer resp.Body.Close()
-	var out map[string]interface{}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil {
-		return vi
-	}
-	if r, ok := out["response"].(string); ok {
-		r = strings.TrimSpace(r)
-		if r != "" {
-			return r
-		}
-	}
-	return vi
-}
-
 func (r *RuleProvider) IsAvailable() bool { return true }
-func (r *RuleProvider) GetModel() string  { return "rule" }
 func (r *RuleProvider) Suggest(preedit, ctx string) []string {
 	// Fallback dùng spell.go
 	if IsValidVietnameseWord(preedit) {
@@ -132,4 +101,3 @@ func (r *RuleProvider) Suggest(preedit, ctx string) []string {
 	}
 	return SuggestCorrections(preedit)
 }
-func (r *RuleProvider) Translate(vi string) string { return vi }

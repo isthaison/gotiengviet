@@ -356,6 +356,11 @@ static gboolean telex_is_tone(gunichar k, int *out){
     }
 }
 static gboolean telex_transform(GArray *buf, gunichar key, gboolean modern){
+    if(buf->len>0 && g_array_index(buf,gunichar,0)==':'){
+        gboolean hasClosing=FALSE;
+        for(guint i=1;i<buf->len;i++) if(g_array_index(buf,gunichar,i)==':'){hasClosing=TRUE;break;}
+        if(!hasClosing) return FALSE;
+    }
     if(buf->len==0 && key=='w'){ gunichar c=0x01B0; g_array_append_val(buf,c); return TRUE; }
     if(buf->len==0 && key=='W'){ gunichar c=0x01AF; g_array_append_val(buf,c); return TRUE; }
     if(buf->len==0 && (key=='w'||key=='W')){

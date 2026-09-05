@@ -2,6 +2,19 @@ package engine
 
 // VNITransform handles VNI input method (numbers)
 func VNITransform(buf []rune, key rune, modern bool) ([]rune, bool) {
+	// Emoji: đang trong :xxx chưa đóng thì không transform
+	if len(buf) > 0 && buf[0] == ':' {
+		hasClosing := false
+		for i := 1; i < len(buf); i++ {
+			if buf[i] == ':' {
+				hasClosing = true
+				break
+			}
+		}
+		if !hasClosing {
+			return buf, false
+		}
+	}
 	// VNI mappings:
 	// 6 -> circumflex â ê ô
 	// 7 -> horn ơ ư

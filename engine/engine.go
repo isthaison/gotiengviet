@@ -108,12 +108,13 @@ func isWordBreak(r rune) bool {
 	if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 		return true
 	}
-	// punctuation
+	// Đừng coi ':' là word break để :smile: được xử lý như một từ cho emoji
+	if r == ':' {
+		return false
+	}
 	if unicode.IsPunct(r) || unicode.IsSymbol(r) {
 		return true
 	}
-	// digit? In Telex, digits are word breaks except VNI digits are controls
-	// For Telex mode, digits should be word breaks (unless they are control in VNI)
 	return false
 }
 
@@ -131,9 +132,15 @@ func (e *Engine) ProcessKey(key rune) (newComposing string, backspaces int, comm
 		return "", 0, ""
 	}
 
-	// Word boundary: space, punctuation, enter
+	// Word boundary: space, punctuation, enter - xử lý macro/emoji trước khi commit
 	if isWordBreak(key) {
 		word := string(e.buffer)
+		// Macro/Emoji: vn + space -> Việt Nam, :smile: + space -> 😊
+		if expanded, ok := ExpandMacro(word); ok {
+			word = expanded
+		} else if expanded, ok := ExpandEmoji(word); ok {
+			word = expanded
+		}
 		if e.SpellCheck && word != "" && !IsValidVietnameseWord(word) {
 			e.LastSuggestions = SuggestCorrections(word)
 		} else {
@@ -195,22 +202,14 @@ func (e *Engine) ProcessKey(key rune) (newComposing string, backspaces int, comm
 	return string(e.buffer), 0, ""
 }
 
-// FeedString is helper for testing: feed whole string sequentially (without word boundary handling for spaces)
+// FeedString helper: feed whole string via ProcessKey (handles macro/emoji on space)
 func (e *Engine) FeedString(s string) string {
 	e.Reset()
 	var last string
 	for _, r := range []rune(s) {
-		if r == ' ' {
-			// commit current buffer + space
-			last += e.Buffer() + " "
-			e.Reset()
-			continue
-		}
-		comp, _, commit := e.ProcessKey(r)
+		_, _, commit := e.ProcessKey(r)
 		if commit != "" {
 			last += commit
-		} else {
-			_ = comp
 		}
 	}
 	last += e.Buffer()

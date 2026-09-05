@@ -11,6 +11,21 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 	if len(buf) == 0 && key == 'W' {
 		return []rune{'Ư'}, true
 	}
+	// Emoji: nếu đang trong :xxx chưa đóng, không áp dụng Telex cho nội dung emoji
+	if len(buf) > 0 && buf[0] == ':' {
+		// Kiểm tra đã có : đóng chưa (tìm : thứ 2)
+		hasClosing := false
+		for i := 1; i < len(buf); i++ {
+			if buf[i] == ':' {
+				hasClosing = true
+				break
+			}
+		}
+		if !hasClosing {
+			// Đang trong emoji code như :heart, :smile -> không transform
+			return buf, false
+		}
+	}
 
 	// 1. Stroke dd -> đ
 	if toLower(key) == 'd' {

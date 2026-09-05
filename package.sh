@@ -12,7 +12,7 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: amd64
-Depends: ibus, libibus-1.0-5, libglib2.0-0, libgtk-3-0, libgdk-pixbuf2.0-0
+Depends: ibus, libibus-1.0-5, libglib2.0-0, libgtk-3-0, libgdk-pixbuf-2.0-0
 Maintainer: GoTiengViet Project <https://github.com/isthaison/gotiengviet>
 Description: GoTiengViet - Gõ tiếng Việt Telex/VNI thuần hệ thống
  Gõ Telex (s f r x j, w z, aa aw dd) và VNI (1-5, 6-9, 0) cho Linux,

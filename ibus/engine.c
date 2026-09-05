@@ -1153,10 +1153,6 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     if(e->purpose == IBUS_INPUT_PURPOSE_PASSWORD || e->purpose == IBUS_INPUT_PURPOSE_PIN){
         return FALSE;
     }
-    // Nếu ứng dụng không hỗ trợ hiển thị Preedit: nhường phím trực tiếp
-    if(e->caps != 0 && !(e->caps & IBUS_CAP_PREEDIT_TEXT)){
-        return FALSE;
-    }
     // Esc: hủy preedit nếu đang gõ dở
     if(keyval == IBUS_Escape){
         if(e->preedit->len > 0){
@@ -1529,6 +1525,88 @@ static gboolean load_config(gboolean *is_telex, gboolean *modern, gboolean *spel
     if(spell) *spell = spellcheck;
     return TRUE;
 }
+static void update_ibus_properties(IBusGoTiengVietEngine *e, IBusEngine *engine){
+    IBusPropList *prop_list = ibus_prop_list_new();
+
+    IBusProperty *prop_telex = ibus_property_new(
+        "InputMode.Telex",
+        PROP_TYPE_RADIO,
+        ibus_text_new_from_static_string("Telex (s f r x j, w)"),
+        NULL,
+        ibus_text_new_from_static_string("Kiểu gõ Telex"),
+        TRUE,
+        TRUE,
+        e->mode_telex ? PROP_STATE_CHECKED : PROP_STATE_UNCHECKED,
+        NULL
+    );
+
+    IBusProperty *prop_vni = ibus_property_new(
+        "InputMode.VNI",
+        PROP_TYPE_RADIO,
+        ibus_text_new_from_static_string("VNI (1-5, 6-9)"),
+        NULL,
+        ibus_text_new_from_static_string("Kiểu gõ VNI"),
+        TRUE,
+        TRUE,
+        !e->mode_telex ? PROP_STATE_CHECKED : PROP_STATE_UNCHECKED,
+        NULL
+    );
+
+    IBusProperty *prop_setup = ibus_property_new(
+        "Setup",
+        PROP_TYPE_NORMAL,
+        ibus_text_new_from_static_string("Mở GoTiengViet Setup..."),
+        NULL,
+        ibus_text_new_from_static_string("Cấu hình GoTiengViet"),
+        TRUE,
+        TRUE,
+        PROP_STATE_UNCHECKED,
+        NULL
+    );
+
+    ibus_prop_list_append(prop_list, prop_telex);
+    ibus_prop_list_append(prop_list, prop_vni);
+    ibus_prop_list_append(prop_list, prop_setup);
+
+    ibus_engine_register_properties(engine, prop_list);
+}
+
+static void ibus_gotiengviet_engine_property_activate(IBusEngine *engine, const gchar *prop_name, guint prop_state){
+    (void)prop_state;
+    IBusGoTiengVietEngine *e = (IBusGoTiengVietEngine*)engine;
+    if(g_strcmp0(prop_name, "InputMode.Telex") == 0){
+        e->mode_telex = TRUE;
+        gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+        GKeyFile *kf = g_key_file_new();
+        g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL);
+        g_key_file_set_string(kf, "input", "method", "telex");
+        gsize len = 0;
+        gchar *data = g_key_file_to_data(kf, &len, NULL);
+        if(data) g_file_set_contents(path, data, (gssize)len, NULL);
+        g_free(data);
+        g_key_file_free(kf);
+        g_free(path);
+        update_ibus_properties(e, engine);
+        system("notify-send 'GoTiengViet' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
+    } else if(g_strcmp0(prop_name, "InputMode.VNI") == 0){
+        e->mode_telex = FALSE;
+        gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+        GKeyFile *kf = g_key_file_new();
+        g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL);
+        g_key_file_set_string(kf, "input", "method", "vni");
+        gsize len = 0;
+        gchar *data = g_key_file_to_data(kf, &len, NULL);
+        if(data) g_file_set_contents(path, data, (gssize)len, NULL);
+        g_free(data);
+        g_key_file_free(kf);
+        g_free(path);
+        update_ibus_properties(e, engine);
+        system("notify-send 'GoTiengViet' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
+    } else if(g_strcmp0(prop_name, "Setup") == 0){
+        system("/usr/local/bin/gotiengviet &");
+    }
+}
+
 static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     gboolean telex, modern, spell;
@@ -1543,7 +1621,8 @@ static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
         IBusText *empty=ibus_text_new_from_string("");
         ibus_engine_update_preedit_text(engine,empty,0,FALSE);
     }
-    // Một engine duy nhất "gotiengviet": chuyển Telex/VNI trên indicator của app GoTiengViet
+    // Cập nhật thuộc tính IBus để menu ngôn ngữ GNOME (vi) luôn hiện Telex / VNI
+    update_ibus_properties(e, engine);
     // Đồng bộ cache mtime để reload_config_if_changed không load lại ngay
     gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
     struct stat st;
@@ -1614,6 +1693,7 @@ static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass
     ec->set_content_type=ibus_gotiengviet_engine_set_content_type;
     ec->set_cursor_location=ibus_gotiengviet_engine_set_cursor_location;
     ec->candidate_clicked=ibus_gotiengviet_engine_candidate_clicked;
+    ec->property_activate=ibus_gotiengviet_engine_property_activate;
 }
 static void ibus_gotiengviet_engine_init(IBusGoTiengVietEngine *e){
     e->preedit=g_string_new("");

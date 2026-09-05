@@ -6,6 +6,7 @@ package main
 #include <libayatana-appindicator/app-indicator.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 // --- Tray indicator (một phần của ứng dụng duy nhất, chạy với cờ --tray) ---
 static AppIndicator *tray_indicator;
@@ -55,16 +56,30 @@ static void tray_update_indicator_label(gboolean is_telex){
 
 static void tray_refresh_checks(){
     char *m = tray_current_method();
-    gboolean is_telex = (g_strcmp0(m, "vni") != 0);
+    gboolean is_telex = (g_strcmp0(m, "vni") != 0 && g_strcmp0(m, "VNI") != 0);
     // block signals while updating to avoid recursion
     g_signal_handlers_block_by_func(tray_item_telex, NULL, NULL);
     g_signal_handlers_block_by_func(tray_item_vni, NULL, NULL);
-    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(tray_item_telex), is_telex);
-    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(tray_item_vni), !is_telex);
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(is_telex ? tray_item_telex : tray_item_vni), TRUE);
     g_signal_handlers_unblock_by_func(tray_item_telex, NULL, NULL);
     g_signal_handlers_unblock_by_func(tray_item_vni, NULL, NULL);
     tray_update_indicator_label(is_telex);
     g_free(m);
+}
+
+static gboolean tray_check_config_timer(gpointer data){
+    (void)data;
+    char *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+    struct stat st;
+    static time_t tray_last_mtime = 0;
+    if(stat(path, &st) == 0){
+        if(tray_last_mtime != 0 && st.st_mtime != tray_last_mtime){
+            tray_refresh_checks();
+        }
+        tray_last_mtime = st.st_mtime;
+    }
+    g_free(path);
+    return G_SOURCE_CONTINUE;
 }
 
 static void tray_on_activate_setup(GtkMenuItem *item, gpointer data){
@@ -115,8 +130,11 @@ int tray_run(int argc, char *argv[]){
     app_indicator_set_title(tray_indicator, "GoTiengViet — Telex/VNI");
 
     GtkWidget *menu = gtk_menu_new();
-    tray_item_telex = gtk_check_menu_item_new_with_label("Telex (s f r x j, w)");
-    tray_item_vni = gtk_check_menu_item_new_with_label("VNI (1-5, 6-9)");
+    GSList *group = NULL;
+    tray_item_telex = gtk_radio_menu_item_new_with_label(group, "Telex (s f r x j, w)");
+    group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(tray_item_telex));
+    tray_item_vni = gtk_radio_menu_item_new_with_label(group, "VNI (1-5, 6-9)");
+
     GtkWidget *tray_item_setup = gtk_menu_item_new_with_label("Mở GoTiengViet Setup...");
     GtkWidget *tray_item_quit = gtk_menu_item_new_with_label("Thoát");
     g_signal_connect(tray_item_telex, "toggled", G_CALLBACK(tray_on_activate_telex), NULL);
@@ -132,6 +150,8 @@ int tray_run(int argc, char *argv[]){
 
     app_indicator_set_menu(tray_indicator, GTK_MENU(menu));
     tray_refresh_checks();
+
+    g_timeout_add(1000, (GSourceFunc)tray_check_config_timer, NULL);
 
     gtk_main();
     return 0;

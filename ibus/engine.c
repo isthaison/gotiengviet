@@ -23,6 +23,17 @@
 #define TONE_NGA 4
 #define TONE_NANG 5
 
+#include <stdarg.h>
+static void debug_log(const char *fmt, ...){
+    FILE *f = fopen("/tmp/gotiengviet_debug.log", "a");
+    if(!f) return;
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(f, fmt, args);
+    va_end(args);
+    fclose(f);
+}
+
 typedef struct {
     gunichar bare; // 'a','e','i','o','u','y','d'
     int diacritic;
@@ -1089,10 +1100,17 @@ static void hide_suggest(IBusGoTiengVietEngine *e, IBusEngine *engine){
 /* Đẩy preedit + gạch đỏ từ sai + bảng gợi ý (Tab chọn, Up/Down di chuyển, Esc bỏ) */
 static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cursor, gboolean visible){
     glong plen=g_utf8_strlen(e->preedit->str, -1);
+    debug_log("[push_preedit] str='%s' plen=%ld visible=%d\n", e->preedit->str, plen, visible);
     gboolean bad=(e->spellcheck && plen>=2 && !spell_word_valid(e->preedit->str));
     IBusText *t=ibus_text_new_from_string(e->preedit->str);
     if(bad) ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_ERROR, 0, (gint)plen);
-    ibus_engine_update_preedit_text(engine,t,(guint)plen,visible);
+    else ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_SINGLE, 0, (gint)plen);
+    ibus_engine_update_preedit_text_with_mode(engine, t, (guint)plen, visible, IBUS_ENGINE_PREEDIT_COMMIT);
+    if(plen > 0 && visible){
+        ibus_engine_show_preedit_text(engine);
+    } else {
+        ibus_engine_hide_preedit_text(engine);
+    }
     clear_candidates(e);
     if(!bad){ ibus_engine_hide_lookup_table(engine); return; }
     GPtrArray *sugs=get_suggestions(e->preedit->str);
@@ -1111,6 +1129,7 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
 }
 static void ibus_gotiengviet_engine_reset(IBusGoTiengVietEngine *e){
     if(e->preedit) g_string_assign(e->preedit,"");
+    ibus_engine_hide_preedit_text((IBusEngine*)e);
 }
 // Tray đổi method khi đang gõ không gây focus_in, nên reload config theo mtime mỗi phím
 static time_t cfg_mtime_cache = 0;
@@ -1136,6 +1155,8 @@ static void reload_config_if_changed(IBusGoTiengVietEngine *e){
 static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, guint keyval, guint keycode, guint modifiers){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     reload_config_if_changed(e);
+    debug_log("[key] kv=0x%x ('%c') kc=%u mod=0x%x preedit='%s' purpose=%u caps=0x%x\n",
+              keyval, (keyval>32 && keyval<127)?(char)keyval:' ', keycode, modifiers, e->preedit->str, e->purpose, e->caps);
     if(modifiers & IBUS_RELEASE_MASK) return FALSE;
     // Phím tắt Ctrl/Alt/Super (Ctrl+C/V/X/Z, Ctrl+S...) — commit chữ đang dở rồi nhường cho app
     if(modifiers & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK | IBUS_SUPER_MASK | IBUS_HYPER_MASK | IBUS_META_MASK)){
@@ -1527,6 +1548,7 @@ static gboolean load_config(gboolean *is_telex, gboolean *modern, gboolean *spel
 }
 static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    debug_log("[focus_in] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
     gboolean telex, modern, spell;
     load_config(&telex, &modern, &spell);
     e->mode_telex=telex;
@@ -1549,6 +1571,7 @@ static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
 }
 static void ibus_gotiengviet_engine_focus_out(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    debug_log("[focus_out] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
     if(e->preedit && e->preedit->len>0){
         gchar *word=expand_word(e->preedit->str);
         IBusText *t=ibus_text_new_from_string(word);
@@ -1562,10 +1585,16 @@ static void ibus_gotiengviet_engine_focus_out(IBusEngine *engine){
 }
 static void ibus_gotiengviet_engine_reset_cb(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    debug_log("[reset_cb] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
     if(e->preedit && e->preedit->len>0){
+        gchar *word=expand_word(e->preedit->str);
+        IBusText *t=ibus_text_new_from_string(word);
+        g_free(word);
+        ibus_engine_commit_text(engine,t);
         ibus_gotiengviet_engine_reset(e);
         IBusText *empty=ibus_text_new_from_string("");
         ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+        ibus_engine_hide_preedit_text(engine);
     }
     hide_suggest(e, engine);
 }
@@ -1574,10 +1603,12 @@ static void ibus_gotiengviet_engine_disable(IBusEngine *engine){
 }
 static void ibus_gotiengviet_engine_set_capabilities(IBusEngine *engine, guint caps){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    debug_log("[set_caps] engine=%p caps=0x%x\n", engine, caps);
     e->caps = caps;
 }
 static void ibus_gotiengviet_engine_set_content_type(IBusEngine *engine, guint purpose, guint hints){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    debug_log("[set_content_type] engine=%p purpose=%u hints=%u\n", engine, purpose, hints);
     e->purpose = purpose;
     e->hints = hints;
 }

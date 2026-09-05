@@ -66,6 +66,7 @@ func VNITransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 			}
 		}
 		if hasVowel {
+			buf = autoPromoteDiphthong(buf)
 			pos := findTonePosition(buf, modern)
 			if pos != -1 && getTone(buf[pos]) == tone {
 				// Nguyên tắc gõ lại để xóa: a1->á, á1->a (xóa, không thêm 1)

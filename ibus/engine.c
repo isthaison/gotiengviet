@@ -133,7 +133,7 @@ static gboolean toggle_breve(gunichar in, gunichar *out){
     CharInfo *info=get_info(in); if(!info||info->bare!='a') return FALSE;
     int ndia=-1;
     if(info->diacritic==DIAC_BREVE) ndia=DIAC_NONE;
-    else if(info->diacritic==DIAC_NONE) ndia=DIAC_BREVE;
+    else if(info->diacritic==DIAC_NONE || info->diacritic==DIAC_CIRCUMFLEX) ndia=DIAC_BREVE;
     else return FALSE;
     return lookup_char(info->bare, ndia, info->tone, info->is_upper, out);
 }
@@ -142,7 +142,7 @@ static gboolean toggle_circumflex(gunichar in, gunichar *out){
     int ndia=-1;
     if(info->bare=='a' || info->bare=='e' || info->bare=='o'){
         if(info->diacritic==DIAC_CIRCUMFLEX) ndia=DIAC_NONE;
-        else if(info->diacritic==DIAC_NONE) ndia=DIAC_CIRCUMFLEX;
+        else if(info->diacritic==DIAC_NONE || info->diacritic==DIAC_BREVE) ndia=DIAC_CIRCUMFLEX;
         else return FALSE;
         return lookup_char(info->bare, ndia, info->tone, info->is_upper, out);
     }
@@ -153,7 +153,7 @@ static gboolean toggle_horn(gunichar in, gunichar *out){
     if(info->bare!='o' && info->bare!='u') return FALSE;
     int ndia=-1;
     if(info->diacritic==DIAC_HORN) ndia=DIAC_NONE;
-    else if(info->diacritic==DIAC_NONE) ndia=DIAC_HORN;
+    else if(info->diacritic==DIAC_NONE || info->diacritic==DIAC_CIRCUMFLEX) ndia=DIAC_HORN;
     else return FALSE;
     return lookup_char(info->bare, ndia, info->tone, info->is_upper, out);
 }
@@ -681,34 +681,153 @@ static gboolean telex_is_tone(gunichar k, int *out){
         default: return FALSE;
     }
 }
+
+// Khôi phục từ tiếng Anh khi gõ tiếp phụ âm kết thúc:
+// test (tés+t), post (pós+t), fast (fás+t), fish (fís+h), task (tás+k), desk (dés+k), risk (rís+k)
+static gboolean try_english_restore(GArray *buf, gunichar key){
+    if(buf->len == 0) return FALSE;
+    gunichar lk = to_lower_g(key);
+    if(lk != 't' && lk != 'h' && lk != 'k' && lk != 'p') return FALSE;
+
+    gunichar last = g_array_index(buf, gunichar, buf->len - 1);
+    if(is_vowel(last) && get_tone(last) == TONE_SAC){
+        CharInfo *info = get_info(last);
+        if(info){
+            gunichar bare_char;
+            if(lookup_char(info->bare, info->diacritic, TONE_NONE, info->is_upper, &bare_char)){
+                g_array_index(buf, gunichar, buf->len - 1) = bare_char;
+                gunichar s_char = (g_unichar_isupper(last) && g_unichar_isupper(key)) ? 'S' : 's';
+                g_array_append_val(buf, s_char);
+                g_array_append_val(buf, key);
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+// Tự động nâng cấp nguyên âm đôi/ba khi có phụ âm cuối hoặc bán nguyên âm cuối:
+// i + e + [coda] -> iê + [coda] (hienr -> hiển, hienj -> hiện, vietj -> việt, tiens -> tiến, tieur -> tiểu)
+// u + o + [coda] -> uô + [coda] (muons -> muốn, cuocj -> cuộc, buonc -> buồn, chuois -> chuối)
+// y + e + [coda] -> yê + [coda] (chuyenr -> chuyển, khuyen -> khuyên)
+static void auto_promote_diphthong(GArray *buf){
+    if(buf->len < 3) return;
+    int n = (int)buf->len;
+
+    // 1. Bán nguyên âm cuối (triphthong): ...ieu, ...yeu, ...uoi
+    gunichar last_char = bare_lower(g_array_index(buf, gunichar, n - 1));
+    gunichar prev_char = bare_lower(g_array_index(buf, gunichar, n - 2));
+    gunichar prev2_char = bare_lower(g_array_index(buf, gunichar, n - 3));
+
+    if(last_char == 'u' && prev_char == 'e' && (prev2_char == 'i' || prev2_char == 'y')){
+        gunichar v2 = g_array_index(buf, gunichar, n - 2);
+        if(get_diac(v2) == DIAC_NONE){
+            gunichar nc;
+            if(toggle_circumflex(v2, &nc)){
+                g_array_index(buf, gunichar, n - 2) = nc;
+                return;
+            }
+        }
+    }
+    if(last_char == 'i' && prev_char == 'o' && prev2_char == 'u'){
+        gunichar v1 = g_array_index(buf, gunichar, n - 3);
+        gunichar v2 = g_array_index(buf, gunichar, n - 2);
+        if(get_diac(v1) == DIAC_NONE && get_diac(v2) == DIAC_NONE){
+            gunichar nc;
+            if(toggle_circumflex(v2, &nc)){
+                g_array_index(buf, gunichar, n - 2) = nc;
+                return;
+            }
+        }
+    }
+
+    // 2. Có phụ âm cuối (hien, viet, muon, cuoc, chuyen...)
+    int last_v = -1;
+    for(int i = n - 1; i >= 0; i--){
+        if(is_vowel(g_array_index(buf, gunichar, i))){
+            last_v = i;
+            break;
+        }
+    }
+    if(last_v <= 0 || last_v >= n - 1) return;
+    gunichar v2 = g_array_index(buf, gunichar, last_v);
+    gunichar v1 = g_array_index(buf, gunichar, last_v - 1);
+    if(bare_lower(v1) == 'i' && bare_lower(v2) == 'e' && get_diac(v2) == DIAC_NONE){
+        gunichar nc;
+        if(toggle_circumflex(v2, &nc)){
+            g_array_index(buf, gunichar, last_v) = nc;
+        }
+    } else if(bare_lower(v1) == 'y' && bare_lower(v2) == 'e' && get_diac(v2) == DIAC_NONE){
+        gunichar nc;
+        if(toggle_circumflex(v2, &nc)){
+            g_array_index(buf, gunichar, last_v) = nc;
+        }
+    } else if(bare_lower(v1) == 'u' && bare_lower(v2) == 'o' && get_diac(v1) == DIAC_NONE && get_diac(v2) == DIAC_NONE){
+        gunichar nc;
+        if(toggle_circumflex(v2, &nc)){
+            g_array_index(buf, gunichar, last_v) = nc;
+        }
+    }
+}
+
 static gboolean telex_transform(GArray *buf, gunichar key, gboolean modern){
     if(buf->len>0 && g_array_index(buf,gunichar,0)==':'){
         gboolean hasClosing=FALSE;
         for(guint i=1;i<buf->len;i++) if(g_array_index(buf,gunichar,i)==':'){hasClosing=TRUE;break;}
         if(!hasClosing) return FALSE;
     }
+    if(try_english_restore(buf, key)) return TRUE;
+
     if(buf->len==0 && key=='w'){ gunichar c=0x01B0; g_array_append_val(buf,c); return TRUE; }
     if(buf->len==0 && key=='W'){ gunichar c=0x01AF; g_array_append_val(buf,c); return TRUE; }
     if(to_lower_g(key)=='d' && buf->len>0){
         gunichar last=g_array_index(buf,gunichar,buf->len-1);
         if(bare_lower(last)=='d'){
-            gunichar nc; if(toggle_stroke(last,&nc)){ g_array_index(buf,gunichar,buf->len-1)=nc; return TRUE; }
+            if(get_diac(last)==DIAC_STROKE){
+                // đ + d -> dd (khôi phục 2 chữ d cho reddit, hidden...)
+                gunichar d_bare = g_unichar_isupper(last) ? 'D' : 'd';
+                g_array_index(buf,gunichar,buf->len-1) = d_bare;
+                gunichar next_d = key;
+                g_array_append_val(buf, next_d);
+                return TRUE;
+            } else {
+                gunichar nc; if(toggle_stroke(last,&nc)){ g_array_index(buf,gunichar,buf->len-1)=nc; return TRUE; }
+            }
         }
     }
     gunichar lk=to_lower_g(key);
     if(lk=='a' && buf->len>0){
         gunichar last=g_array_index(buf,gunichar,buf->len-1);
-        if(bare_lower(last)=='a' && get_diac(last)==DIAC_NONE){
-            gunichar nc; if(toggle_circumflex(last,&nc)){ g_array_index(buf,gunichar,buf->len-1)=nc; return TRUE; }
-        } else if(bare_lower(last)=='a' && get_diac(last)==DIAC_CIRCUMFLEX){
-            gunichar nc; if(toggle_circumflex(last,&nc)){ g_array_index(buf,gunichar,buf->len-1)=nc; return TRUE; }
+        if(bare_lower(last)=='a'){
+            if(get_diac(last)==DIAC_CIRCUMFLEX){
+                // â + a -> aa
+                int tone = get_tone(last);
+                gunichar nc;
+                if(lookup_char('a', DIAC_NONE, tone, g_unichar_isupper(last), &nc))
+                    g_array_index(buf,gunichar,buf->len-1) = nc;
+                else
+                    g_array_index(buf,gunichar,buf->len-1) = g_unichar_isupper(last) ? 'A' : 'a';
+                g_array_append_val(buf, key);
+                return TRUE;
+            } else if(get_diac(last)==DIAC_NONE){
+                gunichar nc; if(toggle_circumflex(last,&nc)){ g_array_index(buf,gunichar,buf->len-1)=nc; return TRUE; }
+            }
         }
     }
     if(lk=='e' && buf->len>0){
         gunichar last=g_array_index(buf,gunichar,buf->len-1);
         if(bare_lower(last)=='e'){
-            int dia=get_diac(last);
-            if(dia==DIAC_NONE||dia==DIAC_CIRCUMFLEX){
+            if(get_diac(last)==DIAC_CIRCUMFLEX){
+                // ê + e -> ee (khôi phục 2 chữ e cho meet, free, see...)
+                int tone = get_tone(last);
+                gunichar nc;
+                if(lookup_char('e', DIAC_NONE, tone, g_unichar_isupper(last), &nc))
+                    g_array_index(buf,gunichar,buf->len-1) = nc;
+                else
+                    g_array_index(buf,gunichar,buf->len-1) = g_unichar_isupper(last) ? 'E' : 'e';
+                g_array_append_val(buf, key);
+                return TRUE;
+            } else if(get_diac(last)==DIAC_NONE){
                 gunichar nc; if(toggle_circumflex(last,&nc)){ g_array_index(buf,gunichar,buf->len-1)=nc; return TRUE; }
             }
         }
@@ -716,8 +835,17 @@ static gboolean telex_transform(GArray *buf, gunichar key, gboolean modern){
     if(lk=='o' && buf->len>0){
         gunichar last=g_array_index(buf,gunichar,buf->len-1);
         if(bare_lower(last)=='o'){
-            int dia=get_diac(last);
-            if(dia==DIAC_NONE||dia==DIAC_CIRCUMFLEX){
+            if(get_diac(last)==DIAC_CIRCUMFLEX){
+                // ô + o -> oo (khôi phục 2 chữ o cho book, google, cool...)
+                int tone = get_tone(last);
+                gunichar nc;
+                if(lookup_char('o', DIAC_NONE, tone, g_unichar_isupper(last), &nc))
+                    g_array_index(buf,gunichar,buf->len-1) = nc;
+                else
+                    g_array_index(buf,gunichar,buf->len-1) = g_unichar_isupper(last) ? 'O' : 'o';
+                g_array_append_val(buf, key);
+                return TRUE;
+            } else if(get_diac(last)==DIAC_NONE){
                 gunichar nc; if(toggle_circumflex(last,&nc)){ g_array_index(buf,gunichar,buf->len-1)=nc; return TRUE; }
             }
         }
@@ -814,6 +942,7 @@ static gboolean telex_transform(GArray *buf, gunichar key, gboolean modern){
         gboolean hasV=FALSE;
         for(guint i=0;i<buf->len;i++) if(is_vowel(g_array_index(buf,gunichar,i))){hasV=TRUE;break;}
         if(hasV){
+            auto_promote_diphthong(buf);
             int pos=find_tone_position(buf, modern);
             if(pos!=-1 && get_tone(g_array_index(buf,gunichar,pos))==tone){
                 // Cùng dấu đã có -> gõ s lần 2 để ra s thường (xóa dấu và thêm s)
@@ -951,7 +1080,7 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
     gboolean bad=(e->spellcheck && plen>=2 && !spell_word_valid(e->preedit->str));
     IBusText *t=ibus_text_new_from_string(e->preedit->str);
     if(bad) ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_ERROR, 0, (gint)plen);
-    ibus_engine_update_preedit_text(engine,t,cursor,visible);
+    ibus_engine_update_preedit_text(engine,t,(guint)plen,visible);
     clear_candidates(e);
     if(!bad){ ibus_engine_hide_lookup_table(engine); return; }
     GPtrArray *sugs=get_suggestions(e->preedit->str);
@@ -1015,7 +1144,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             push_preedit(e, engine, e->preedit->len, TRUE);
             return TRUE;
         }
-        if((keyval>=IBUS_1 && keyval<=IBUS_5) || (keyval>=IBUS_KP_1 && keyval<=IBUS_KP_5)){
+        if(e->mode_telex && ((keyval>=IBUS_1 && keyval<=IBUS_5) || (keyval>=IBUS_KP_1 && keyval<=IBUS_KP_5))){
             int idx = (keyval>=IBUS_1 && keyval<=IBUS_5) ? (keyval - IBUS_1) : (keyval - IBUS_KP_1);
             if(idx < e->n_candidates){
                 g_string_assign(e->preedit, e->candidates[idx]);
@@ -1082,6 +1211,40 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             return TRUE;
         }
         return FALSE;
+    }
+    // Telex bracket shortcuts: [ -> ươ, ] -> ư, { -> ƯƠ, } -> Ư, double bracket restores literal
+    if(e->mode_telex && (keyval==IBUS_bracketleft || keyval==IBUS_bracketright || keyval==IBUS_braceleft || keyval==IBUS_braceright)){
+        if(keyval==IBUS_bracketleft){
+            if(g_str_has_suffix(e->preedit->str, "ươ")){
+                g_string_truncate(e->preedit, e->preedit->len - strlen("ươ"));
+                g_string_append_c(e->preedit, '[');
+            } else {
+                g_string_append(e->preedit, "ươ");
+            }
+        } else if(keyval==IBUS_bracketright){
+            if(g_str_has_suffix(e->preedit->str, "ư")){
+                g_string_truncate(e->preedit, e->preedit->len - strlen("ư"));
+                g_string_append_c(e->preedit, ']');
+            } else {
+                g_string_append(e->preedit, "ư");
+            }
+        } else if(keyval==IBUS_braceleft){
+            if(g_str_has_suffix(e->preedit->str, "ƯƠ")){
+                g_string_truncate(e->preedit, e->preedit->len - strlen("ƯƠ"));
+                g_string_append_c(e->preedit, '{');
+            } else {
+                g_string_append(e->preedit, "ƯƠ");
+            }
+        } else if(keyval==IBUS_braceright){
+            if(g_str_has_suffix(e->preedit->str, "Ư")){
+                g_string_truncate(e->preedit, e->preedit->len - strlen("Ư"));
+                g_string_append_c(e->preedit, '}');
+            } else {
+                g_string_append(e->preedit, "Ư");
+            }
+        }
+        push_preedit(e, engine, e->preedit->len, TRUE);
+        return TRUE;
     }
     // punctuation commit
     if((keyval>=IBUS_exclam && keyval<=IBUS_slash) || (keyval>=IBUS_colon && keyval<=IBUS_at) || (keyval>=IBUS_bracketleft && keyval<=IBUS_grave) || (keyval>=IBUS_braceleft && keyval<=IBUS_asciitilde)){
@@ -1180,6 +1343,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
                 int tone=c-'0';
                 gboolean hasV=FALSE; for(guint i=0;i<buf->len;i++) if(is_vowel(g_array_index(buf,gunichar,i))){hasV=TRUE;break;}
                 if(hasV){
+                    auto_promote_diphthong(buf);
                     int pos=find_tone_position(buf, e->modern);
                     if(pos!=-1 && get_tone(g_array_index(buf,gunichar,pos))==tone){
                         // Nguyên tắc gõ lại để xóa: a1->á, á1->a

@@ -1,5 +1,109 @@
 package engine
 
+// tryEnglishRestore khôi phục từ tiếng Anh khi gõ tiếp phụ âm kết thúc:
+// test (tés+t), post (pós+t), fast (fás+t), fish (fís+h), task (tás+k), desk (dés+k), risk (rís+k)
+func tryEnglishRestore(buf []rune, key rune) ([]rune, bool) {
+	if len(buf) == 0 {
+		return buf, false
+	}
+	lk := toLower(key)
+	if lk != 't' && lk != 'h' && lk != 'k' && lk != 'p' {
+		return buf, false
+	}
+	last := buf[len(buf)-1]
+	if isVowel(last) && getTone(last) == ToneSac {
+		if bareChar, ok := lookup(bareLower(last), getDiacritic(last), ToneNone, isUpper(last)); ok {
+			newBuf := make([]rune, len(buf)-1, len(buf)+2)
+			copy(newBuf, buf[:len(buf)-1])
+			newBuf = append(newBuf, bareChar)
+			sChar := 's'
+			if isUpper(last) && isUpper(key) {
+				sChar = 'S'
+			}
+			newBuf = append(newBuf, sChar, key)
+			return newBuf, true
+		}
+	}
+	return buf, false
+}
+
+// autoPromoteDiphthong tự động nâng cấp nguyên âm đôi/ba khi có phụ âm cuối hoặc bán nguyên âm cuối:
+// i + e + [coda] -> iê + [coda] (hienr -> hiển, hienj -> hiện, vietj -> việt, tiens -> tiến, tieur -> tiểu)
+// u + o + [coda] -> uô + [coda] (muons -> muốn, cuocj -> cuộc, buonc -> buồn, chuois -> chuối)
+// y + e + [coda] -> yê + [coda] (chuyenr -> chuyển, khuyen -> khuyên)
+func autoPromoteDiphthong(buf []rune) []rune {
+	if len(buf) < 3 {
+		return buf
+	}
+	n := len(buf)
+
+	// 1. Bán nguyên âm cuối (triphthong): ...ieu, ...yeu, ...uoi
+	lastChar := bareLower(buf[n-1])
+	prevChar := bareLower(buf[n-2])
+	prev2Char := bareLower(buf[n-3])
+
+	if lastChar == 'u' && prevChar == 'e' && (prev2Char == 'i' || prev2Char == 'y') {
+		v2 := buf[n-2]
+		if getDiacritic(v2) == DiacriticNone {
+			if nc, ok := toggleCircumflex(v2); ok {
+				newBuf := make([]rune, n)
+				copy(newBuf, buf)
+				newBuf[n-2] = nc
+				return newBuf
+			}
+		}
+	}
+	if lastChar == 'i' && prevChar == 'o' && prev2Char == 'u' {
+		v1 := buf[n-3]
+		v2 := buf[n-2]
+		if getDiacritic(v1) == DiacriticNone && getDiacritic(v2) == DiacriticNone {
+			if nc, ok := toggleCircumflex(v2); ok {
+				newBuf := make([]rune, n)
+				copy(newBuf, buf)
+				newBuf[n-2] = nc
+				return newBuf
+			}
+		}
+	}
+
+	// 2. Có phụ âm cuối
+	lastV := -1
+	for i := n - 1; i >= 0; i-- {
+		if isVowel(buf[i]) {
+			lastV = i
+			break
+		}
+	}
+	if lastV <= 0 || lastV >= n-1 {
+		return buf
+	}
+	v2 := buf[lastV]
+	v1 := buf[lastV-1]
+	if bareLower(v1) == 'i' && bareLower(v2) == 'e' && getDiacritic(v2) == DiacriticNone {
+		if nc, ok := toggleCircumflex(v2); ok {
+			newBuf := make([]rune, n)
+			copy(newBuf, buf)
+			newBuf[lastV] = nc
+			return newBuf
+		}
+	} else if bareLower(v1) == 'y' && bareLower(v2) == 'e' && getDiacritic(v2) == DiacriticNone {
+		if nc, ok := toggleCircumflex(v2); ok {
+			newBuf := make([]rune, n)
+			copy(newBuf, buf)
+			newBuf[lastV] = nc
+			return newBuf
+		}
+	} else if bareLower(v1) == 'u' && bareLower(v2) == 'o' && getDiacritic(v1) == DiacriticNone && getDiacritic(v2) == DiacriticNone {
+		if nc, ok := toggleCircumflex(v2); ok {
+			newBuf := make([]rune, n)
+			copy(newBuf, buf)
+			newBuf[lastV] = nc
+			return newBuf
+		}
+	}
+	return buf
+}
+
 // TelexTransform attempts to transform buffer + key according to Telex rules.
 // Returns new buffer and whether key was consumed as transform (true) vs should be appended (false)
 // modern: tone placement style
@@ -27,12 +131,53 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 		}
 	}
 
-	// 1. Stroke dd -> đ
+	// Khôi phục từ tiếng Anh (test, post, fast...)
+	if newBuf, ok := tryEnglishRestore(buf, key); ok {
+		return newBuf, true
+	}
+
+	// Bracket shortcuts: [ -> ươ, [[ -> [, ] -> ư, ]] -> ]
+	if key == '[' {
+		if len(buf) >= 2 && buf[len(buf)-2] == 'ư' && buf[len(buf)-1] == 'ơ' {
+			return append(buf[:len(buf)-2], '['), true
+		}
+		return append(buf, 'ư', 'ơ'), true
+	}
+	if key == ']' {
+		if len(buf) >= 1 && buf[len(buf)-1] == 'ư' {
+			return append(buf[:len(buf)-1], ']'), true
+		}
+		return append(buf, 'ư'), true
+	}
+	if key == '{' {
+		if len(buf) >= 2 && buf[len(buf)-2] == 'Ư' && buf[len(buf)-1] == 'Ơ' {
+			return append(buf[:len(buf)-2], '{'), true
+		}
+		return append(buf, 'Ư', 'Ơ'), true
+	}
+	if key == '}' {
+		if len(buf) >= 1 && buf[len(buf)-1] == 'Ư' {
+			return append(buf[:len(buf)-1], '}'), true
+		}
+		return append(buf, 'Ư'), true
+	}
+
+	// 1. Stroke dd -> đ, ddd -> dd
 	if toLower(key) == 'd' {
 		// Check if last char is d/đ
 		if len(buf) > 0 {
 			last := buf[len(buf)-1]
 			if bareLower(last) == 'd' {
+				if getDiacritic(last) == DiacriticStroke {
+					dBare := 'd'
+					if isUpper(last) {
+						dBare = 'D'
+					}
+					newBuf := make([]rune, len(buf))
+					copy(newBuf, buf)
+					newBuf[len(newBuf)-1] = dBare
+					return append(newBuf, key), true
+				}
 				nr, ok := toggleStroke(last)
 				if ok {
 					newBuf := make([]rune, len(buf))
@@ -47,35 +192,26 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 	// 2. Diacritic tone modifiers: aa, ee, oo, aw, ow, uw
 	// We attempt to apply based on key
 	lk := toLower(key)
-	// aa -> â
+	// aa -> â, aaa -> aa
 	if lk == 'a' && len(buf) > 0 {
 		last := buf[len(buf)-1]
-		// If last is 'a' (any tone) with No diacritic, try circumflex
-		if bareLower(last) == 'a' && getDiacritic(last) == DiacriticNone {
-			// Toggle a -> â
-			nr, ok := toggleCircumflex(last)
-			if ok {
+		if bareLower(last) == 'a' {
+			if getDiacritic(last) == DiacriticCircumflex {
+				tone := getTone(last)
+				var nc rune
+				if r, ok := lookup('a', DiacriticNone, tone, isUpper(last)); ok {
+					nc = r
+				} else {
+					nc = 'a'
+					if isUpper(last) {
+						nc = 'A'
+					}
+				}
 				newBuf := make([]rune, len(buf))
 				copy(newBuf, buf)
-				newBuf[len(newBuf)-1] = nr
-				return newBuf, true
-			}
-		} else if bareLower(last) == 'a' && getDiacritic(last) == DiacriticCircumflex {
-			// â + a -> a (revert)
-			nr, ok := toggleCircumflex(last)
-			if ok {
-				newBuf := make([]rune, len(buf))
-				copy(newBuf, buf)
-				newBuf[len(newBuf)-1] = nr
-				return newBuf, true
-			}
-		}
-	}
-	if lk == 'e' && len(buf) > 0 {
-		last := buf[len(buf)-1]
-		if bareLower(last) == 'e' {
-			dia := getDiacritic(last)
-			if dia == DiacriticNone {
+				newBuf[len(newBuf)-1] = nc
+				return append(newBuf, key), true
+			} else if getDiacritic(last) == DiacriticNone {
 				nr, ok := toggleCircumflex(last)
 				if ok {
 					newBuf := make([]rune, len(buf))
@@ -83,7 +219,28 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 					newBuf[len(newBuf)-1] = nr
 					return newBuf, true
 				}
-			} else if dia == DiacriticCircumflex {
+			}
+		}
+	}
+	if lk == 'e' && len(buf) > 0 {
+		last := buf[len(buf)-1]
+		if bareLower(last) == 'e' {
+			if getDiacritic(last) == DiacriticCircumflex {
+				tone := getTone(last)
+				var nc rune
+				if r, ok := lookup('e', DiacriticNone, tone, isUpper(last)); ok {
+					nc = r
+				} else {
+					nc = 'e'
+					if isUpper(last) {
+						nc = 'E'
+					}
+				}
+				newBuf := make([]rune, len(buf))
+				copy(newBuf, buf)
+				newBuf[len(newBuf)-1] = nc
+				return append(newBuf, key), true
+			} else if getDiacritic(last) == DiacriticNone {
 				nr, ok := toggleCircumflex(last)
 				if ok {
 					newBuf := make([]rune, len(buf))
@@ -97,16 +254,22 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 	if lk == 'o' && len(buf) > 0 {
 		last := buf[len(buf)-1]
 		if bareLower(last) == 'o' {
-			dia := getDiacritic(last)
-			if dia == DiacriticNone {
-				nr, ok := toggleCircumflex(last)
-				if ok {
-					newBuf := make([]rune, len(buf))
-					copy(newBuf, buf)
-					newBuf[len(newBuf)-1] = nr
-					return newBuf, true
+			if getDiacritic(last) == DiacriticCircumflex {
+				tone := getTone(last)
+				var nc rune
+				if r, ok := lookup('o', DiacriticNone, tone, isUpper(last)); ok {
+					nc = r
+				} else {
+					nc = 'o'
+					if isUpper(last) {
+						nc = 'O'
+					}
 				}
-			} else if dia == DiacriticCircumflex {
+				newBuf := make([]rune, len(buf))
+				copy(newBuf, buf)
+				newBuf[len(newBuf)-1] = nc
+				return append(newBuf, key), true
+			} else if getDiacritic(last) == DiacriticNone {
 				nr, ok := toggleCircumflex(last)
 				if ok {
 					newBuf := make([]rune, len(buf))
@@ -270,6 +433,7 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 			}
 		}
 		if hasVowel {
+			buf = autoPromoteDiphthong(buf)
 			pos := findTonePosition(buf, modern)
 			if pos != -1 && getTone(buf[pos]) == tone {
 				// Cùng dấu đã có -> gõ s lần 2 để ra s thường (xóa dấu và thêm s)

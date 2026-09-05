@@ -183,10 +183,10 @@ func toggleBreve(r rune) (rune, bool) {
 	var newDia int
 	if info.Diacritic == DiacriticBreve {
 		newDia = DiacriticNone
-	} else if info.Diacritic == DiacriticNone {
+	} else if info.Diacritic == DiacriticNone || info.Diacritic == DiacriticCircumflex {
 		newDia = DiacriticBreve
 	} else {
-		return r, false // â cannot become ă directly
+		return r, false
 	}
 	nr, ok := lookup(info.Bare, newDia, info.Tone, info.IsUpper)
 	if !ok {
@@ -205,7 +205,7 @@ func toggleCircumflex(r rune) (rune, bool) {
 	case 'a':
 		if info.Diacritic == DiacriticCircumflex {
 			newDia = DiacriticNone
-		} else if info.Diacritic == DiacriticNone {
+		} else if info.Diacritic == DiacriticNone || info.Diacritic == DiacriticBreve {
 			newDia = DiacriticCircumflex
 		} else {
 			return r, false
@@ -221,7 +221,7 @@ func toggleCircumflex(r rune) (rune, bool) {
 	case 'o':
 		if info.Diacritic == DiacriticCircumflex {
 			newDia = DiacriticNone
-		} else if info.Diacritic == DiacriticNone {
+		} else if info.Diacritic == DiacriticNone || info.Diacritic == DiacriticHorn {
 			newDia = DiacriticCircumflex
 		} else {
 			return r, false
@@ -246,7 +246,7 @@ func toggleHorn(r rune) (rune, bool) {
 	case 'o':
 		if info.Diacritic == DiacriticHorn {
 			newDia = DiacriticNone
-		} else if info.Diacritic == DiacriticNone {
+		} else if info.Diacritic == DiacriticNone || info.Diacritic == DiacriticCircumflex {
 			newDia = DiacriticHorn
 		} else {
 			return r, false

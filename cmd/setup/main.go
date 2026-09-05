@@ -7,7 +7,19 @@ package main
 #include <string.h>
 
 static GtkWidget *rb_telex, *rb_vni, *cb_modern, *cb_spell;
+static GtkWidget *lbl_preview;
 static char *config_path;
+
+static void update_preview(){
+    gboolean modern = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_modern));
+    const char *txt = modern ?
+        "Preview modern (hoà): <tt>hoaf→hoà, hoas→hoá, huow→hươu, thoas→thoá</tt>" :
+        "Preview traditional (hòa): <tt>hoaf→hòa, hoas→hóa, huow→hươu, thoas→thóa</tt>";
+    gtk_label_set_markup(GTK_LABEL(lbl_preview), txt);
+}
+static void on_modern_toggled(GtkWidget *w, gpointer data){
+    update_preview();
+}
 
 static void on_save(GtkWidget *w, gpointer data){
     GtkWindow *win = GTK_WINDOW(data);
@@ -70,7 +82,13 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     gtk_container_add(GTK_CONTAINER(f2), box2);
     cb_modern = gtk_check_button_new_with_label("Kiểu mới (modern) — hoà thay vì hòa cho oa/oe/uy (Bộ GD 2018)");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cb_modern), strcmp(cur_modern,"true")==0);
+    g_signal_connect(cb_modern, "toggled", G_CALLBACK(on_modern_toggled), NULL);
     gtk_box_pack_start(GTK_BOX(box2), cb_modern, FALSE, FALSE, 0);
+    lbl_preview = gtk_label_new(NULL);
+    gtk_label_set_line_wrap(GTK_LABEL(lbl_preview), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(lbl_preview), 0.0);
+    update_preview();
+    gtk_box_pack_start(GTK_BOX(box2), lbl_preview, FALSE, FALSE, 0);
     cb_spell = gtk_check_button_new_with_label("Kiểm tra chính tả (chỉ gợi ý, không chặn)");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cb_spell), strcmp(cur_spell,"true")==0);
     gtk_box_pack_start(GTK_BOX(box2), cb_spell, FALSE, FALSE, 0);

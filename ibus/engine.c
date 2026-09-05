@@ -1029,7 +1029,19 @@ static void ucs4_to_gstring(GArray *arr, GString *s){
 /* IBus Engine definition */
 typedef struct _GoTiengVietEngine IBusGoTiengVietEngine;
 typedef struct _GoTiengVietEngineClass IBusGoTiengVietEngineClass;
-struct _GoTiengVietEngine { IBusEngine parent; GString *preedit; gboolean mode_telex; gboolean modern; gboolean spellcheck; gchar **candidates; int n_candidates; int cand_cursor; };
+struct _GoTiengVietEngine {
+    IBusEngine parent;
+    GString *preedit;
+    gboolean mode_telex;
+    gboolean modern;
+    gboolean spellcheck;
+    guint caps;
+    guint purpose;
+    guint hints;
+    gchar **candidates;
+    int n_candidates;
+    int cand_cursor;
+};
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
 G_DEFINE_TYPE(IBusGoTiengVietEngine, ibus_gotiengviet_engine, IBUS_TYPE_ENGINE)
 
@@ -1135,6 +1147,26 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             ibus_engine_update_preedit_text(engine,empty,0,FALSE);
             hide_suggest(e, engine);
         }
+        return FALSE;
+    }
+    // Trường mật khẩu (Password / PIN): Không can thiệp preedit, nhường phím trực tiếp
+    if(e->purpose == IBUS_INPUT_PURPOSE_PASSWORD || e->purpose == IBUS_INPUT_PURPOSE_PIN){
+        return FALSE;
+    }
+    // Nếu ứng dụng không hỗ trợ hiển thị Preedit: nhường phím trực tiếp
+    if(e->caps != 0 && !(e->caps & IBUS_CAP_PREEDIT_TEXT)){
+        return FALSE;
+    }
+    // Esc: hủy preedit nếu đang gõ dở
+    if(keyval == IBUS_Escape){
+        if(e->preedit->len > 0){
+            ibus_gotiengviet_engine_reset(e);
+            IBusText *empty = ibus_text_new_from_string("");
+            ibus_engine_update_preedit_text(engine, empty, 0, FALSE);
+            hide_suggest(e, engine);
+            return TRUE;
+        }
+        hide_suggest(e, engine);
         return FALSE;
     }
     // Tab chọn gợi ý, 1..5 chọn nhanh, Up/Down di chuyển, Enter commit gợi ý, Esc bỏ bảng gợi ý
@@ -1386,10 +1418,55 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             }
             g_array_free(buf,TRUE);
         }
-        // if not consumed, append digit (or commit?)
-        g_string_append_c(e->preedit,c);
-        push_preedit(e, engine, e->preedit->len, TRUE);
-        return TRUE;
+        if(e->mode_telex){
+            if(e->preedit->len>0){
+                gchar *word=expand_word(e->preedit->str);
+                gchar *commit=g_strdup_printf("%s%c",word,c);
+                g_free(word);
+                IBusText *t=ibus_text_new_from_string(commit);
+                ibus_engine_commit_text(engine,t);
+                g_free(commit);
+                ibus_gotiengviet_engine_reset(e);
+                IBusText *empty=ibus_text_new_from_string("");
+                ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+                hide_suggest(e, engine);
+                return TRUE;
+            }
+            return FALSE;
+        }
+        // VNI mode nhưng không áp dụng được dấu: commit từ và số
+        if(e->preedit->len>0){
+            gchar *word=expand_word(e->preedit->str);
+            gchar *commit=g_strdup_printf("%s%c",word,c);
+            g_free(word);
+            IBusText *t=ibus_text_new_from_string(commit);
+            ibus_engine_commit_text(engine,t);
+            g_free(commit);
+            ibus_gotiengviet_engine_reset(e);
+            IBusText *empty=ibus_text_new_from_string("");
+            ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+            hide_suggest(e, engine);
+            return TRUE;
+        }
+        return FALSE;
+    }
+    // Keypad numbers (Numpad)
+    if(keyval>=IBUS_KP_0 && keyval<=IBUS_KP_9){
+        gchar c = '0' + (keyval - IBUS_KP_0);
+        if(e->preedit->len>0){
+            gchar *word=expand_word(e->preedit->str);
+            gchar *commit=g_strdup_printf("%s%c",word,c);
+            g_free(word);
+            IBusText *t=ibus_text_new_from_string(commit);
+            ibus_engine_commit_text(engine,t);
+            g_free(commit);
+            ibus_gotiengviet_engine_reset(e);
+            IBusText *empty=ibus_text_new_from_string("");
+            ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+            hide_suggest(e, engine);
+            return TRUE;
+        }
+        return FALSE;
     }
     // Enter -> commit
     if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
@@ -1459,6 +1536,13 @@ static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     e->mode_telex=telex;
     e->modern=modern;
     e->spellcheck=spell;
+    e->purpose=IBUS_INPUT_PURPOSE_FREE_FORM;
+    // Đảm bảo focus vào input mới thì xóa sạch buffer preedit cũ
+    if(e->preedit && e->preedit->len>0){
+        ibus_gotiengviet_engine_reset(e);
+        IBusText *empty=ibus_text_new_from_string("");
+        ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+    }
     // Một engine duy nhất "gotiengviet": chuyển Telex/VNI trên indicator của app GoTiengViet
     // Đồng bộ cache mtime để reload_config_if_changed không load lại ngay
     gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
@@ -1466,6 +1550,43 @@ static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     if(stat(path, &st) == 0) cfg_mtime_cache = st.st_mtime;
     g_free(path);
     hide_suggest(e, engine);
+}
+static void ibus_gotiengviet_engine_focus_out(IBusEngine *engine){
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    if(e->preedit && e->preedit->len>0){
+        gchar *word=expand_word(e->preedit->str);
+        IBusText *t=ibus_text_new_from_string(word);
+        g_free(word);
+        ibus_engine_commit_text(engine,t);
+        ibus_gotiengviet_engine_reset(e);
+        IBusText *empty=ibus_text_new_from_string("");
+        ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+    }
+    hide_suggest(e, engine);
+}
+static void ibus_gotiengviet_engine_reset_cb(IBusEngine *engine){
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    if(e->preedit && e->preedit->len>0){
+        ibus_gotiengviet_engine_reset(e);
+        IBusText *empty=ibus_text_new_from_string("");
+        ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+    }
+    hide_suggest(e, engine);
+}
+static void ibus_gotiengviet_engine_disable(IBusEngine *engine){
+    ibus_gotiengviet_engine_focus_out(engine);
+}
+static void ibus_gotiengviet_engine_set_capabilities(IBusEngine *engine, guint caps){
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    e->caps = caps;
+}
+static void ibus_gotiengviet_engine_set_content_type(IBusEngine *engine, guint purpose, guint hints){
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    e->purpose = purpose;
+    e->hints = hints;
+}
+static void ibus_gotiengviet_engine_set_cursor_location(IBusEngine *engine, gint x, gint y, gint w, gint h){
+    (void)engine; (void)x; (void)y; (void)w; (void)h;
 }
 static void ibus_gotiengviet_engine_candidate_clicked(IBusEngine *engine, guint index, guint button, guint state){
     (void)button; (void)state;
@@ -1486,11 +1607,20 @@ static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass
     IBusEngineClass *ec=IBUS_ENGINE_CLASS(klass);
     ec->process_key_event=ibus_gotiengviet_engine_process_key_event;
     ec->focus_in=ibus_gotiengviet_engine_focus_in;
+    ec->focus_out=ibus_gotiengviet_engine_focus_out;
+    ec->reset=ibus_gotiengviet_engine_reset_cb;
+    ec->disable=ibus_gotiengviet_engine_disable;
+    ec->set_capabilities=ibus_gotiengviet_engine_set_capabilities;
+    ec->set_content_type=ibus_gotiengviet_engine_set_content_type;
+    ec->set_cursor_location=ibus_gotiengviet_engine_set_cursor_location;
     ec->candidate_clicked=ibus_gotiengviet_engine_candidate_clicked;
 }
 static void ibus_gotiengviet_engine_init(IBusGoTiengVietEngine *e){
     e->preedit=g_string_new("");
     e->modern=TRUE;
+    e->caps=IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
+    e->purpose=IBUS_INPUT_PURPOSE_FREE_FORM;
+    e->hints=IBUS_INPUT_HINT_NONE;
     load_config(&e->mode_telex, &e->modern, &e->spellcheck);
 }
 static IBusBus *bus=NULL;

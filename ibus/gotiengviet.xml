@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component>
+  <name>org.freedesktop.IBus.GoTiengViet</name>
+  <description>GoTiengViet - Gõ Telex/VNI thuần hệ thống (không lib ngoài)</description>
+  <exec>/usr/libexec/ibus-engine-gotiengviet --ibus</exec>
+  <version>0.1.0</version>
+  <author>GoTiengViet Project</author>
+  <license>GPL</license>
+  <homepage>https://github.com/isthaison/gotiengviet</homepage>
+  <textdomain>gotiengviet</textdomain>
+  <engines>
+    <engine>
+      <name>gotiengviet-telex</name>
+      <longname>Telex</longname>
+      <description>Telex: s f r x j, aa ee oo aw ow uw dd, z xóa - github.com/isthaison/gotiengviet</description>
+      <language>vi</language>
+      <icon>gotiengviet</icon>
+      <layout>us</layout>
+      <rank>99</rank>
+      <setup>/usr/libexec/ibus-setup-gotiengviet</setup>
+    </engine>
+    <engine>
+      <name>gotiengviet-vni</name>
+      <longname>VNI</longname>
+      <description>VNI: 1 2 3 4 5, 6 7 8 9 0 - github.com/isthaison/gotiengviet</description>
+      <language>vi</language>
+      <icon>gotiengviet</icon>
+      <layout>us</layout>
+      <rank>99</rank>
+      <setup>/usr/libexec/ibus-setup-gotiengviet</setup>
+    </engine>
+  </engines>
+</component>

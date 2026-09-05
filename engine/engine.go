@@ -1,0 +1,194 @@
+package engine
+
+import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"strings"
+	"unicode"
+)
+
+type InputMode int
+
+const (
+	ModeTelex InputMode = 0
+	ModeVNI   InputMode = 1
+)
+
+type Engine struct {
+	Mode   InputMode
+	Modern bool // true = new style hòa
+	buffer []rune
+}
+
+func loadModernFromConfig() bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return true
+	}
+	cfgPath := filepath.Join(home, ".config", "gotiengviet", "config")
+	f, err := os.Open(cfgPath)
+	if err != nil {
+		return true
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, "modern=") {
+			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
+			return v == "true" || v == "True" || v == "1"
+		}
+	}
+	return true
+}
+
+func loadMethodFromConfig() InputMode {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ModeTelex
+	}
+	cfgPath := filepath.Join(home, ".config", "gotiengviet", "config")
+	f, err := os.Open(cfgPath)
+	if err != nil {
+		return ModeTelex
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, "method=") {
+			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
+			if v == "vni" || v == "VNI" {
+				return ModeVNI
+			}
+		}
+	}
+	return ModeTelex
+}
+
+func NewEngine(mode InputMode) *Engine {
+	// Nếu mode là 0 và config có method khác, ưu tiên config? Giữ nguyên mode truyền vào nhưng Modern đọc từ config
+	return &Engine{Mode: mode, Modern: loadModernFromConfig(), buffer: []rune{}}
+}
+
+func NewEngineFromConfig() *Engine {
+	return &Engine{Mode: loadMethodFromConfig(), Modern: loadModernFromConfig(), buffer: []rune{}}
+}
+
+func (e *Engine) SetMode(mode InputMode) { e.Mode = mode }
+func (e *Engine) Reset()                 { e.buffer = []rune{} }
+func (e *Engine) Buffer() string         { return string(e.buffer) }
+
+// isWordBreak decides if rune terminates current syllable (commit)
+func isWordBreak(r rune) bool {
+	if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+		return true
+	}
+	// punctuation
+	if unicode.IsPunct(r) || unicode.IsSymbol(r) {
+		return true
+	}
+	// digit? In Telex, digits are word breaks except VNI digits are controls
+	// For Telex mode, digits should be word breaks (unless they are control in VNI)
+	return false
+}
+
+// ProcessKey processes one incoming keystroke.
+// Returns: newComposing (current buffer after processing), backspaces (how many chars to delete before output), commit (string to commit if word break), consumed
+// For IBus: if commit != "" -> commit text and clear composing
+// If backspaces>0 -> need to delete and retype newComposing
+func (e *Engine) ProcessKey(key rune) (newComposing string, backspaces int, commit string) {
+	// Backspace handling
+	if key == '\b' || key == 127 { // backspace
+		if len(e.buffer) > 0 {
+			e.buffer = e.buffer[:len(e.buffer)-1]
+			return string(e.buffer), 1, ""
+		}
+		return "", 0, ""
+	}
+
+	// Word boundary: space, punctuation, enter
+	// In VNI mode, digits 0-9 are not word breaks if they are control; but punctuation still
+	if isWordBreak(key) {
+		committed := string(e.buffer) + string(key)
+		e.buffer = []rune{}
+		return "", 0, committed
+	}
+
+	// For VNI mode, digits 0-9 are potential control keys, don't treat as word break
+	// Try transform
+	oldLen := len(e.buffer)
+	oldStr := string(e.buffer)
+	var newBuf []rune
+	var consumed bool
+
+	switch e.Mode {
+	case ModeTelex:
+		newBuf, consumed = TelexTransform(e.buffer, key, e.Modern)
+		if consumed {
+			e.buffer = newBuf
+			// Calculate backspaces: need to delete old buffer length and replace with new?
+			// For IBus, we return backspaces = oldLen (to delete) and newComposing = new buffer
+			// But if transform was tone replacement, old and new len same, still need to delete? IBus can handle replace.
+			// We'll return backspaces = oldLen if new != old, else 0?
+			// Simpler: return len difference handling via IBus caller deleting appropriately.
+			// We'll compute: if newBuffer != oldStr, need to backspace oldLen and type new.
+			if string(newBuf) == oldStr {
+				return string(newBuf), 0, ""
+			}
+			return string(newBuf), oldLen, ""
+		}
+		// Not consumed -> append
+		e.buffer = append(e.buffer, key)
+		return string(e.buffer), 0, ""
+
+	case ModeVNI:
+		// Check if key is VNI control digit
+		if key >= '0' && key <= '9' {
+			newBuf, consumed = VNITransform(e.buffer, key, e.Modern)
+			if consumed {
+				e.buffer = newBuf
+				if string(newBuf) == oldStr {
+					return string(newBuf), 0, ""
+				}
+				return string(newBuf), oldLen, ""
+			}
+			// Not consumed digit -> if digit should be literal, append it as word char? But digits are usually separate.
+			// We'll append digit and also trigger commit? For VNI, typing digit without vowel should remain digit.
+			e.buffer = append(e.buffer, key)
+			return string(e.buffer), 0, ""
+		}
+		// Letter key
+		e.buffer = append(e.buffer, key)
+		return string(e.buffer), 0, ""
+	}
+
+	return string(e.buffer), 0, ""
+}
+
+// FeedString is helper for testing: feed whole string sequentially (without word boundary handling for spaces)
+func (e *Engine) FeedString(s string) string {
+	e.Reset()
+	var last string
+	for _, r := range []rune(s) {
+		if r == ' ' {
+			// commit current buffer + space
+			last += e.Buffer() + " "
+			e.Reset()
+			continue
+		}
+		comp, _, commit := e.ProcessKey(r)
+		if commit != "" {
+			last += commit
+		} else {
+			_ = comp
+		}
+	}
+	last += e.Buffer()
+	return last
+}
+
+// Transform helper standalone (stateless)
+func TransformTelex(s string) string { return TransformStringTelex(s, true) }
+func TransformVNI(s string) string   { return TransformStringVNI(s, true) }

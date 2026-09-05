@@ -573,7 +573,7 @@ static void ucs4_to_gstring(GArray *arr, GString *s){
 /* IBus Engine definition */
 typedef struct _GoTiengVietEngine IBusGoTiengVietEngine;
 typedef struct _GoTiengVietEngineClass IBusGoTiengVietEngineClass;
-struct _GoTiengVietEngine { IBusEngine parent; GString *preedit; gboolean mode_telex; gboolean modern; };
+struct _GoTiengVietEngine { IBusEngine parent; GString *preedit; gboolean mode_telex; gboolean modern; gboolean spellcheck; };
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
 G_DEFINE_TYPE(IBusGoTiengVietEngine, ibus_gotiengviet_engine, IBUS_TYPE_ENGINE)
 
@@ -778,10 +778,11 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     }
     return FALSE;
 }
-static gboolean load_config(gboolean *is_telex, gboolean *modern){
+static gboolean load_config(gboolean *is_telex, gboolean *modern, gboolean *spell){
     gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
     gboolean telex = TRUE;
     gboolean mod = TRUE;
+    gboolean spellcheck = TRUE;
     GKeyFile *kf = g_key_file_new();
     if(g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)){
         gchar *method = g_key_file_get_string(kf, "input", "method", NULL);
@@ -796,17 +797,24 @@ static gboolean load_config(gboolean *is_telex, gboolean *modern){
             else mod=TRUE;
             g_free(mod_str);
         }
+        gchar *spell_str = g_key_file_get_string(kf, "input", "spellcheck", NULL);
+        if(spell_str){
+            if(g_strcmp0(spell_str, "false")==0 || g_strcmp0(spell_str, "False")==0 || g_strcmp0(spell_str, "0")==0) spellcheck=FALSE;
+            else spellcheck=TRUE;
+            g_free(spell_str);
+        }
         g_key_file_free(kf);
     }
     g_free(path);
     if(is_telex) *is_telex = telex;
     if(modern) *modern = mod;
+    if(spell) *spell = spellcheck;
     return TRUE;
 }
 static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     gboolean telex, modern;
-    load_config(&telex, &modern);
+    load_config(&telex, &modern, NULL);
     e->mode_telex=telex;
     e->modern=modern;
 }
@@ -818,7 +826,7 @@ static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass
 static void ibus_gotiengviet_engine_init(IBusGoTiengVietEngine *e){
     e->preedit=g_string_new("");
     e->modern=TRUE;
-    load_config(&e->mode_telex, &e->modern);
+    load_config(&e->mode_telex, &e->modern, &e->spellcheck);
 }
 static IBusBus *bus=NULL;
 static IBusFactory *factory=NULL;
@@ -833,9 +841,10 @@ static IBusEngine* create_engine_cb(IBusFactory *f, const gchar *engine_name, gp
     IBusGoTiengVietEngine *ue = (IBusGoTiengVietEngine*)engine;
     if(g_strcmp0(engine_name, "gotiengviet-vni")==0) ue->mode_telex=FALSE;
     else ue->mode_telex=TRUE;
-    gboolean mod=TRUE;
-    load_config(NULL, &mod);
+    gboolean mod=TRUE, spell=TRUE;
+    load_config(NULL, &mod, &spell);
     ue->modern=mod;
+    ue->spellcheck=spell;
     return engine;
 }
 /* Crash handling - chỉ dùng glib hệ thống */

@@ -16,9 +16,11 @@ const (
 )
 
 type Engine struct {
-	Mode   InputMode
-	Modern bool // true = new style hòa
-	buffer []rune
+	Mode            InputMode
+	Modern          bool // true = new style hòa
+	SpellCheck      bool
+	LastSuggestions []string
+	buffer          []rune
 }
 
 func loadModernFromConfig() bool {
@@ -36,6 +38,28 @@ func loadModernFromConfig() bool {
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if strings.HasPrefix(line, "modern=") {
+			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
+			return v == "true" || v == "True" || v == "1"
+		}
+	}
+	return true
+}
+
+func loadSpellCheckFromConfig() bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return true
+	}
+	cfgPath := filepath.Join(home, ".config", "gotiengviet", "config")
+	f, err := os.Open(cfgPath)
+	if err != nil {
+		return true
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, "spellcheck=") {
 			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
 			return v == "true" || v == "True" || v == "1"
 		}
@@ -68,12 +92,11 @@ func loadMethodFromConfig() InputMode {
 }
 
 func NewEngine(mode InputMode) *Engine {
-	// Nếu mode là 0 và config có method khác, ưu tiên config? Giữ nguyên mode truyền vào nhưng Modern đọc từ config
-	return &Engine{Mode: mode, Modern: loadModernFromConfig(), buffer: []rune{}}
+	return &Engine{Mode: mode, Modern: loadModernFromConfig(), SpellCheck: loadSpellCheckFromConfig(), buffer: []rune{}}
 }
 
 func NewEngineFromConfig() *Engine {
-	return &Engine{Mode: loadMethodFromConfig(), Modern: loadModernFromConfig(), buffer: []rune{}}
+	return &Engine{Mode: loadMethodFromConfig(), Modern: loadModernFromConfig(), SpellCheck: loadSpellCheckFromConfig(), buffer: []rune{}}
 }
 
 func (e *Engine) SetMode(mode InputMode) { e.Mode = mode }
@@ -109,9 +132,14 @@ func (e *Engine) ProcessKey(key rune) (newComposing string, backspaces int, comm
 	}
 
 	// Word boundary: space, punctuation, enter
-	// In VNI mode, digits 0-9 are not word breaks if they are control; but punctuation still
 	if isWordBreak(key) {
-		committed := string(e.buffer) + string(key)
+		word := string(e.buffer)
+		if e.SpellCheck && word != "" && !IsValidVietnameseWord(word) {
+			e.LastSuggestions = SuggestCorrections(word)
+		} else {
+			e.LastSuggestions = nil
+		}
+		committed := word + string(key)
 		e.buffer = []rune{}
 		return "", 0, committed
 	}

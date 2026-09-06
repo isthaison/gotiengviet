@@ -91,17 +91,48 @@ static void normalize_tone(GArray *buf, gboolean modern) {
         apply_tone_at(buf, find_tone_position(buf, modern), tone);
     }
 }
-static gboolean shortcut(GArray *buf, const gchar *expansion, gunichar key) {
-    glong length;
-    gunichar *chars = g_utf8_to_ucs4(expansion, -1, NULL, &length, NULL);
-    if (g_unichar_isupper(key)) for (glong i=0;i<length;i++) chars[i]=g_unichar_toupper(chars[i]);
-    gboolean repeat = buf->len >= (guint)length &&
-        !memcmp(&g_array_index(buf,gunichar,buf->len-length), chars, length*sizeof(gunichar));
-    if (repeat) { g_array_set_size(buf, buf->len-length); g_array_append_val(buf,key); }
-    else g_array_append_vals(buf,chars,length);
+static gboolean shortcut_matches(const GArray *buf, const gchar *expansion) {
+    if (!expansion || !buf->len) return FALSE;
+    glong len = 0;
+    gunichar *chars = g_utf8_to_ucs4(expansion, -1, NULL, &len, NULL);
+    if (!chars || (glong)buf->len < len) {
+        g_free(chars);
+        return FALSE;
+    }
+    gboolean match = TRUE;
+    for (glong i = 0; i < len; i++) {
+        gunichar b = to_lower_g(g_array_index(buf, gunichar, buf->len - len + i));
+        gunichar e = to_lower_g(chars[i]);
+        if (b != e) { match = FALSE; break; }
+    }
+    g_free(chars);
+    return match;
+}
+
+static gboolean shortcut_undo(GArray *buf, const gchar *expansion, gunichar key) {
+    glong len = 0;
+    gunichar *chars = g_utf8_to_ucs4(expansion, -1, NULL, &len, NULL);
+    if (!chars || (glong)buf->len < len) { g_free(chars); return FALSE; }
+    gunichar last_c = g_array_index(buf, gunichar, buf->len - 1);
+    g_array_set_size(buf, buf->len - len);
+    gunichar out_key = (g_unichar_isupper(last_c) || g_unichar_isupper(key)) ? g_unichar_toupper(key) : key;
+    g_array_append_val(buf, out_key);
     g_free(chars);
     return TRUE;
 }
+
+static gboolean shortcut_apply(GArray *buf, const gchar *expansion, gunichar key) {
+    glong len = 0;
+    gunichar *chars = g_utf8_to_ucs4(expansion, -1, NULL, &len, NULL);
+    if (!chars) return FALSE;
+    if (g_unichar_isupper(key)) {
+        for (glong i = 0; i < len; i++) chars[i] = g_unichar_toupper(chars[i]);
+    }
+    g_array_append_vals(buf, chars, len);
+    g_free(chars);
+    return TRUE;
+}
+
 static gboolean shape(GArray *buf, const KeyRule *rule, gunichar key, gboolean modern) {
     int first = nucleus_start(buf), last = nucleus_end(buf);
     int positions[2], count = 0;
@@ -128,10 +159,7 @@ static gboolean shape(GArray *buf, const KeyRule *rule, gunichar key, gboolean m
             if (priority > best) { positions[0]=i; count=1; best=priority; }
         }
     }
-    if (!count) {
-        if (rule->expansion && first < 0) return shortcut(buf,rule->expansion,key);
-        return FALSE;
-    }
+    if (!count) return FALSE;
     gboolean repeat = TRUE;
     int marks[2];
     for (int i=0;i<count;i++) {
@@ -144,40 +172,54 @@ static gboolean shape(GArray *buf, const KeyRule *rule, gunichar key, gboolean m
         if (!lookup_char(bare_lower(c), repeat ? DIAC_NONE : marks[i], get_tone(c), g_unichar_isupper(c), &changed)) return FALSE;
         g_array_index(buf,gunichar,positions[i]) = changed;
     }
-    /* The same undo rule for every shape: remove it and append one raw key.
-     * Special case for 'w' -> 'ư': repeating 'w' on standalone 'ư' should restore
-     * raw 'w' instead of keeping 'u' and appending 'w' (which would make 'uw'). */
-    if (repeat) {
-        if (rule->expansion && count == 1 && positions[0] == first && positions[0] == last &&
-            bare_lower(g_array_index(buf, gunichar, positions[0])) == 'u' && !closed) {
-            gunichar cur = g_array_index(buf, gunichar, positions[0]);
-            g_array_index(buf, gunichar, positions[0]) = (g_unichar_isupper(cur) || g_unichar_isupper(key)) ? 'W' : 'w';
-        } else {
-            g_array_append_val(buf, key);
-        }
-    } else {
-        normalize_tone(buf, modern);
-    }
+    /* The same undo rule for every shape: remove it and append one raw key. */
+    if (repeat) g_array_append_val(buf, key);
+    else normalize_tone(buf, modern);
     return TRUE;
 }
 gboolean gtv_apply_key(GArray *buf, gunichar key, GtvMode mode, gboolean modern) {
     gtv_init();
-    const KeyRule *rule = key_rule(mode,key);
+    const KeyRule *rule = key_rule(mode, key);
     if (!rule || !syllable_eligible(buf)) return FALSE;
-    if (rule->operation == OP_SHORTCUT) return shortcut(buf,rule->expansion,key);
+
+    /* 1. SHORTCUT UNDO: If the buffer currently ends with this rule's expansion token,
+     * repeating the shortcut key undoes the token and restores the raw key.
+     * Examples: 'ư' + 'w' -> 'w', 'Ư' + 'W' -> 'W', 'ươ' + '[' -> '[', 'tư' + 'w' -> 'tw'. */
+    if (rule->expansion && shortcut_matches(buf, rule->expansion)) {
+        return shortcut_undo(buf, rule->expansion, key);
+    }
+
+    /* 2. PURE SHORTCUT: If this is an explicit shortcut key (e.g. [, ], {, }), apply it. */
+    if (rule->operation == OP_SHORTCUT) {
+        return shortcut_apply(buf, rule->expansion, key);
+    }
+
+    /* 3. TONE CLEAR: 'z' (Telex) or '0' (VNI) clears tone. */
     if (rule->operation == OP_CLEAR) {
         if (!current_tone(buf)) return FALSE;
         remove_all_tones(buf);
         return TRUE;
     }
-    if (rule->operation == OP_SHAPE) return shape(buf,rule,key,modern);
+
+    /* 4. SHAPE MODIFIER: Try modifying an existing vowel in the buffer (e.g. a->â, a+w->ă, o+w->ơ, uo+w->ươ). */
+    if (rule->operation == OP_SHAPE) {
+        if (shape(buf, rule, key, modern)) return TRUE;
+        /* If shape found no existing vowel to modify, and this key has a shortcut expansion (e.g. 'w' -> 'ư'
+         * at the start of a syllable or after a consonant onset), apply the expansion. */
+        if (rule->expansion && nucleus_start(buf) < 0) {
+            return shortcut_apply(buf, rule->expansion, key);
+        }
+        return FALSE;
+    }
+
+    /* 5. TONE ACCENT: 's', 'f', 'r', 'x', 'j' (Telex) or '1'..'5' (VNI). */
     if (nucleus_start(buf) < 0) return FALSE;
     gboolean repeat = current_tone(buf) == rule->mark;
     remove_all_tones(buf);
-    if (repeat) g_array_append_val(buf,key);
+    if (repeat) g_array_append_val(buf, key);
     else {
         auto_promote_diphthong(buf);
-        apply_tone_at(buf,find_tone_position(buf,modern),rule->mark);
+        apply_tone_at(buf, find_tone_position(buf, modern), rule->mark);
     }
     return TRUE;
 }

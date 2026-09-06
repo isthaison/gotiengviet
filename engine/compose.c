@@ -144,9 +144,20 @@ static gboolean shape(GArray *buf, const KeyRule *rule, gunichar key, gboolean m
         if (!lookup_char(bare_lower(c), repeat ? DIAC_NONE : marks[i], get_tone(c), g_unichar_isupper(c), &changed)) return FALSE;
         g_array_index(buf,gunichar,positions[i]) = changed;
     }
-    /* The same undo rule for every shape: remove it and append one raw key. */
-    if (repeat) g_array_append_val(buf,key);
-    else normalize_tone(buf,modern);
+    /* The same undo rule for every shape: remove it and append one raw key.
+     * Special case for 'w' -> 'ư': repeating 'w' on standalone 'ư' should restore
+     * raw 'w' instead of keeping 'u' and appending 'w' (which would make 'uw'). */
+    if (repeat) {
+        if (rule->expansion && count == 1 && positions[0] == first && positions[0] == last &&
+            bare_lower(g_array_index(buf, gunichar, positions[0])) == 'u' && !closed) {
+            gunichar cur = g_array_index(buf, gunichar, positions[0]);
+            g_array_index(buf, gunichar, positions[0]) = (g_unichar_isupper(cur) || g_unichar_isupper(key)) ? 'W' : 'w';
+        } else {
+            g_array_append_val(buf, key);
+        }
+    } else {
+        normalize_tone(buf, modern);
+    }
     return TRUE;
 }
 gboolean gtv_apply_key(GArray *buf, gunichar key, GtvMode mode, gboolean modern) {

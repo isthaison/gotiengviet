@@ -45,3 +45,34 @@ GPtrArray *gtv_ai_suggest(const GtvConfig *config, const gchar *word, const gcha
     if (spell_word_valid(word)) return g_ptr_array_new_with_free_func(g_free);
     return get_suggestions(word);
 }
+
+GPtrArray *gtv_predict_next(const GtvConfig *config, const gchar *context, const gchar *prefix) {
+    gtv_init();
+    if (config && config->ai_enabled && gtv_ai_available(config)) {
+        gchar *pfx_hint = (prefix && *prefix) ? g_strdup_printf(" (bắt đầu bằng chữ '%s')", prefix) : g_strdup("");
+        gchar *prompt = g_strdup_printf("Dự đoán từ tiếp theo trong tiếng Việt cho ngữ cảnh: '%s'%s -> chỉ trả về tối đa 3 từ cách nhau bằng dấu phẩy, không giải thích:",
+            context ? context : "", pfx_hint);
+        g_free(pfx_hint);
+        gchar *quoted_prompt = gtv_json_quote(prompt);
+        gchar *model = gtv_json_quote(config->model);
+        gchar *body = g_strdup_printf("{\"model\":%s,\"prompt\":%s,\"stream\":false}", model, quoted_prompt);
+        gchar *reply = ollama_request(config, "/api/generate", body);
+        gchar *response = gtv_json_response(reply);
+        g_free(reply); g_free(body); g_free(model); g_free(quoted_prompt); g_free(prompt);
+        if (response && *g_strstrip(response)) {
+            GPtrArray *out = g_ptr_array_new_with_free_func(g_free);
+            gchar **tokens = g_strsplit_set(response, ",\n", -1);
+            for (guint i = 0; tokens[i] && out->len < 5; i++) {
+                gchar *stripped = g_strstrip(tokens[i]);
+                if (*stripped) add_candidate_unique(out, stripped);
+            }
+            g_strfreev(tokens);
+            g_free(response);
+            if (out->len > 0) return out;
+            g_ptr_array_unref(out);
+        } else {
+            g_free(response);
+        }
+    }
+    return gtv_vector_predict_next(context, prefix, 5);
+}

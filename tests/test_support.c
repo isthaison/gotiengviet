@@ -164,7 +164,36 @@ static void test_ollama(void) {
     config.url="http://fail";
     g_assert_false(gtv_ai_available(&config));
     out=gtv_ai_suggest(&config,"được","");g_assert_cmpuint(out->len,==,0);g_ptr_array_unref(out);
+}
 
+static void test_vector_prediction(void) {
+    /* Test next-word predictions without prefix */
+    GPtrArray *p1 = gtv_vector_predict_next("xin", "", 5);
+    g_assert_nonnull(p1);
+    g_assert_cmpuint(p1->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(p1, 0), ==, "chào");
+    g_ptr_array_unref(p1);
+
+    GPtrArray *p2 = gtv_vector_predict_next("chúc mừng", "", 5);
+    g_assert_nonnull(p2);
+    g_assert_cmpuint(p2->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(p2, 0), ==, "năm mới");
+    g_ptr_array_unref(p2);
+
+    /* Test next-word prediction with prefix filter */
+    GPtrArray *p3 = gtv_vector_predict_next("công nghệ", "th", 5);
+    g_assert_nonnull(p3);
+    g_assert_cmpuint(p3->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(p3, 0), ==, "thông tin");
+    g_ptr_array_unref(p3);
+
+    /* Test fallback through gtv_predict_next */
+    GtvConfig config = {.ai_enabled = FALSE};
+    GPtrArray *p4 = gtv_predict_next(&config, "thành phố", "");
+    g_assert_nonnull(p4);
+    g_assert_cmpuint(p4->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(p4, 0), ==, "hồ chí minh");
+    g_ptr_array_unref(p4);
 }
 int main(int argc,char **argv) {
     const gchar *fixture=g_getenv("GTV_TEST_CURL_DIR");
@@ -177,6 +206,7 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/json",test_json);
     g_test_add_func("/support/ollama",test_ollama);
     g_test_add_func("/support/spelling",test_spelling);
+    g_test_add_func("/support/vector-prediction",test_vector_prediction);
     g_test_add_func("/algorithm/order-independence",test_order_independence);
     g_test_add_func("/algorithm/random-input",test_random_input);
     return g_test_run();

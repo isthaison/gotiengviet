@@ -30,4 +30,7 @@ void gtv_config_clear(GtvConfig *config);
 /* Ollama is optional; unavailable/invalid responses fall back to spelling rules. */
 gboolean gtv_ai_available(const GtvConfig *config);
 GPtrArray *gtv_ai_suggest(const GtvConfig *config, const gchar *word, const gchar *context);
+/* Vector-based semantic next-word prediction based on sentence context and optional prefix. */
+GPtrArray *gtv_vector_predict_next(const gchar *context, const gchar *prefix, guint max_results);
+GPtrArray *gtv_predict_next(const GtvConfig *config, const gchar *context, const gchar *prefix);
 #endif

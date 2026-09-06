@@ -21,6 +21,7 @@ typedef struct _GoTiengVietEngineClass IBusGoTiengVietEngineClass;
 struct _GoTiengVietEngine {
     IBusEngine parent;
     GString *preedit;
+    GString *sentence_context;
     gboolean mode_telex;
     gboolean modern;
     gboolean spellcheck;
@@ -33,6 +34,26 @@ struct _GoTiengVietEngine {
 };
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
 G_DEFINE_TYPE(IBusGoTiengVietEngine, ibus_gotiengviet_engine, IBUS_TYPE_ENGINE)
+
+static void update_context(IBusGoTiengVietEngine *e, const char *committed){
+    if(!e->sentence_context || !committed || !*committed) return;
+    if(strpbrk(committed, ".!?;\n")){
+        g_string_assign(e->sentence_context, "");
+        return;
+    }
+    if(e->sentence_context->len > 0) g_string_append_c(e->sentence_context, ' ');
+    g_string_append(e->sentence_context, committed);
+    if(e->sentence_context->len > 120){
+        gchar **tokens = g_strsplit_set(e->sentence_context->str, " ", -1);
+        guint n = g_strv_length(tokens);
+        if(n > 3){
+            gchar *trimmed = g_strjoin(" ", tokens[n-3], tokens[n-2], tokens[n-1], NULL);
+            g_string_assign(e->sentence_context, trimmed);
+            g_free(trimmed);
+        }
+        g_strfreev(tokens);
+    }
+}
 
 static void clear_candidates(IBusGoTiengVietEngine *e){
     if(e->candidates){
@@ -62,9 +83,17 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
         ibus_engine_hide_preedit_text(engine);
     }
     clear_candidates(e);
-    if(!bad){ ibus_engine_hide_lookup_table(engine); return; }
-    GPtrArray *sugs=get_suggestions(e->preedit->str);
-    if(sugs->len==0){ ibus_engine_hide_lookup_table(engine); g_ptr_array_free(sugs,TRUE); return; }
+    GPtrArray *sugs = NULL;
+    if(bad){
+        sugs = get_suggestions(e->preedit->str);
+    } else if(e->spellcheck && e->sentence_context && e->sentence_context->len > 0 && plen >= 1){
+        sugs = gtv_vector_predict_next(e->sentence_context->str, e->preedit->str, 5);
+    }
+    if(!sugs || sugs->len == 0){
+        if(sugs) g_ptr_array_free(sugs, TRUE);
+        ibus_engine_hide_lookup_table(engine);
+        return;
+    }
     e->n_candidates=(int)sugs->len;
     e->cand_cursor=0;
     e->candidates=g_new(gchar*, sugs->len);
@@ -127,6 +156,9 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         hide_suggest(e, engine);
         return FALSE;
     }
+    if(keyval == '.' || keyval == '?' || keyval == '!' || keyval == ';' || keyval == '\n'){
+        if(e->sentence_context) g_string_assign(e->sentence_context, "");
+    }
     // Tab chọn gợi ý, 1..5 chọn nhanh, Up/Down di chuyển, Enter commit gợi ý, Esc bỏ bảng gợi ý
     if(e->n_candidates>0 && e->candidates){
         if(keyval==IBUS_Tab){
@@ -139,6 +171,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             if(idx < e->n_candidates){
                 g_string_assign(e->preedit, e->candidates[idx]);
                 gchar *word=expand_word(e->preedit->str);
+                update_context(e, word);
                 IBusText *t=ibus_text_new_from_string(word);
                 g_free(word);
                 ibus_engine_commit_text(engine,t);
@@ -162,6 +195,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
             g_string_assign(e->preedit, e->candidates[e->cand_cursor]);
             gchar *word=expand_word(e->preedit->str);
+            update_context(e, word);
             IBusText *t=ibus_text_new_from_string(word);
             g_free(word);
             ibus_engine_commit_text(engine,t);
@@ -190,6 +224,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     if(keyval==IBUS_space){
         if(e->preedit->len>0){
             gchar *commit = expand_word(e->preedit->str);
+            update_context(e, commit);
             gchar *with_space = g_strdup_printf("%s ",commit);
             IBusText *t=ibus_text_new_from_string(with_space);
             ibus_engine_commit_text(engine,t);
@@ -212,6 +247,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         composer->buffer = gstring_to_ucs4(e->preedit);
         gchar *commit = gtv_engine_process(composer, key, NULL);
         if(commit){
+            update_context(e, commit);
             ibus_engine_commit_text(engine, ibus_text_new_from_string(commit));
             g_free(commit);
             ibus_gotiengviet_engine_reset(e);
@@ -228,6 +264,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
         if(e->preedit->len>0){
             gchar *word=expand_word(e->preedit->str);
+            update_context(e, word);
             IBusText *t=ibus_text_new_from_string(word);
             g_free(word);
             ibus_engine_commit_text(engine,t);
@@ -242,6 +279,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     // Other keys: commit preedit and forward
     if(e->preedit->len>0){
         gchar *word=expand_word(e->preedit->str);
+        update_context(e, word);
         IBusText *t=ibus_text_new_from_string(word);
         g_free(word);
         ibus_engine_commit_text(engine,t);
@@ -288,6 +326,7 @@ static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
 static void ibus_gotiengviet_engine_focus_out(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     debug_log("[focus_out] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
+    if(e->sentence_context) g_string_assign(e->sentence_context, "");
     if(e->preedit && e->preedit->len>0){
         gchar *word=expand_word(e->preedit->str);
         IBusText *t=ibus_text_new_from_string(word);
@@ -302,6 +341,7 @@ static void ibus_gotiengviet_engine_focus_out(IBusEngine *engine){
 static void ibus_gotiengviet_engine_reset_cb(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     debug_log("[reset_cb] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
+    if(e->sentence_context) g_string_assign(e->sentence_context, "");
     if(e->preedit && e->preedit->len>0){
         gchar *word=expand_word(e->preedit->str);
         IBusText *t=ibus_text_new_from_string(word);
@@ -337,6 +377,7 @@ static void ibus_gotiengviet_engine_candidate_clicked(IBusEngine *engine, guint 
     if(index < (guint)e->n_candidates && e->candidates){
         g_string_assign(e->preedit, e->candidates[index]);
         gchar *word=expand_word(e->preedit->str);
+        update_context(e, word);
         IBusText *t=ibus_text_new_from_string(word);
         g_free(word);
         ibus_engine_commit_text(engine,t);
@@ -360,6 +401,7 @@ static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass
 }
 static void ibus_gotiengviet_engine_init(IBusGoTiengVietEngine *e){
     e->preedit=g_string_new("");
+    e->sentence_context=g_string_new("");
     e->modern=TRUE;
     e->caps=IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
     e->purpose=IBUS_INPUT_PURPOSE_FREE_FORM;

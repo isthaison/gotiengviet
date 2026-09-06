@@ -21,8 +21,13 @@ int main(int argc, char **argv) {
         for(guint i=0;i<out->len;i++) puts(g_ptr_array_index(out,i));
         g_ptr_array_unref(out);gtv_config_clear(&config);return 0;
     }
+    if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--predict")) {
+        GPtrArray *out = gtv_predict_next(&config, argv[2], argc == 4 ? argv[3] : "");
+        for(guint i=0;i<out->len;i++) puts(g_ptr_array_index(out,i));
+        g_ptr_array_unref(out);gtv_config_clear(&config);return 0;
+    }
     if (argc > 1) {
-        puts("GoTiengViet Demo (C)\nUsage: gotiengviet-demo [--transform telex|vni TEXT] [--suggest WORD [CONTEXT]]");
+        puts("GoTiengViet Demo (C)\nUsage: gotiengviet-demo [--transform telex|vni TEXT] [--suggest WORD [CONTEXT]] [--predict CONTEXT [PREFIX]]");
         gtv_config_clear(&config);
         return strcmp(argv[1], "--help") != 0;
     }

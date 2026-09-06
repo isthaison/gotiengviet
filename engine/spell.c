@@ -1,34 +1,100 @@
 #include "internal.h"
 
+/* Từ điển tiếng Việt phổ biến dùng cho tra cứu nhanh và gợi ý chính tả */
 static const char *viet_dict_true[] = {
- "chào","xin","cảm","ơn","tiếng","việt","được","hoặc","không","có","của","và","là",
- "trong","người","một","những","các","đã","sẽ","đang","này","kia","đó","gì","nào",
- "sao","thế","rất","quá","lắm","cũng","vẫn","còn","hết","nữa","đi","đến","về",
- "lại","lên","xuống","ra","vào","làm","việc","học","tập","yêu","thương","nhà",
- "trường","lớp","bạn","thầy","cô","gia","đình","bố","mẹ","anh","chị","em","con",
- "ăn","uống","ngủ","chơi","đọc","viết","nghe","nói","biết","hiểu","muốn","thích",
- "cần","phải","nên","đừng","giúp","cho","tặng","mua","bán","tiền","cơm","nước",
- "xe","đường","phố","chợ","sông","núi","biển","cây","hoa","trời","đất","nắng",
- "mưa","gió","ngày","đêm","sáng","tối","giờ","hôm","nay","mai","tuần","tháng",
- "năm","xuân","tết","đẹp","xấu","tốt","mới","cũ","lớn","nhỏ","cao","thấp","dài",
- "ngắn","nhanh","chậm","mạnh","vui","buồn","khỏe","mệt","đói","nóng","lạnh",
- "sạch","ngon","đông","yên","tĩnh","hòa","hoà","hóa","hoá","thưa","thừa",
- "dạ","vâng","ơi","nhé","nha","chứ","mà","thì","rằng","nếu","vì","nhưng",
- "hay","với","giữa","trên","dưới","trước","sau","bên","ngoài","khắp",
- "mọi","mỗi","mấy","bao","nhiêu","đâu","ai","khi","ở","từ","do","để","như",
- "bằng","hơn","nhất","cả","dù","ngay","vừa","đều","bác","bạc","bàn","bàng","bà",
- "hóc","hòn","hòng","hò","công","ca","ke","kê","ki","nga","ngo","ghe","ghê","ga","go",
- "tha","thơm","thơ","test","thử","nghiệm","máy","tính","phần","mềm","hệ","thống",
- "cài","đặt","chính","tả","gợi","ý","dấu","thanh","kiểm","tra","văn","bản",
- "tin","nhắn","điện","thoại","chú","chủ","chúng","tôi","ta","họ","nó","mình",
- NULL
+    /* Đại từ, số từ, trợ từ, liên từ */
+    "tôi", "ta", "tao", "chúng", "mình", "bạn", "cậu", "họ", "nó", "ai", "gì", "nào", "đâu", "sao", "thế",
+    "ông", "bà", "bác", "chú", "cô", "dì", "anh", "chị", "em", "con", "cháu", "mẹ", "bố", "cha", "thầy",
+    "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín", "mười", "trăm", "nghìn", "ngàn", "triệu", "tỷ",
+    "và", "hoặc", "hay", "nhưng", "mà", "thì", "là", "rằng", "vì", "do", "nếu", "hễ", "tuy", "dù", "để", "cho",
+    "với", "cùng", "của", "trong", "ngoài", "trên", "dưới", "trước", "sau", "giữa", "bên", "cạnh", "khắp", "mọi",
+    "mỗi", "từng", "mấy", "bao", "nhiêu", "những", "các", "cả", "đều", "ngay", "vừa", "mới", "đã", "đang", "sẽ",
+    "chưa", "chẳng", "không", "chớ", "đừng", "hãy", "quá", "lắm", "rất", "cực", "hơi", "khá", "hơn", "nhất", "cũng",
+    "vẫn", "còn", "hết", "nữa", "luôn", "thường", "ít", "nhiều", "ơi", "à", "ạ", "nhé", "nha", "chứ", "nhỉ", "vâng", "dạ",
+
+    /* Động từ và tính từ thông dụng */
+    "ăn", "uống", "ngủ", "nghỉ", "nghĩ", "thức", "chơi", "làm", "việc", "học", "hành", "tập", "đọc", "viết",
+    "nghe", "nói", "hỏi", "bảo", "kể", "nhìn", "thấy", "xem", "biết", "hiểu", "muốn", "thích", "yêu", "thương",
+    "ghét", "nhớ", "quên", "sợ", "lo", "buồn", "vui", "mừng", "cười", "khóc", "đi", "đến", "về", "lại", "qua",
+    "lên", "xuống", "ra", "vào", "tới", "lui", "chạy", "nhảy", "bước", "ngồi", "đứng", "nằm", "bay", "bơi",
+    "mua", "bán", "tặng", "cho", "nhận", "lấy", "mang", "cầm", "nắm", "giữ", "đặt", "để", "bỏ", "gửi", "tìm",
+    "kiếm", "gặp", "thấy", "giúp", "đỡ", "cần", "phải", "nên", "mở", "đóng", "bật", "tắt", "bắt", "đầu", "kết",
+    "thúc", "dừng", "tiếp", "tục", "xây", "dựng", "sửa", "chữa", "phát", "triển", "quản", "lý", "bảo", "vệ",
+    "tốt", "xấu", "đẹp", "mới", "cũ", "lớn", "nhỏ", "to", "bé", "cao", "thấp", "dài", "ngắn", "rộng", "hẹp",
+    "nhanh", "chậm", "mạnh", "yếu", "nặng", "nhẹ", "dễ", "khó", "đúng", "sai", "thật", "giả", "giàu", "nghèo",
+    "ấm", "nóng", "lạnh", "mát", "đói", "no", "mệt", "khỏe", "sạch", "bẩn", "ngon", "ngọt", "cay", "đắng", "chua",
+    "chát", "mặn", "nhạt", "đậm", "rõ", "mờ", "sáng", "tối", "đông", "vắng", "yên", "tĩnh", "ồn", "đầy", "vơi",
+    "tròn", "vuông", "thẳng", "cong", "xa", "gần", "sớm", "muộn", "khác", "giống", "quen", "lạ",
+
+    /* Danh từ tự nhiên, thời gian, xã hội, kỹ thuật */
+    "nhà", "cửa", "phòng", "bàn", "ghế", "giường", "bếp", "sân", "vườn", "trường", "lớp", "chợ", "đường", "phố",
+    "xe", "cộ", "sông", "núi", "biển", "hồ", "rừng", "cây", "hoa", "lá", "quả", "trái", "đất", "nước", "lửa",
+    "trời", "mây", "mưa", "nắng", "gió", "bão", "sương", "tuyết", "ngày", "đêm", "sáng", "trưa", "chiều", "tối",
+    "hôm", "nay", "mai", "kia", "qua", "giờ", "phút", "giây", "tuần", "tháng", "năm", "mùa", "xuân", "hạ", "thu",
+    "đông", "tết", "tiền", "bạc", "vàng", "cơm", "gạo", "thịt", "cá", "rau", "áo", "quần", "giày", "dép", "nón",
+    "sách", "vở", "bút", "mực", "giấy", "báo", "tranh", "ảnh", "máy", "tính", "điện", "thoại", "phần", "mềm",
+    "hệ", "thống", "tin", "nhắn", "chính", "tả", "văn", "bản", "gợi", "ý", "dấu", "thanh", "kiểm", "tra", "cài",
+    "đặt", "chương", "trình", "mạng", "dữ", "liệu", "thông", "tin", "công", "nghệ", "khoa", "học", "kỹ", "thuật",
+    "tiếng", "việt", "quốc", "gia", "nhân", "dân", "xã", "hội", "kinh", "tế", "văn", "hóa", "giáo", "dục",
+    "y", "tế", "luật", "pháp", "nhà", "nước", "chính", "phủ", "đoàn", "thể", "cộng", "đồng",
+
+    /* Các cặp từ âm chuẩn dễ nhầm lẫn */
+    "sắp", "sẵn", "sống", "sinh", "suốt", "suất", "xuất", "xanh", "xinh", "xong", "xưa", "xuân", "xơ", "xóm",
+    "trên", "trong", "trước", "trời", "trẻ", "trăng", "tròn", "chân", "chơi", "cho", "chung", "chút", "chưa", "chờ",
+    "dành", "giành", "rành", "dạy", "dễ", "dẫn", "giờ", "giúp", "giữa", "giữ", "giải", "giá", "rồi", "rất", "rõ",
+    "nghĩ", "nghỉ", "sữa", "sửa", "bão", "bảo", "vẽ", "vẻ", "cũng", "đỗ", "đổ", "vỡ", "vở", "kỹ", "mã", "mả",
+    "công", "cùng", "cuộc", "ke", "kê", "ki", "kẹo", "kinh", "kiến", "kiên", "khi", "khó", "khoa", "khác",
+    "ga", "go", "gu", "gà", "gần", "gạo", "gặp", "ghe", "ghế", "ghé", "ghét", "ghi", "ghim",
+    "nga", "ngo", "ngu", "ngày", "người", "ngon", "ngủ", "ngắn", "nghe", "nghề", "nghèo", "nghiên",
+    "qua", "quan", "quân", "quen", "quét", "quý", "quang", "quanh", "quyết",
+    "thưa", "thừa", "được", "bác", "bạc", "học", "hóc", "chào", "cảm", "ơn",
+    NULL
 };
-/* Từ sai đã biết -> luôn gợi ý sửa */
-static const char *viet_dict_false[] = { "hoăc", "bàc", "vièt", "hòc", "kông", "ngha", "chàol", "tếst", "đượck", "thuaw", NULL };
+
+/* Bản đồ các lỗi gõ sai / kẹt phím Telex/VNI kinh điển -> gợi ý trực tiếp */
+static const struct {
+    const char *bad;
+    const char *good[3];
+} common_fixes[] = {
+    {"hoăc", {"hoặc", NULL}},
+    {"hoacw", {"hoặc", NULL}},
+    {"thuaw", {"thưa", "thừa", NULL}},
+    {"bàc", {"bác", "bạc", NULL}},
+    {"hòc", {"học", "hóc", NULL}},
+    {"vièt", {"việt", NULL}},
+    {"kông", {"không", "công", NULL}},
+    {"ngha", {"nga", NULL}},
+    {"ngho", {"ngo", NULL}},
+    {"nghu", {"ngu", NULL}},
+    {"gha", {"ga", NULL}},
+    {"gho", {"go", NULL}},
+    {"ghu", {"gu", NULL}},
+    {"ge", {"ghe", NULL}},
+    {"gê", {"ghê", NULL}},
+    {"chàol", {"chào", NULL}},
+    {"tếst", {"tét", "test", NULL}},
+    {"đượck", {"được", NULL}},
+    {"duocw", {"được", "dược", NULL}},
+    {"duocwjd", {"được", NULL}},
+    {"duocjwd", {"được", NULL}},
+    {"bieetw", {"biết", NULL}},
+    {"nghiw", {"nghĩ", "nghỉ", NULL}},
+    {"dduoc", {"được", NULL}},
+    {"dduowjc", {"được", NULL}},
+    {"duowjc", {"dược", "được", NULL}},
+    {"khong", {"không", NULL}},
+    {"duoc", {"được", NULL}},
+    {NULL, {NULL}}
+};
 
 int dict_lookup(const char *lower_utf8){
-    for(int i=0; viet_dict_false[i]; i++) if(strcmp(lower_utf8, viet_dict_false[i])==0) return 0;
-    for(int i=0; viet_dict_true[i]; i++) if(strcmp(lower_utf8, viet_dict_true[i])==0) return 1;
+    if(!lower_utf8 || !*lower_utf8) return -1;
+    for(int i=0; common_fixes[i].bad; i++){
+        if(strcmp(lower_utf8, common_fixes[i].bad) == 0) return 0;
+    }
+    for(int i=0; viet_dict_true[i]; i++){
+        if(strcmp(lower_utf8, viet_dict_true[i]) == 0) return 1;
+    }
     return -1;
 }
 
@@ -231,24 +297,154 @@ void add_candidate_unique(GPtrArray *out, const char *cand){
     g_ptr_array_add(out, g_strdup(cand));
 }
 
+/* Áp dụng kiểu chữ hoa/thường của từ gốc lên từ gợi ý */
+static gchar *apply_casing(const char *orig, const char *cand){
+    if(!orig || !cand) return g_strdup(cand ? cand : "");
+    glong olen = 0, clen = 0;
+    gunichar *ou = g_utf8_to_ucs4(orig, -1, NULL, &olen, NULL);
+    gunichar *cu = g_utf8_to_ucs4(cand, -1, NULL, &clen, NULL);
+    if(!ou || !cu){
+        g_free(ou); g_free(cu);
+        return g_strdup(cand);
+    }
+    gboolean all_upper = TRUE;
+    gboolean first_upper = g_unichar_isupper(ou[0]);
+    for(glong i=0; i<olen; i++){
+        if(g_unichar_isalpha(ou[i]) && !g_unichar_isupper(ou[i])){
+            all_upper = FALSE;
+            break;
+        }
+    }
+    if(all_upper && olen > 1){
+        for(glong i=0; i<clen; i++) cu[i] = g_unichar_toupper(cu[i]);
+    } else if(first_upper && clen > 0){
+        cu[0] = g_unichar_toupper(cu[0]);
+    }
+    gchar *res = g_ucs4_to_utf8(cu, clen, NULL, NULL, NULL);
+    g_free(ou); g_free(cu);
+    return res ? res : g_strdup(cand);
+}
+
+typedef struct {
+    char *word;
+    int score;
+} ScoredCand;
+
+static void add_candidate_scored(GArray *items, const char *cand, int score){
+    if(!cand || !*cand) return;
+    for(guint i=0; i<items->len; i++){
+        ScoredCand *ci = &g_array_index(items, ScoredCand, i);
+        if(strcmp(ci->word, cand) == 0){
+            if(score > ci->score) ci->score = score;
+            return;
+        }
+    }
+    ScoredCand ci;
+    ci.word = g_strdup(cand);
+    ci.score = score;
+    g_array_append_val(items, ci);
+}
+
+static gint compare_scored_cand(gconstpointer a, gconstpointer b){
+    const ScoredCand *ca = a;
+    const ScoredCand *cb = b;
+    if(cb->score != ca->score) return cb->score - ca->score;
+    return strcmp(ca->word, cb->word);
+}
+
 GPtrArray* get_suggestions(const char *utf8){
     GPtrArray *out = g_ptr_array_new_with_free_func(g_free);
     if(!utf8 || !*utf8) return out;
+
     gchar *lower = g_utf8_strdown(utf8, -1);
     glong llen = 0;
     gunichar *lu = g_utf8_to_ucs4(lower, -1, NULL, &llen, NULL);
     if(!lu){ g_free(lower); return out; }
 
-    // 1. Đặc trị các lỗi gõ Telex kẹt phím ở đuôi:
-    if(strcmp(lower, "hoăc") == 0 || strcmp(lower, "hoacw") == 0){
-        add_candidate_unique(out, "hoặc");
-    }
-    if(strcmp(lower, "thuaw") == 0){
-        add_candidate_unique(out, "thưa");
-        add_candidate_unique(out, "thừa");
+    GArray *items = g_array_new(FALSE, FALSE, sizeof(ScoredCand));
+
+    /* 1. Tra cứu bảng lỗi chính tả và gõ phím đã biết */
+    for(int i=0; common_fixes[i].bad; i++){
+        if(strcmp(lower, common_fixes[i].bad) == 0){
+            for(int j=0; common_fixes[i].good[j]; j++){
+                add_candidate_scored(items, common_fixes[i].good[j], 100);
+            }
+            break;
+        }
     }
 
-    // 2. Thử cắt bỏ phụ âm thừa ở đuôi:
+    /* 2. Quy tắc chính tả phụ âm đầu tiếng Việt (k/c, gh/g, ngh/ng, qu) */
+    if(llen >= 2 && bare_lower(lu[0]) == 'k'){
+        gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+        alt_ucs[0] = 'c';
+        gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+        if(alt_str){
+            if(spell_word_valid(alt_str)) add_candidate_scored(items, alt_str, 95);
+            g_free(alt_str);
+        }
+        g_free(alt_ucs);
+    } else if(llen >= 2 && bare_lower(lu[0]) == 'c'){
+        gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+        alt_ucs[0] = 'k';
+        gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+        if(alt_str){
+            if(spell_word_valid(alt_str)) add_candidate_scored(items, alt_str, 95);
+            g_free(alt_str);
+        }
+        g_free(alt_ucs);
+    } else if(llen >= 2 && bare_lower(lu[0]) == 'g' && bare_lower(lu[1]) != 'h' && bare_lower(lu[1]) != 'i'){
+        /* g -> gh trước e, ê */
+        gunichar v = bare_lower(lu[1]);
+        if(v == 'e' || v == 0x00ea){
+            gunichar *alt_ucs = g_new(gunichar, llen + 1);
+            alt_ucs[0] = 'g'; alt_ucs[1] = 'h';
+            for(glong i=1; i<llen; i++) alt_ucs[i+1] = lu[i];
+            gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen + 1, NULL, NULL, NULL);
+            if(alt_str){
+                if(spell_word_valid(alt_str)) add_candidate_scored(items, alt_str, 95);
+                g_free(alt_str);
+            }
+            g_free(alt_ucs);
+        }
+    } else if(llen >= 3 && bare_lower(lu[0]) == 'g' && bare_lower(lu[1]) == 'h'){
+        /* gh -> g trước a, o, u */
+        gunichar *alt_ucs = g_new(gunichar, llen - 1);
+        alt_ucs[0] = 'g';
+        for(glong i=2; i<llen; i++) alt_ucs[i-1] = lu[i];
+        gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen - 1, NULL, NULL, NULL);
+        if(alt_str){
+            if(spell_word_valid(alt_str)) add_candidate_scored(items, alt_str, 95);
+            g_free(alt_str);
+        }
+        g_free(alt_ucs);
+    } else if(llen >= 3 && bare_lower(lu[0]) == 'n' && bare_lower(lu[1]) == 'g' && bare_lower(lu[2]) == 'h'){
+        /* ngh -> ng trước a, o, u */
+        gunichar *alt_ucs = g_new(gunichar, llen - 1);
+        alt_ucs[0] = 'n'; alt_ucs[1] = 'g';
+        for(glong i=3; i<llen; i++) alt_ucs[i-1] = lu[i];
+        gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen - 1, NULL, NULL, NULL);
+        if(alt_str){
+            if(spell_word_valid(alt_str)) add_candidate_scored(items, alt_str, 95);
+            g_free(alt_str);
+        }
+        g_free(alt_ucs);
+    } else if(llen >= 2 && bare_lower(lu[0]) == 'n' && bare_lower(lu[1]) == 'g'){
+        /* ng -> ngh trước e, ê, i */
+        gunichar v = bare_lower(lu[2]);
+        if(v == 'e' || v == 'i' || v == 'y' || v == 0x00ea){
+            gunichar *alt_ucs = g_new(gunichar, llen + 1);
+            alt_ucs[0] = 'n'; alt_ucs[1] = 'g'; alt_ucs[2] = 'h';
+            for(glong i=2; i<llen; i++) alt_ucs[i+1] = lu[i];
+            gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen + 1, NULL, NULL, NULL);
+            if(alt_str){
+                if(spell_word_valid(alt_str)) add_candidate_scored(items, alt_str, 95);
+                g_free(alt_str);
+            }
+            g_free(alt_ucs);
+        }
+    }
+
+    /* 3. Xử lý phụ âm dính ở đuôi do gõ nhanh (Telex / typo) */
     if(llen >= 3){
         gunichar last_c = bare_lower(lu[llen-1]);
         if(last_c=='s' || last_c=='f' || last_c=='r' || last_c=='x' || last_c=='j' ||
@@ -256,14 +452,22 @@ GPtrArray* get_suggestions(const char *utf8){
             gchar *truncated = g_ucs4_to_utf8(lu, llen-1, NULL, NULL, NULL);
             if(truncated){
                 if(spell_word_valid(truncated)){
-                    add_candidate_unique(out, truncated);
+                    add_candidate_scored(items, truncated, 90);
+                }
+                /* Thử chuyển đổi dấu đuôi nếu từ trước đó nhận được dấu */
+                gchar *recomposed = gtv_transform(lower, GTV_TELEX, TRUE);
+                if(recomposed){
+                    if(strcmp(recomposed, lower) != 0 && spell_word_valid(recomposed)){
+                        add_candidate_scored(items, recomposed, 92);
+                    }
+                    g_free(recomposed);
                 }
                 g_free(truncated);
             }
         }
     }
 
-    // 3. Đổi dấu thanh cho âm tắc c, ch, p, t:
+    /* 4. Sửa thanh điệu cho âm tiết kết thúc bằng âm tắc (c, ch, p, t chỉ đi với sắc/nặng) */
     glong first_v = -1, last_v = -1;
     int tone_pos = -1;
     for(glong i=0; i<llen; i++){
@@ -285,7 +489,7 @@ GPtrArray* get_suggestions(const char *utf8){
                     gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
                     if(alt_str){
                         if(spell_word_valid(alt_str)){
-                            add_candidate_unique(out, alt_str);
+                            add_candidate_scored(items, alt_str, 85);
                         }
                         g_free(alt_str);
                     }
@@ -295,42 +499,116 @@ GPtrArray* get_suggestions(const char *utf8){
         }
     }
 
-    // 4. Sửa phụ âm đầu k/c, ngh/ng, gh/g:
-    if(llen >= 2 && bare_lower(lu[0]) == 'k'){
-        gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
-        alt_ucs[0] = 'c';
-        gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
-        if(alt_str){
-            if(spell_word_valid(alt_str)) add_candidate_unique(out, alt_str);
-            g_free(alt_str);
+    /* 5. Gợi ý biến thể ngữ âm dễ nhầm lẫn theo phương ngữ (Hỏi <-> Ngã, s <-> x, tr <-> ch, d <-> gi) */
+    if(tone_pos != -1){
+        CharInfo *v_info = get_info(lu[tone_pos]);
+        if(v_info){
+            int alt_tone = TONE_NONE;
+            if(v_info->tone == TONE_HOI) alt_tone = TONE_NGA;
+            else if(v_info->tone == TONE_NGA) alt_tone = TONE_HOI;
+
+            if(alt_tone != TONE_NONE){
+                gunichar new_v;
+                if(lookup_char(v_info->bare, v_info->diacritic, alt_tone, v_info->is_upper, &new_v)){
+                    gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+                    alt_ucs[tone_pos] = new_v;
+                    gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+                    if(alt_str){
+                        if(spell_word_valid(alt_str)){
+                            add_candidate_scored(items, alt_str, 80);
+                        }
+                        g_free(alt_str);
+                    }
+                    g_free(alt_ucs);
+                }
+            }
         }
-        g_free(alt_ucs);
-    } else if(llen >= 3 && bare_lower(lu[0]) == 'n' && bare_lower(lu[1]) == 'g' && bare_lower(lu[2]) == 'h'){
-        gunichar *alt_ucs = g_new(gunichar, llen - 1);
-        alt_ucs[0] = 'n'; alt_ucs[1] = 'g';
-        for(glong i=3; i<llen; i++) alt_ucs[i-1] = lu[i];
-        gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen - 1, NULL, NULL, NULL);
-        if(alt_str){
-            if(spell_word_valid(alt_str)) add_candidate_unique(out, alt_str);
-            g_free(alt_str);
+    }
+    if(llen >= 2){
+        if(bare_lower(lu[0]) == 's'){
+            gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+            alt_ucs[0] = 'x';
+            gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+            if(alt_str){
+                if(dict_lookup(alt_str) == 1) add_candidate_scored(items, alt_str, 78);
+                g_free(alt_str);
+            }
+            g_free(alt_ucs);
+        } else if(bare_lower(lu[0]) == 'x'){
+            gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+            alt_ucs[0] = 's';
+            gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+            if(alt_str){
+                if(dict_lookup(alt_str) == 1) add_candidate_scored(items, alt_str, 78);
+                g_free(alt_str);
+            }
+            g_free(alt_ucs);
+        } else if(llen >= 3 && bare_lower(lu[0]) == 't' && bare_lower(lu[1]) == 'r'){
+            gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+            alt_ucs[0] = 'c'; alt_ucs[1] = 'h';
+            gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+            if(alt_str){
+                if(dict_lookup(alt_str) == 1) add_candidate_scored(items, alt_str, 78);
+                g_free(alt_str);
+            }
+            g_free(alt_ucs);
+        } else if(llen >= 3 && bare_lower(lu[0]) == 'c' && bare_lower(lu[1]) == 'h'){
+            gunichar *alt_ucs = g_memdup2(lu, llen * sizeof(gunichar));
+            alt_ucs[0] = 't'; alt_ucs[1] = 'r';
+            gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen, NULL, NULL, NULL);
+            if(alt_str){
+                if(dict_lookup(alt_str) == 1) add_candidate_scored(items, alt_str, 78);
+                g_free(alt_str);
+            }
+            g_free(alt_ucs);
+        } else if(bare_lower(lu[0]) == 'd'){
+            /* d -> gi */
+            gunichar *alt_ucs = g_new(gunichar, llen + 1);
+            alt_ucs[0] = 'g'; alt_ucs[1] = 'i';
+            for(glong i=1; i<llen; i++) alt_ucs[i+1] = lu[i];
+            gchar *alt_str = g_ucs4_to_utf8(alt_ucs, llen + 1, NULL, NULL, NULL);
+            if(alt_str){
+                if(dict_lookup(alt_str) == 1) add_candidate_scored(items, alt_str, 75);
+                g_free(alt_str);
+            }
+            g_free(alt_ucs);
         }
-        g_free(alt_ucs);
     }
 
-    // 5. Tìm trong từ điển bằng khoảng cách Levenshtein:
-    for(int i=0; viet_dict_true[i] && out->len < 5; i++){
+    /* 6. Tìm kiếm trong từ điển theo khoảng cách Levenshtein */
+    for(int i=0; viet_dict_true[i] && items->len < 10; i++){
         glong dlen = 0;
         gunichar *du = g_utf8_to_ucs4(viet_dict_true[i], -1, NULL, &dlen, NULL);
         if(!du) continue;
         glong diff = llen > dlen ? llen - dlen : dlen - llen;
-        if(diff <= 2 && lev_ucs4(lu, llen, du, dlen) <= 2){
-            add_candidate_unique(out, viet_dict_true[i]);
+        if(diff <= 2){
+            int dist = lev_ucs4(lu, llen, du, dlen);
+            if(dist == 1){
+                add_candidate_scored(items, viet_dict_true[i], 70);
+            } else if(dist == 2 && items->len < 6){
+                add_candidate_scored(items, viet_dict_true[i], 50);
+            }
         }
         g_free(du);
     }
 
-    g_free(lu); g_free(lower);
+    /* 7. Sắp xếp theo điểm và trích xuất top 5 với định dạng chữ hoa/thường nguyên bản */
+    g_array_sort(items, compare_scored_cand);
+    for(guint i=0; i<items->len && out->len < 5; i++){
+        ScoredCand *ci = &g_array_index(items, ScoredCand, i);
+        gchar *cased = apply_casing(utf8, ci->word);
+        add_candidate_unique(out, cased);
+        g_free(cased);
+    }
+
+    /* Dọn dẹp */
+    for(guint i=0; i<items->len; i++){
+        ScoredCand *ci = &g_array_index(items, ScoredCand, i);
+        g_free(ci->word);
+    }
+    g_array_unref(items);
+    g_free(lu);
+    g_free(lower);
+
     return out;
 }
-
-/* Telex helpers */

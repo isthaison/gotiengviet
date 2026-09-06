@@ -68,12 +68,45 @@ static void test_json(void) {
 static void test_spelling(void) {
     g_assert_true(spell_word_valid("được"));
     g_assert_false(spell_word_valid("kông"));
+    g_assert_false(spell_word_valid("hoăc"));
+    g_assert_false(spell_word_valid("bàc"));
+    g_assert_false(spell_word_valid("vièt"));
+    g_assert_false(spell_word_valid("ngha"));
+    g_assert_false(spell_word_valid("ge"));
+
     GtvConfig config={.ai_enabled=FALSE};
     g_assert_true(gtv_ai_available(&config));
     GPtrArray *suggestions=gtv_ai_suggest(&config,"kông","");
-    g_assert_cmpuint(suggestions->len,>,0);g_ptr_array_unref(suggestions);
+    g_assert_cmpuint(suggestions->len,>,0);
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"công");
+    g_ptr_array_unref(suggestions);
+
+    /* Casing tests: preserve TitleCase and UPPERCASE */
+    suggestions=gtv_ai_suggest(&config,"Kông","");
+    g_assert_cmpuint(suggestions->len,>,0);
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"Công");
+    g_ptr_array_unref(suggestions);
+
+    suggestions=gtv_ai_suggest(&config,"KÔNG","");
+    g_assert_cmpuint(suggestions->len,>,0);
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"CÔNG");
+    g_ptr_array_unref(suggestions);
+
+    /* Test voiceless stop correction */
+    suggestions=gtv_ai_suggest(&config,"vièt","");
+    g_assert_cmpuint(suggestions->len,>,0);
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"việt");
+    g_ptr_array_unref(suggestions);
+
+    /* Test hoăc -> hoặc */
+    suggestions=gtv_ai_suggest(&config,"hoăc","");
+    g_assert_cmpuint(suggestions->len,>,0);
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"hoặc");
+    g_ptr_array_unref(suggestions);
+
     suggestions=gtv_ai_suggest(&config,"được","");
-    g_assert_cmpuint(suggestions->len,==,0);g_ptr_array_unref(suggestions);
+    g_assert_cmpuint(suggestions->len,==,0);
+    g_ptr_array_unref(suggestions);
 }
 
 /* Every permutation of pending operations must converge to the same syllable. */

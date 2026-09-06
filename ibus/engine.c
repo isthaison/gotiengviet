@@ -467,10 +467,26 @@ static void install_crash_handlers(void){
 }
 
 static void bus_connected_cb(IBusBus *b, gpointer user_data){
-    IBusComponent *c=ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.2.1","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
-    IBusEngineDesc *d=ibus_engine_desc_new("gotiengviet","GoTiengViet","GoTiengViet: Telex/VNI (đổi Telex/VNI trên indicator của app) - github.com/isthaison/gotiengviet","vi","GPL","GoTiengViet","gotiengviet","us");
-    ibus_component_add_engine(c,d);
-    ibus_bus_register_component(bus,c);
+    IBusComponent *c = NULL;
+    if(g_file_test("/usr/share/ibus/component/gotiengviet.xml", G_FILE_TEST_EXISTS)){
+        c = ibus_component_new_from_file("/usr/share/ibus/component/gotiengviet.xml");
+    }
+    if(!c){
+        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.2.1","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
+        IBusEngineDesc *d = ibus_engine_desc_new_varargs(
+            "name", "gotiengviet",
+            "longname", "GoTiengViet",
+            "description", "GoTiengViet: Telex/VNI - github.com/isthaison/gotiengviet",
+            "language", "vi",
+            "license", "GPL",
+            "author", "GoTiengViet",
+            "icon", "gotiengviet",
+            "layout", "us",
+            "setup", "/usr/libexec/ibus-setup-gotiengviet",
+            NULL);
+        ibus_component_add_engine(c, d);
+    }
+    ibus_bus_register_component(bus, c);
     if(!factory){
         factory=ibus_factory_new(ibus_bus_get_connection(bus));
         g_signal_connect(factory, "create-engine", G_CALLBACK(create_engine_cb), NULL);

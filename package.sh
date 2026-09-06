@@ -33,6 +33,9 @@ fi
 if command -v update-desktop-database >/dev/null; then
     update-desktop-database /usr/share/applications || true
 fi
+mkdir -p /usr/local/bin 2>/dev/null || true
+ln -sfn /usr/bin/gotiengviet /usr/local/bin/gotiengviet 2>/dev/null || true
+ln -sfn /usr/bin/gotiengviet-demo /usr/local/bin/gotiengviet-demo 2>/dev/null || true
 POST
 chmod -R u=rwX,go=rX "$staging"
 chmod 755 "$staging/DEBIAN"

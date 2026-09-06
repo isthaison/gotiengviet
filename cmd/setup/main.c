@@ -88,7 +88,18 @@ static gboolean tray_check_config_timer(gpointer data){
 
 static void tray_on_activate_setup(GtkMenuItem *item, gpointer data){
     (void)item; (void)data;
-    run_shell("/usr/local/bin/gotiengviet &");
+    gchar *self = g_file_read_link("/proc/self/exe", NULL);
+    if(self){
+        gchar *setup_argv[] = {self, NULL};
+        GError *err = NULL;
+        if(g_spawn_async(NULL, setup_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &err)){
+            g_free(self);
+            return;
+        }
+        if(err){ g_warning("Failed to spawn setup: %s", err->message); g_error_free(err); }
+        g_free(self);
+    }
+    run_shell("/usr/bin/gotiengviet 2>/dev/null || gotiengviet 2>/dev/null || /usr/libexec/ibus-setup-gotiengviet 2>/dev/null &");
 }
 static void tray_on_activate_telex(GtkMenuItem *item, gpointer data){
     (void)data;

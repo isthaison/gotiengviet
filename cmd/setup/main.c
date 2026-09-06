@@ -1,12 +1,16 @@
-package main
-
-/*
-#cgo pkg-config: gtk+-3.0 ayatana-appindicator3-0.1
+#include "../../engine/engine.h"
 #include <gtk/gtk.h>
 #include <libayatana-appindicator/app-indicator.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
+/* Existing desktop integration commands; report launch failures. */
+static int run_shell(const char *command) {
+    int status = system(command);
+    if (status != 0) g_warning("Desktop command failed (status %d)", status);
+    return status;
+}
 
 // --- Tray indicator (một phần của ứng dụng duy nhất, chạy với cờ --tray) ---
 static AppIndicator *tray_indicator;
@@ -84,23 +88,23 @@ static gboolean tray_check_config_timer(gpointer data){
 
 static void tray_on_activate_setup(GtkMenuItem *item, gpointer data){
     (void)item; (void)data;
-    system("/usr/local/bin/gotiengviet &");
+    run_shell("/usr/local/bin/gotiengviet &");
 }
 static void tray_on_activate_telex(GtkMenuItem *item, gpointer data){
     (void)data;
     if(!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) return;
     tray_update_config_method("telex");
     // Một engine duy nhất: đảm bảo input-sources chỉ có gotiengviet rồi kích hoạt nó
-    system("gsettings set org.gnome.desktop.input-sources sources \"[('xkb','us'),('ibus','gotiengviet')]\" 2>/dev/null; ibus engine gotiengviet 2>/dev/null &");
-    system("notify-send 'GoTiengViet' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
+    run_shell("gsettings set org.gnome.desktop.input-sources sources \"[('xkb','us'),('ibus','gotiengviet')]\" 2>/dev/null; ibus engine gotiengviet 2>/dev/null &");
+    run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
     tray_refresh_checks();
 }
 static void tray_on_activate_vni(GtkMenuItem *item, gpointer data){
     (void)data;
     if(!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) return;
     tray_update_config_method("vni");
-    system("gsettings set org.gnome.desktop.input-sources sources \"[('xkb','us'),('ibus','gotiengviet')]\" 2>/dev/null; ibus engine gotiengviet 2>/dev/null &");
-    system("notify-send 'GoTiengViet' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
+    run_shell("gsettings set org.gnome.desktop.input-sources sources \"[('xkb','us'),('ibus','gotiengviet')]\" 2>/dev/null; ibus engine gotiengviet 2>/dev/null &");
+    run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
     tray_refresh_checks();
 }
 static void tray_on_activate_quit(GtkMenuItem *item, gpointer data){
@@ -121,8 +125,10 @@ int tray_run(int argc, char *argv[]){
     }
 
     // AppIndicator — hiện trên top bar GNOME qua extension ubuntu-appindicators
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     tray_indicator = app_indicator_new("gotiengviet", "gotiengviet",
                                   APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
+    G_GNUC_END_IGNORE_DEPRECATIONS
     app_indicator_set_status(tray_indicator, APP_INDICATOR_STATUS_ACTIVE);
     // Trỏ trực tiếp vào thư mục chứa icon để Shell resolve đúng icon
     app_indicator_set_icon_theme_path(tray_indicator, "/usr/share/gotiengviet/icons");
@@ -204,7 +210,7 @@ static void ai_log(const char *line){
 static gboolean ollama_serving(int port){
     char cmd[256];
     snprintf(cmd, sizeof(cmd), "curl -s -m 2 http://localhost:%d/api/tags -o /dev/null 2>/dev/null", port);
-    int rc = system(cmd);
+    int rc = run_shell(cmd);
     return (rc == 0);
 }
 
@@ -312,7 +318,7 @@ static void on_install_exit(GPid pid, gint status, gpointer data){
         snprintf(active_log_path, sizeof(active_log_path), "/tmp/ollama_serve.log");
         ensure_ollama_serve();
     } else {
-        char msg[200];
+        char msg[512];
         snprintf(msg, sizeof(msg), "Cài Ollama thất bại (mã %d). Xem %s", status, active_log_path);
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
         ai_log(msg);
@@ -336,7 +342,7 @@ static void on_install_clicked(GtkWidget *w, gpointer data){
     if(log_timer_id == 0) log_timer_id = g_timeout_add(800, poll_serve_log, NULL);
     gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang tải script cài Ollama...");
     ai_log("Tải https://ollama.com/install.sh ...");
-    int rc = system("curl -fsSL https://ollama.com/install.sh -o /tmp/ollama_install.sh >>/tmp/ollama_install.log 2>&1");
+    int rc = run_shell("curl -fsSL https://ollama.com/install.sh -o /tmp/ollama_install.sh >>/tmp/ollama_install.log 2>&1");
     if(rc != 0){
         ai_log("LỖI tải script cài đặt (mất mạng?). Thử lại sau.");
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Không tải được script cài Ollama (kiểm tra mạng).");
@@ -375,34 +381,32 @@ static void on_save(GtkWidget *w, gpointer data){
     const char *modern = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_modern)) ? "true" : "false";
     const char *spell = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_spell)) ? "true" : "false";
     const char *ai_enabled = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai)) ? "true" : "false";
-    const char *model = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo_model));
-    if(!model) model = "qwen2:0.5b";
+    const char *model = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)));
+    if(!model) model = g_strdup("qwen2:0.5b");
     int port = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port));
     const char *url = gtk_entry_get_text(GTK_ENTRY(entry_url));
     // Nếu bật AI: đảm bảo ollama serve đang chạy rồi mới lưu
     if(strcmp(ai_enabled,"true")==0){ ensure_ollama_serve(); }
-    // Ghi file ~/.config/gotiengviet/config
-    char *dir = g_path_get_dirname(config_path);
-    g_mkdir_with_parents(dir, 0755);
-    g_free(dir);
-    FILE *f = fopen(config_path, "w");
-    if(f){
-        fprintf(f, "[input]\nmethod=%s\nmodern=%s\nspellcheck=%s\ncharset=unicode\n", method, modern, spell);
-        fprintf(f, "\n[ai]\nenable=%s\nmodel=%s\nurl=%s\nport=%d\n", ai_enabled, model, url, port);
-        fclose(f);
+    GtvConfig config = {.mode = strcmp(method,"vni") == 0 ? GTV_VNI : GTV_TELEX,
+        .modern = strcmp(modern,"true") == 0, .spellcheck = strcmp(spell,"true") == 0,
+        .ai_enabled = strcmp(ai_enabled,"true") == 0, .model = (gchar *)model,
+        .url = (gchar *)url, .port = g_strdup_printf("%d",port)};
+    gchar *directory = g_path_get_dirname(config_path);
+    GError *error = NULL;
+    gboolean saved = gtv_config_save(&config,directory,&error);
+    g_free(directory); g_free(config.port);
+    if(!saved){
+        GtkWidget *failure = gtk_message_dialog_new(win,GTK_DIALOG_MODAL,GTK_MESSAGE_ERROR,GTK_BUTTONS_OK,
+            "Không lưu được cấu hình: %s",error->message);
+        gtk_dialog_run(GTK_DIALOG(failure));gtk_widget_destroy(failure);g_error_free(error);
+        g_free((gpointer)model);
+        return;
     }
-    // Ghi ai.conf riêng cho engine/ai.go
-    char *ai_path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "ai.conf", NULL);
-    FILE *af = fopen(ai_path, "w");
-    if(af){
-        fprintf(af, "[ai]\nprovider=%s\nmodel=%s\nurl=%s\nport=%d\n", strcmp(ai_enabled,"true")==0?"ollama":"rule", model, url, port);
-        fclose(af);
-    }
-    g_free(ai_path);
     // Restart ibus
-    system("ibus restart 2>/dev/null &");
+    run_shell("ibus restart 2>/dev/null &");
     GtkWidget *dlg = gtk_message_dialog_new(win, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
         "Đã lưu %s, modern=%s, AI %s:%s. Đã restart ibus.", method, modern, ai_enabled, model);
+    g_free((gpointer)model);
     gtk_dialog_run(GTK_DIALOG(dlg));
     gtk_widget_destroy(dlg);
     gtk_main_quit();
@@ -422,11 +426,12 @@ static void on_download_clicked(GtkWidget *w, gpointer data){
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang tải, vui lòng đợi...");
         return;
     }
-    const char *model = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo_model));
-    if(!model || strlen(model)==0) model = "qwen2:0.5b";
+    const char *model = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)));
+    if(!model || strlen(model)==0) { g_free((gpointer)model); model = g_strdup("qwen2:0.5b"); }
     // Lấy model name trước " ("
     char model_name[64]; strncpy(model_name, model, 63); model_name[63]=0;
     char *sp = strchr(model_name, ' '); if(sp) *sp=0;
+    g_free((gpointer)model);
     // Đảm bảo ollama serve đang chạy (tự start nếu chưa)
     int port = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port));
     if(!ollama_serving(port)){
@@ -444,7 +449,7 @@ static void on_download_clicked(GtkWidget *w, gpointer data){
     snprintf(json, sizeof(json), "{\"name\":\"%s\"}", model_name);
     char curl_cmd[1024];
     snprintf(curl_cmd, sizeof(curl_cmd), "curl -s -X POST %s -d '%s' -H 'Content-Type: application/json' > /tmp/ollama_pull.log 2>&1 &", pull_url, json);
-    system(curl_cmd);
+    run_shell(curl_cmd);
     // Giả lập progress
     gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đã gửi yêu cầu tải, kiểm tra với: curl http://localhost:55602/api/tags");
     download_in_progress = FALSE;
@@ -530,9 +535,9 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     gtk_box_pack_start(GTK_BOX(box_ai), hbox_ai, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hbox_ai), gtk_label_new("Model:"), FALSE, FALSE, 0);
     combo_model = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_model), "qwen2:0.5b (~400MB)");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_model), "qwen2:1.5b (~900MB)");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo_model), "rule (không model)");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "qwen2:0.5b", "qwen2:0.5b (~400MB)");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "qwen2:1.5b", "qwen2:1.5b (~900MB)");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "rule", "rule (không model)");
     gtk_combo_box_set_active(GTK_COMBO_BOX(combo_model), 0);
     gtk_box_pack_start(GTK_BOX(hbox_ai), combo_model, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hbox_ai), gtk_label_new("Port:"), FALSE, FALSE, 0);
@@ -574,12 +579,13 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     log_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(log_view));
     gtk_container_add(GTK_CONTAINER(log_scroll), log_view);
     // Khởi tạo AI từ config
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cb_ai), strcmp(cur_ai_enable,"true")==0);
-    if(strstr(cur_model,"1.5b")) gtk_combo_box_set_active(GTK_COMBO_BOX(combo_model), 1);
-    else if(strstr(cur_model,"rule")) gtk_combo_box_set_active(GTK_COMBO_BOX(combo_model), 2);
-    else gtk_combo_box_set_active(GTK_COMBO_BOX(combo_model), 0);
+    if(!gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo_model),cur_model)) {
+        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model),cur_model,cur_model);
+        gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo_model),cur_model);
+    }
     gtk_entry_set_text(GTK_ENTRY(entry_url), cur_url);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_port), atoi(cur_port));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cb_ai), strcmp(cur_ai_enable,"true")==0);
 
     GtkWidget *info = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(info), "<span size='small'>Cấu hình lưu tại <tt>~/.config/gotiengviet/config</tt>\nGõ lại ký tự để xóa dấu: <tt>as-&gt;á, á s-&gt;a</tt>, <tt>uw-&gt;ư, ư w-&gt;u</tt></span>");
@@ -602,277 +608,119 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     gtk_main();
     return 0;
 }
-*/
-import "C"
-import (
-	"bufio"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"syscall"
-	"unsafe"
-)
 
-func parseAIConf(path string, aiModel, aiUrl, aiPort, aiEnable *string) {
-	f2, err2 := os.Open(path)
-	if err2 != nil {
-		return
-	}
-	defer f2.Close()
-	sc2 := bufio.NewScanner(f2)
-	for sc2.Scan() {
-		line := strings.TrimSpace(sc2.Text())
-		if v, ok := strings.CutPrefix(line, "model="); ok {
-			if v = strings.TrimSpace(v); v != "" {
-				*aiModel = v
-			}
-		} else if v, ok := strings.CutPrefix(line, "url="); ok {
-			if v = strings.TrimSpace(v); v != "" {
-				*aiUrl = v
-			}
-		} else if v, ok := strings.CutPrefix(line, "port="); ok {
-			if v = strings.TrimSpace(v); v != "" {
-				*aiPort = v
-			}
-		} else if strings.HasPrefix(line, "enable=") || strings.HasPrefix(line, "provider=") {
-			if strings.Contains(line, "ollama") {
-				*aiEnable = "true"
-			}
-			if strings.Contains(line, "rule") {
-				*aiEnable = "false"
-			}
-		}
-	}
+#include <sys/file.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+static void ensure_input_source(void) {
+    GSettingsSchemaSource *source = g_settings_schema_source_get_default();
+    if (!source) return;
+    GSettingsSchema *schema = g_settings_schema_source_lookup(source, "org.gnome.desktop.input-sources", TRUE);
+    if (!schema) return;
+    GSettings *settings = g_settings_new_full(schema, NULL, NULL);
+    GVariant *current = g_settings_get_value(settings, "sources");
+    GVariantIter iter;
+    const gchar *kind, *name;
+    gboolean found = FALSE;
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
+    g_variant_iter_init(&iter, current);
+    while (g_variant_iter_next(&iter, "(&s&s)", &kind, &name)) {
+        if (!strcmp(kind, "ibus") && !strcmp(name, "gotiengviet")) found = TRUE;
+        g_variant_builder_add(&builder, "(ss)", kind, name);
+    }
+    if (!found) {
+        g_variant_builder_add(&builder, "(ss)", "ibus", "gotiengviet");
+        g_settings_set_value(settings, "sources", g_variant_builder_end(&builder));
+        g_settings_sync();
+        g_spawn_command_line_async("ibus engine gotiengviet", NULL);
+    } else g_variant_builder_clear(&builder);
+    g_variant_unref(current);
+    g_object_unref(settings);
+    g_settings_schema_unref(schema);
 }
 
-func loadConfig() (method, modern, spell, aiEnable, aiModel, aiUrl, aiPort string) {
-	method = "telex"
-	modern = "true"
-	spell = "true"
-	aiEnable = "false"
-	aiModel = "qwen2:0.5b"
-	aiUrl = "http://localhost:55602"
-	aiPort = "55602"
-	home, _ := os.UserHomeDir()
-	cfg := filepath.Join(home, ".config", "gotiengviet", "config")
-	aiCfg := filepath.Join(home, ".config", "gotiengviet", "ai.conf")
-	f, err := os.Open(cfg)
-	if err != nil {
-		parseAIConf(aiCfg, &aiModel, &aiUrl, &aiPort, &aiEnable)
-		return
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "method=") {
-			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
-			if v == "vni" || v == "telex" {
-				method = v
-			}
-		}
-		if strings.HasPrefix(line, "modern=") {
-			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
-			if v == "true" || v == "false" {
-				modern = v
-			}
-		}
-		if strings.HasPrefix(line, "spellcheck=") {
-			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
-			if v == "true" || v == "false" {
-				spell = v
-			}
-		}
-		if strings.HasPrefix(line, "port=") {
-			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
-			if v != "" {
-				aiPort = v
-			}
-		}
-		if strings.HasPrefix(line, "url=") {
-			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
-			if v != "" {
-				aiUrl = v
-			}
-		}
-		if strings.HasPrefix(line, "model=") {
-			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
-			if v != "" {
-				aiModel = v
-			}
-		}
-		if strings.HasPrefix(line, "enable=") {
-			v := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
-			if v == "true" || v == "false" {
-				aiEnable = v
-			}
-		}
-	}
-	parseAIConf(aiCfg, &aiModel, &aiUrl, &aiPort, &aiEnable)
-	return
+static void cli_choice(const gchar *label, gchar *buffer, gsize size) {
+    g_print("%s: ", label);
+    if (!fgets(buffer, size, stdin)) buffer[0] = '\0';
+    g_strstrip(buffer);
 }
 
-func runTray() {
-	argc := C.int(len(os.Args))
-	cArgv := make([]*C.char, len(os.Args))
-	for i, a := range os.Args {
-		cArgv[i] = C.CString(a)
-	}
-	// Tiến trình tray chạy thường trú nên không free argv (giống cmd/tray cũ)
-	C.tray_run(argc, &cArgv[0])
+static int setup_cli(GtvConfig *config, const gchar *directory) {
+    gchar input[256];
+    g_print("GoTiengViet Setup (C) — %s, modern=%s, AI=%s\nEnter để giữ giá trị hiện tại.\n",
+        config->mode == GTV_VNI ? "vni" : "telex", config->modern ? "true" : "false", config->ai_enabled ? "true" : "false");
+    cli_choice("Kiểu gõ [telex/vni]", input, sizeof(input));
+    if (!g_ascii_strcasecmp(input, "vni")) config->mode = GTV_VNI;
+    if (!g_ascii_strcasecmp(input, "telex")) config->mode = GTV_TELEX;
+    cli_choice("Modern [true/false]", input, sizeof(input));
+    if (!g_ascii_strcasecmp(input, "true")) config->modern = TRUE;
+    if (!g_ascii_strcasecmp(input, "false")) config->modern = FALSE;
+    cli_choice("AI enable [true/false]", input, sizeof(input));
+    if (!g_ascii_strcasecmp(input, "true")) config->ai_enabled = TRUE;
+    if (!g_ascii_strcasecmp(input, "false")) config->ai_enabled = FALSE;
+    cli_choice("AI port [1..65535]", input, sizeof(input));
+    if (*input) {
+        gchar *end;
+        guint64 port = g_ascii_strtoull(input, &end, 10);
+        if (*end || port < 1 || port > 65535) { g_printerr("Port không hợp lệ\n"); return 1; }
+        g_free(config->port); config->port = g_strdup(input);
+        g_free(config->url); config->url = g_strdup_printf("http://localhost:%s", input);
+    }
+    GError *error = NULL;
+    if (!gtv_config_save(config, directory, &error)) {
+        g_printerr("Không lưu được cấu hình: %s\n", error->message);
+        g_error_free(error);
+        return 1;
+    }
+    g_print("Đã lưu %s/config và ai.conf\n", directory);
+    return 0;
 }
 
-// ensureTrayRunning: mở app thì tự start indicator trên statusbar nếu chưa chạy.
-// Chỉ start thêm khi chưa có tiến trình "gotiengviet --tray" để không trùng icon.
-func ensureTrayRunning() {
-	if _, err := exec.LookPath("pgrep"); err != nil {
-		return
-	}
-	if err := exec.Command("pgrep", "-f", "gotiengviet --tray").Run(); err == nil {
-		return // tray đã chạy
-	}
-	bin := os.Args[0]
-	if bin == "" {
-		bin = "/usr/local/bin/gotiengviet"
-	}
-	cmd := exec.Command(bin, "--tray")
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // tách session: đóng app/terminal tray vẫn ở lại
-	_ = cmd.Start() // chạy nền độc lập, không Wait
-}
-
-// Tự động kiểm tra và thêm GoTiengViet vào danh sách Input Sources của GNOME nếu chưa có
-func ensureInputSource() {
-	envBus := os.Getenv("DBUS_SESSION_BUS_ADDRESS")
-	if envBus == "" {
-		uid := os.Getuid()
-		userBus := fmt.Sprintf("unix:path=/run/user/%d/bus", uid)
-		if _, err := os.Stat(fmt.Sprintf("/run/user/%d/bus", uid)); err == nil {
-			os.Setenv("DBUS_SESSION_BUS_ADDRESS", userBus)
-		}
-	}
-
-	out, err := exec.Command("gsettings", "get", "org.gnome.desktop.input-sources", "sources").Output()
-	if err != nil {
-		return
-	}
-	srcStr := strings.TrimSpace(string(out))
-	if strings.Contains(srcStr, "'gotiengviet'") {
-		return
-	}
-
-	newSrc := "[('xkb', 'us'), ('ibus', 'gotiengviet')]"
-	if strings.HasPrefix(srcStr, "[") && strings.HasSuffix(srcStr, "]") {
-		inner := strings.TrimSpace(srcStr[1 : len(srcStr)-1])
-		if inner == "" {
-			newSrc = "[('ibus', 'gotiengviet')]"
-		} else {
-			newSrc = fmt.Sprintf("[%s, ('ibus', 'gotiengviet')]", inner)
-		}
-	} else if strings.HasPrefix(srcStr, "@a(ss) []") {
-		newSrc = "[('xkb', 'us'), ('ibus', 'gotiengviet')]"
-	}
-
-	_ = exec.Command("gsettings", "set", "org.gnome.desktop.input-sources", "sources", newSrc).Run()
-	_ = exec.Command("ibus", "engine", "gotiengviet").Run()
-}
-
-func main() {
-	// Khi mở ứng dụng: tự động kiểm tra và thêm vào list input source của hệ thống
-	ensureInputSource()
-
-	// Một ứng dụng duy nhất: cờ --tray chỉ hiện indicator trên statusbar (dùng cho autostart)
-	for _, a := range os.Args[1:] {
-		if a == "--tray" {
-			if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
-				fmt.Fprintln(os.Stderr, "GoTiengViet tray cần môi trường đồ họa (DISPLAY/WAYLAND_DISPLAY)")
-				os.Exit(1)
-			}
-			runTray()
-			return
-		}
-	}
-	method, modern, spell, aiEnable, aiModel, aiUrl, aiPort := loadConfig()
-	home, _ := os.UserHomeDir()
-	cfgPath := filepath.Join(home, ".config", "gotiengviet", "config")
-
-	// CLI fallback khi không có DISPLAY/WAYLAND_DISPLAY (Settings gọi với Wayland)
-	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
-		fmt.Printf("GoTiengViet Setup (CLI Go) - hiện tại: %s modern=%s AI=%s:%s\n", method, modern, aiEnable, aiModel)
-		fmt.Println("1) telex  2) vni")
-		fmt.Printf("Chọn [telex/vni] (Enter giữ %s): ", method)
-		var inp string
-		fmt.Scanln(&inp)
-		inp = strings.TrimSpace(strings.ToLower(inp))
-		if inp == "telex" || inp == "vni" {
-			method = inp
-		}
-		fmt.Printf("Modern? [true/false] (hiện %s): ", modern)
-		fmt.Scanln(&inp)
-		inp = strings.TrimSpace(strings.ToLower(inp))
-		if inp == "true" || inp == "false" {
-			modern = inp
-		}
-		fmt.Printf("AI enable? [true/false] (hiện %s): ", aiEnable)
-		fmt.Scanln(&inp)
-		inp = strings.TrimSpace(strings.ToLower(inp))
-		if inp == "true" || inp == "false" {
-			aiEnable = inp
-		}
-		fmt.Printf("AI port? (hiện %s): ", aiPort)
-		fmt.Scanln(&inp)
-		inp = strings.TrimSpace(inp)
-		if inp != "" {
-			aiPort = inp
-			aiUrl = "http://localhost:" + aiPort
-		}
-		os.MkdirAll(filepath.Dir(cfgPath), 0755)
-		os.WriteFile(cfgPath, []byte(fmt.Sprintf("[input]\nmethod=%s\nmodern=%s\nspellcheck=%s\ncharset=unicode\n\n[ai]\nenable=%s\nmodel=%s\nurl=%s\nport=%s\n", method, modern, spell, aiEnable, aiModel, aiUrl, aiPort)), 0644)
-		// Ghi ai.conf riêng
-		aiPath := filepath.Join(home, ".config", "gotiengviet", "ai.conf")
-		os.MkdirAll(filepath.Dir(aiPath), 0755)
-		os.WriteFile(aiPath, []byte(fmt.Sprintf("[ai]\nprovider=%s\nmodel=%s\nurl=%s\nport=%s\n", map[string]string{"true": "ollama", "false": "rule"}[aiEnable], aiModel, aiUrl, aiPort)), 0644)
-		fmt.Printf("Đã lưu %s và %s\n", cfgPath, aiPath)
-		return
-	}
-
-	// Mở app thì tự động đảm bảo tray indicator chạy trên statusbar (nếu chưa có)
-	ensureTrayRunning()
-
-	// GUI via CGO gtk+-3.0, thuần Go + lib hệ thống, không dùng gotk3
-	cMethod := C.CString(method)
-	cModern := C.CString(modern)
-	cSpell := C.CString(spell)
-	cAiEnable := C.CString(aiEnable)
-	cModel := C.CString(aiModel)
-	cUrl := C.CString(aiUrl)
-	cPort := C.CString(aiPort)
-	cCfg := C.CString(cfgPath)
-	defer C.free(unsafe.Pointer(cMethod))
-	defer C.free(unsafe.Pointer(cModern))
-	defer C.free(unsafe.Pointer(cSpell))
-	defer C.free(unsafe.Pointer(cAiEnable))
-	defer C.free(unsafe.Pointer(cModel))
-	defer C.free(unsafe.Pointer(cUrl))
-	defer C.free(unsafe.Pointer(cPort))
-	defer C.free(unsafe.Pointer(cCfg))
-
-	argc := C.int(len(os.Args))
-	cArgv := make([]*C.char, len(os.Args)+1)
-	for i, a := range os.Args {
-		cArgv[i] = C.CString(a)
-	}
-	defer func() {
-		for _, p := range cArgv {
-			if p != nil {
-				C.free(unsafe.Pointer(p))
-			}
-		}
-	}()
-
-	C.setup_ui(argc, &cArgv[0], cMethod, cModern, cSpell, cAiEnable, cModel, cUrl, cPort, cCfg)
+int main(int argc, char **argv) {
+    gboolean tray = FALSE, cli = FALSE;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--tray")) tray = TRUE;
+        else if (!strcmp(argv[i], "--cli")) cli = TRUE;
+        else if (!strcmp(argv[i], "--help")) {
+            g_print("GoTiengViet Setup\n  --tray  Chạy indicator\n  --cli   Cấu hình qua terminal\n");
+            return 0;
+        } else { g_printerr("Tham số không hợp lệ: %s\n", argv[i]); return 1; }
+    }
+    gboolean graphical = g_getenv("DISPLAY") || g_getenv("WAYLAND_DISPLAY");
+    if (tray) {
+        if (!graphical) { g_printerr("Tray cần DISPLAY/WAYLAND_DISPLAY\n"); return 1; }
+        gchar *lock_path = g_build_filename(g_get_user_runtime_dir(), "gotiengviet-tray.lock", NULL);
+        int lock_fd = open(lock_path, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+        g_free(lock_path);
+        if (lock_fd < 0) { g_printerr("Không mở được khóa tray\n"); return 1; }
+        if (flock(lock_fd, LOCK_EX | LOCK_NB) != 0) { close(lock_fd); return 0; }
+        ensure_input_source();
+        int result = tray_run(argc, argv);
+        close(lock_fd);
+        return result;
+    }
+    gchar *directory = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    GtvConfig config;
+    gtv_config_load(&config, directory);
+    int result;
+    if (cli || !graphical) result = setup_cli(&config, directory);
+    else {
+        ensure_input_source();
+        gchar *self = g_file_read_link("/proc/self/exe", NULL);
+        if (self) {
+            gchar *tray_argv[] = {self, "--tray", NULL};
+            g_spawn_async(NULL, tray_argv, NULL, G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL, NULL, NULL, NULL, NULL);
+            g_free(self);
+        }
+        gchar *path = g_build_filename(directory, "config", NULL);
+        result = setup_ui(argc, argv, config.mode == GTV_VNI ? "vni" : "telex",
+            config.modern ? "true" : "false", config.spellcheck ? "true" : "false",
+            config.ai_enabled ? "true" : "false", config.model, config.url, config.port, path);
+        g_free(path);
+    }
+    gtv_config_clear(&config);
+    g_free(directory);
+    return result;
 }

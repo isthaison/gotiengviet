@@ -1,40 +1,61 @@
-.PHONY: all build install clean package test vet
+CC ?= cc
+AR ?= ar
+PKG_CONFIG ?= pkg-config
+CFLAGS ?= -O2 -g
+CFLAGS += -std=gnu11 -Wall -Wextra -Wno-unused-parameter
+CPPFLAGS += -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
+BUILD_DIR ?= build
+VERSION ?= 0.2.0-1
+CORE_SRC := $(wildcard engine/*.c)
+CORE_OBJ := $(patsubst engine/%.c,$(BUILD_DIR)/engine/%.o,$(CORE_SRC))
+CORE_LIB := $(BUILD_DIR)/libgotiengviet.a
+CORE_LIBS := $(shell $(PKG_CONFIG) --libs gio-2.0)
+BINS := $(BUILD_DIR)/ibus-engine-gotiengviet $(BUILD_DIR)/ibus-setup-gotiengviet $(BUILD_DIR)/gotiengviet-demo
 
-VERSION ?= 0.1.0-1
-PREFIX ?= /usr
-
+.PHONY: all build test vet install clean package help
 all: build
-
-build:
-	@echo "=== Build ==="
-	go vet ./engine
-	CGO_ENABLED=1 go build -o /tmp/gotiengviet-demo ./cmd/demo
-	CGO_ENABLED=1 go build -o /tmp/ibus-setup-gotiengviet ./cmd/setup
-	CGO_ENABLED=1 go build -o /tmp/ibus-engine-gotiengviet-go ./cmd/gotiengviet-ibus
-	gcc -O2 -g -o /tmp/ibus-engine-gotiengviet ibus/engine.c $$(pkg-config --cflags --libs ibus-1.0)
-	@echo "Build ok: /tmp/gotiengviet-demo, /tmp/ibus-setup-gotiengviet, /tmp/ibus-engine-gotiengviet"
-
-test: build
-	@echo "=== Test ==="
-	printf "quit\n" | /tmp/gotiengviet-demo 2>&1 | grep -E "✓|✗" | head -20
-	/tmp/ibus-engine-gotiengviet 2>&1 | head -5
-
+build: $(BINS)
+$(BUILD_DIR)/engine/%.o: engine/%.c engine/engine.h engine/internal.h
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
+$(CORE_LIB): $(CORE_OBJ)
+	$(AR) rcs $@ $^
+$(BUILD_DIR)/ibus-engine-gotiengviet: ibus/engine.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0) $(CORE_LIBS) -o $@
+$(BUILD_DIR)/ibus-setup-gotiengviet: cmd/setup/main.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0 ayatana-appindicator3-0.1) $(CORE_LIBS) -o $@
+$(BUILD_DIR)/gotiengviet-demo: cmd/demo/main.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(CORE_LIBS) -o $@
+$(BUILD_DIR)/test-engine: tests/test_engine.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(CORE_LIBS) -o $@
+$(BUILD_DIR)/test-support: tests/test_support.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(CORE_LIBS) -o $@
+$(BUILD_DIR)/fixtures/curl: tests/fake_curl.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(CORE_LIBS) -o $@
+test: $(BUILD_DIR)/test-engine $(BUILD_DIR)/test-support $(BUILD_DIR)/fixtures/curl
+	$(BUILD_DIR)/test-engine
+	GTV_TEST_CURL_DIR="$(abspath $(BUILD_DIR))/fixtures" $(BUILD_DIR)/test-support
 vet:
-	go vet ./...
-
+	$(MAKE) build test CFLAGS='-O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Werror' BUILD_DIR=$(BUILD_DIR)/strict
 install: build
 	sudo ./install.sh
-
-clean:
-	./clean.sh
-
 package: build
 	./package.sh $(VERSION)
-
+clean:
+	./clean.sh
 help:
-	@echo "make build    - Build tất cả (Go + C)"
-	@echo "make test     - Test nhanh"
-	@echo "make install  - Cài đặt (cần sudo)"
-	@echo "make package  - Đóng gói .deb (VERSION=0.1.0-1)"
-	@echo "make clean    - Dọn dẹp"
-	@echo "make vet      - go vet"
+	@echo 'make build | test | vet | install | package VERSION=... | clean'
+-include $(CORE_OBJ:.o=.d)
+
+$(BUILD_DIR)/test-setup: tests/test_setup.c cmd/setup/main.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0 ayatana-appindicator3-0.1) $(CORE_LIBS) -o $@
+.PHONY: test-ui
+test-ui: $(BUILD_DIR)/test-setup
+	$(BUILD_DIR)/test-setup
+
+$(BUILD_DIR)/test-ibus: tests/test_ibus.c ibus/engine.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0) $(CORE_LIBS) -o $@
+.PHONY: test-ibus
+test-ibus: $(BUILD_DIR)/test-ibus
+	$(BUILD_DIR)/test-ibus

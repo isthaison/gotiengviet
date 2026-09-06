@@ -6,3 +6,7 @@
 *.log
 .cache/
 .ibus-1.5.32*/
+
+/build/
+core
+core.*

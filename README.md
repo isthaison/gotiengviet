@@ -1,135 +1,123 @@
-# 🇻🇳 GoTiengViet — Bộ Gõ Tiếng Việt Thuần Hệ Thống Cho Linux
+# GoTiengViet
 
-<p align="center">
-  <img src="ibus/icons/gotiengviet.svg" width="120" height="120" alt="GoTiengViet Logo" />
-</p>
+Bộ gõ tiếng Việt cho Linux, viết hoàn toàn bằng **C**. Tên ứng dụng vẫn là GoTiengViet; build và chạy không cần Go hay CGO.
 
-<p align="center">
-  <strong>Bộ gõ tiếng Việt siêu nhẹ, hiện đại, thuần hệ thống dành cho Linux (Ubuntu, Debian, Fedora, Arch)</strong><br>
-  Tương thích hoàn hảo với <strong>GNOME Wayland</strong> & <strong>X11</strong> • Không thư viện ngoài • Hỗ trợ Telex, VNI, Macro, Kiểm tra chính tả & AI Offline.
-</p>
+Ứng dụng gồm lõi dùng chung cho Telex/VNI, IBus adapter, giao diện cấu hình GTK 3, indicator, demo terminal, kiểm tra chính tả, macro/emoji và API gợi ý Ollama tùy chọn.
 
-<p align="center">
-  <a href="https://github.com/isthaison/gotiengviet/releases"><img src="https://img.shields.io/badge/release-v0.1.0-blue.svg?style=flat-square" alt="Release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" alt="License"></a>
-  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Wayland%20%7C%20X11-orange.svg?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/badge/framework-IBus%201.5-purple.svg?style=flat-square" alt="IBus">
-  <img src="https://img.shields.io/badge/language-Go%20%7C%20C-00ADD8.svg?style=flat-square" alt="Language">
-</p>
+## Quy tắc gõ thống nhất
 
----
+Telex và VNI chỉ khác **bảng ánh xạ phím**. Cả hai đi qua cùng thuật toán trong `engine/compose.c`:
 
-## ✨ Điểm Nổi Bật
+1. Xác định âm đầu, cụm nguyên âm và phụ âm cuối của phần đang gõ.
+2. Ánh xạ phím thành thao tác: đặt thanh, đổi dạng chữ, xóa thanh hoặc gõ tắt.
+3. Chọn chữ/cụm nguyên âm đích theo cấu trúc âm tiết. Dấu có thể gõ trước hoặc sau phụ âm cuối; chữ `d` đầu âm tiết có thể đổi thành `đ` bằng phím gõ ở cuối.
+4. Đặt dạng chữ và dấu thanh độc lập, giữ nguyên chữ hoa/thường. Cặp `uo/uô` là một đích của dấu móc, đổi thành `ươ`.
+5. Gõ lại dấu đang có: **bỏ dấu đó và thêm đúng một phím thô**. Đổi sang dấu khác thay dấu cũ. Dấu thanh được đặt lại đúng vị trí khi cụm nguyên âm thay đổi.
 
-- ⚡ **Thuần Hệ Thống (Zero Bloatware)**: Không cài thêm daemon rườm rà hay dependency bên thứ ba. Chỉ sử dụng `libibus-1.0` và `glib-2.0` có sẵn của hệ điều hành.
-- 🖥️ **Tương Thích Tuyệt Đối Wayland & X11**: Hoạt động mượt mà trên GNOME Shell, không giật lag, không delay phím, tự động tích hợp trực tiếp vào danh sách **Input Sources** của hệ thống (`ibus gotiengviet`).
-- ✍️ **Đa Dạng Kiểu Gõ**:
-  - **Telex**: Hỗ trợ đầy đủ phím tắt (`w` đơn -> `ư`, `uow` -> `ươ`, `z` hủy dấu...).
-  - **VNI**: Phím số `1-5` bỏ dấu, `6-9` mũ/râu/trăng, `0` hủy dấu.
-  - Chuẩn đặt dấu hiện đại (*Bộ GD&ĐT*: `hoà`, `toán`) hoặc kiểu truyền thống (`hòa`).
-- 🔍 **Kiểm Tra Chính Tả & Gợi Ý Chuẩn Ngữ Âm**:
-  - Tự động gạch chân đỏ khi gõ sai quy tắc chính tả tiếng Việt (như luật thanh điệu với phụ âm cuối `c, ch, p, t`, âm đầu `k/c/gh/g/ngh/ng`, kẹt phím Telex `hoacw` $\rightarrow$ `hoặc`, `tếst` $\rightarrow$ `tết`).
-  - Chọn nhanh từ gợi ý bằng phím số `1..5`, `Tab`, `Enter`, hoặc click chuột.
-- 🚀 **Gõ Tắt Macro & Emoji**:
-  - Mở rộng từ viết tắt: `vn` $\rightarrow$ `Việt Nam`, `hn` $\rightarrow$ `Hà Nội`, `dc` $\rightarrow$ `được`, `ko` $\rightarrow$ `không`...
-  - Emoji tức thì: `:smile:` $\rightarrow$ 😊, `:heart:` $\rightarrow$ ❤️, `:fire:` $\rightarrow$ 🔥, `:check:` $\rightarrow$ ✅...
-- 🤖 **Tích Hợp AI Local (Ollama)**:
-  - Tùy chọn kết nối tới LLM nội bộ (ví dụ: `qwen2:0.5b`) để sửa lỗi chính tả ngữ cảnh nâng cao, hoàn toàn offline và riêng tư.
-- 🎯 **Trải Nghiệm Đồng Nhất (Single App)**:
-  - Khay hệ thống (System Tray Indicator) gọn gàng, chuyển đổi nhanh Telex/VNI bằng 1 click.
-  - Bảng điều khiển cấu hình trực quan viết bằng GTK+ 3.
+Không có bảng ngoại lệ theo từ và không suy đoán/khôi phục tiếng Anh trong thuật toán gõ. Các bảng từ trong `spell.c` chỉ phục vụ gợi ý chính tả, không quyết định kết quả phím gõ. Macro là chức năng mở rộng riêng khi kết thúc từ.
 
----
+| Thao tác | Telex | VNI |
+|---|---|---|
+| Sắc, huyền, hỏi, ngã, nặng | `s f r x j` | `1 2 3 4 5` |
+| Mũ | `a e o` trên nguyên âm tương ứng | `6` |
+| Móc/trăng | `w` | `7` / `8` |
+| Gạch chữ d | `d` | `9` |
+| Xóa dấu thanh | `z` | `0` |
 
-## 📦 Cài Đặt Nhanh
+Ví dụ:
 
-### Cách 1: Tải và cài đặt gói `.deb` (Khuyên Dùng cho Ubuntu/Debian)
+| Chuỗi phím | Kết quả |
+|---|---|
+| `bawst`, `bawts`, `batsw` | `bắt` |
+| `duocjwd`, `duocwjd`, `dduocjw` | `được` |
+| `duoc579`, `duoc795` (VNI) | `được` |
+| `ass` / `a11` | `as` / `a1` |
+| `aaa` / `a66` | `aa` / `a6` |
+| `uoww` / `uo77` | `uow` / `uo7` |
 
-Tải file `.deb` mới nhất từ mục [Releases](https://github.com/isthaison/gotiengviet/releases) và cài đặt:
+**Thay đổi có chủ đích:** `test` ra `tét`, `pass` ra `pas`; không còn khôi phục tiếng Anh tự động. Để gõ chữ điều khiển thô, gõ lặp (`tesst → test`, `passs → pass`) hoặc chuyển nguồn bàn phím bằng `Super+Space`.
 
-```bash
-sudo dpkg -i gotiengviet_0.1.0-10_amd64.deb
-```
+Phím `w` khi chưa có nguyên âm thêm `ư`; theo cùng quy tắc bỏ móc, `ww → uw`, `sww → suw`. Các phím tắt `[`/`]` và `{`/`}` thêm `ươ`/`ư` và chữ hoa tương ứng; lặp phím tắt trả lại dấu ngoặc.
 
-### Cách 2: Cài đặt từ mã nguồn
+## Build và kiểm thử
 
-Chỉ cần cài đặt các gói dev cơ bản có sẵn trong kho `apt`:
+Trên Debian/Ubuntu, cần compiler C và các thư viện hệ thống:
 
-```bash
-# 1. Cài thư viện hệ thống
-sudo apt update
-sudo apt install -y git golang gcc pkg-config libibus-1.0-dev libgtk-3-dev libayatana-appindicator3-dev
-
-# 2. Clone repo và cài đặt
-git clone https://github.com/isthaison/gotiengviet.git
-cd gotiengviet
+```sh
+sudo apt install build-essential pkg-config libibus-1.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-bin
 ./build.sh
-sudo bash ./install.sh
 ```
 
-Sau khi cài đặt xong, mở **Settings > Keyboard > Input Sources** hoặc ấn `Super + Space` để bắt đầu gõ tiếng Việt!
+Các binary nằm trong `build/`:
 
----
+- `ibus-engine-gotiengviet`: adapter IBus (`--ibus` để chạy trong phiên IBus).
+- `ibus-setup-gotiengviet`: giao diện cấu hình; `--tray` chạy indicator, `--cli` cấu hình qua terminal.
+- `gotiengviet-demo`: demo tương tác, đổi bằng `mode telex` / `mode vni`.
+- `libgotiengviet.a`: thư viện C dùng chung.
 
-## ⌨️ Bảng Quy Tắc Gõ
-
-### Kiểu gõ Telex
-| Phím gõ | Kết quả | Mô tả |
-|---|---|---|
-| `s`, `f`, `r`, `x`, `j` | `á`, `à`, `ả`, `ã`, `ạ` | Sắc, huyền, hỏi, ngã, nặng |
-| `aa`, `aw`, `ee`, `oo`, `ow`, `uw` | `â`, `ă`, `ê`, `ô`, `ơ`, `ư` | Dấu mũ, dấu á, dấu móc |
-| `dd` | `đ` | Chữ đ |
-| `w` | `ư` (đầu từ) / râu | Gõ nhanh âm ư |
-| `uow` | `ươ` | Tổ hợp nhanh ươ |
-| `z` | Xoá dấu thanh | Ví dụ: `toasz` $\rightarrow$ `toa` |
-
-### Kiểu gõ VNI
-| Phím gõ | Kết quả | Mô tả |
-|---|---|---|
-| `1`, `2`, `3`, `4`, `5` | `á`, `à`, `ả`, `ã`, `ạ` | Sắc, huyền, hỏi, ngã, nặng |
-| `6`, `7`, `8`, `9` | `â/ê/ô`, `ơ/ư`, `ă`, `đ` | Mũ, móc, á, gạch đ |
-| `0` | Xoá dấu thanh | Xoá dấu đã gõ |
-
----
-
-## 🛠️ Cấu Trúc Dự Án
-
-```
-gotiengviet/
-├── cmd/
-│   ├── demo/                # CLI demo không cần môi trường đồ hoạ
-│   ├── gotiengviet-ibus/    # CGO bridge kiểm thử libibus
-│   └── setup/               # Ứng dụng khay hệ thống & Bảng cấu hình (Go + GTK3 CGO)
-├── engine/                  # Lõi bộ gõ thuần Go stdlib
-│   ├── charset.go           # Bảng mã Unicode tiếng Việt dựng sẵn
-│   ├── phonology.go         # Quy tắc cấu trúc âm tiết & đặt dấu chuẩn
-│   ├── telex.go             # Bộ máy biến đổi Telex
-│   ├── vni.go               # Bộ máy biến đổi VNI
-│   ├── spell.go             # Thuật toán kiểm tra chính tả & Levenshtein
-│   ├── macro.go             # Lõi mở rộng gõ tắt & emoji
-│   └── ai.go                # Tích hợp AI Local Ollama
-├── ibus/
-│   ├── engine.c             # IBus Engine C thuần siêu tốc (0ms latency)
-│   ├── gotiengviet.xml      # Component descriptor cho IBus
-│   └── icons/               # Bộ icon đa độ phân giải (16x16 -> 256x256, SVG)
-├── build.sh                 # Kịch bản biên dịch toàn bộ dự án
-├── install.sh               # Kịch bản cài đặt tự động vào hệ điều hành
-└── package.sh               # Kịch bản đóng gói file .deb chuẩn Debian
+```sh
+make test                  # regression, cấu hình, stateful, JSON/Ollama fixture, hoán vị thao tác
+make vet                   # build + test với -Werror
+build/gotiengviet-demo --transform telex duocjwd
+build/gotiengviet-demo --transform vni duoc579
 ```
 
----
+Test hoán vị kiểm tra mọi thứ tự của phụ âm cuối, dấu thanh, dấu móc và dấu gạch trên cùng âm tiết, với cả hai kiểu gõ, hai kiểu đặt thanh và chữ hoa/thường. Test ngẫu nhiên kiểm tra 20.000 chuỗi, gồm phím điều khiển, chữ hoa, số và dấu ngoặc.
 
-## 🤝 Đóng Góp (Contributing)
+## Cài đặt và đóng gói
 
-Mọi đóng góp, báo lỗi (issues) và đề xuất tính năng (pull requests) đều rất được hoan nghênh!
-1. Fork dự án
-2. Tạo nhánh tính năng (`git checkout -b feature/tinh-nang-moi`)
-3. Commit thay đổi (`git commit -m 'Thêm tính năng mới'`)
-4. Push nhánh lên GitHub (`git push origin feature/tinh-nang-moi`)
-5. Tạo Pull Request mới
+```sh
+sudo ./install.sh
+make package VERSION=0.2.0-1
+```
 
----
+Script cài đặt dùng các binary đã build trong `build/`, không lấy binary cũ từ `/tmp`. Mở GoTiengViet để thêm vào Input Sources, rồi chọn bằng `Super+Space`. Cấu hình người dùng được giữ nguyên.
 
-## 📄 Bản Quyền (License)
+Có thể kiểm tra cây cài đặt mà không cần root:
 
-Dự án được phát hành theo giấy phép mã nguồn mở **[MIT License](LICENSE)**. Tự do sử dụng, chỉnh sửa và phân phối.
+```sh
+DESTDIR=/tmp/gotiengviet-staging ./install.sh
+```
+
+`make clean` chỉ xóa thư mục `build/`, không xóa các gói phát hành `.deb` hay file hệ thống.
+
+## Cấu hình và gợi ý
+
+Cấu hình nằm tại `$XDG_CONFIG_HOME/gotiengviet/` (mặc định `~/.config/gotiengviet/`):
+
+- `config`: kiểu gõ, kiểu đặt thanh, chính tả và tùy chọn AI.
+- `ai.conf`: provider `rule` hoặc `ollama`, model, URL và port; giá trị AI trong file này được ưu tiên khi đọc.
+
+IBus sử dụng gợi ý chính tả cục bộ để không chặn xử lý phím. API C `gtv_ai_suggest` và lệnh demo dưới đây hỗ trợ Ollama, tự quay về quy tắc khi dịch vụ không có hoặc trả lỗi:
+
+```sh
+build/gotiengviet-demo --suggest kông
+```
+
+Ollama là tùy chọn; cần `curl` nếu bật provider này. Dữ liệu request được truyền bằng stdin và argv, không ghép vào lệnh shell. Mỗi request có timeout và giới hạn kích thước response. Test dùng chương trình C giả lập curl, không tải model hoặc gọi dịch vụ mạng.
+
+## Cấu trúc mã nguồn
+
+```text
+engine/
+  engine.h          API công khai và kiểu dữ liệu
+  engine.c          xử lý chuỗi, buffer, backspace và commit
+  compose.c         bảng phím + thuật toán chung Telex/VNI
+  charset.c         bảng ký tự Unicode và phép biến đổi dấu
+  phonology.c       vị trí đặt dấu thanh
+  promotion.c       quy tắc nguyên âm ie/ye/uo
+  config.c          đọc/lưu cấu hình dùng chung
+  spell.c           kiểm tra và gợi ý chính tả
+  macro.c           mở rộng macro/emoji
+  ai.c, json.c      provider Ollama và JSON
+  text.c            chuyển UTF-8/UCS-4
+  telex.c, vni.c    adapter mỏng vào thuật toán chung
+ibus/engine.c       vòng đời, phím và giao tiếp IBus
+cmd/setup/main.c   GTK, indicator và cấu hình CLI
+cmd/demo/main.c    demo C
+ tests/             toàn bộ kiểm thử C
+```
+
+Các script shell chỉ phục vụ build, cài đặt và đóng gói. Không có mã nguồn ứng dụng Go, bridge CGO hoặc phụ thuộc toolchain Go.
+
+Giấy phép: [MIT](LICENSE).

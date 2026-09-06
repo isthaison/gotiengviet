@@ -132,7 +132,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                     send_backspaces((int)backspaces);
                 }
                 glong wlen = 0;
-                gunichar2 *wstr = g_utf8_to_utf16(commit, -1, NULL, &wlen, NULL);
+                guint16 *wstr = g_utf8_to_utf16(commit, -1, NULL, &wlen, NULL);
                 if (wstr) {
                     send_unicode_string((const wchar_t *)wstr);
                     g_free(wstr);
@@ -144,7 +144,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 gchar *current = gtv_engine_buffer(g_app.engine);
                 send_backspaces((int)backspaces);
                 glong wlen = 0;
-                gunichar2 *wstr = g_utf8_to_utf16(current, -1, NULL, &wlen, NULL);
+                guint16 *wstr = g_utf8_to_utf16(current, -1, NULL, &wlen, NULL);
                 if (wstr) {
                     send_unicode_string((const wchar_t *)wstr);
                     g_free(wstr);

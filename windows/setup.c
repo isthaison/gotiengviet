@@ -54,9 +54,11 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 gboolean want_startup = (IsDlgButtonChecked(hwnd, IDC_CHECK_STARTUP) == BST_CHECKED);
                 gtv_tray_set_startup(want_startup);
 
-                gtv_engine_set_mode(g_app.engine, g_app.config.mode);
-                gtv_engine_set_modern(g_app.engine, g_app.config.modern);
-                gtv_engine_set_spellcheck(g_app.engine, g_app.config.spellcheck);
+                if (g_app.engine) {
+                    g_app.engine->mode = g_app.config.mode;
+                    g_app.engine->modern = g_app.config.modern;
+                    g_app.engine->spellcheck = g_app.config.spellcheck;
+                }
 
                 gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
                 gtv_config_save(&g_app.config, config_dir, NULL);

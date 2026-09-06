@@ -97,17 +97,17 @@ void gtv_tray_show_menu(HWND hwnd) {
             break;
         case ID_TRAY_MODE_TELEX:
             g_app.config.mode = GTV_TELEX;
-            gtv_engine_set_mode(g_app.engine, GTV_TELEX);
+            if (g_app.engine) g_app.engine->mode = GTV_TELEX;
             gtv_config_save(&g_app.config, g_get_user_config_dir(), NULL);
             break;
         case ID_TRAY_MODE_VNI:
             g_app.config.mode = GTV_VNI;
-            gtv_engine_set_mode(g_app.engine, GTV_VNI);
+            if (g_app.engine) g_app.engine->mode = GTV_VNI;
             gtv_config_save(&g_app.config, g_get_user_config_dir(), NULL);
             break;
         case ID_TRAY_SPELLCHECK:
             g_app.config.spellcheck = !g_app.config.spellcheck;
-            gtv_engine_set_spellcheck(g_app.engine, g_app.config.spellcheck);
+            if (g_app.engine) g_app.engine->spellcheck = g_app.config.spellcheck;
             gtv_config_save(&g_app.config, g_get_user_config_dir(), NULL);
             break;
         case ID_TRAY_STARTUP:

@@ -13,8 +13,8 @@ static void test_stateful(void) {
     g_assert_cmpuint(backspaces,==,1);
     gchar *commit=gtv_engine_process(engine,' ',NULL);
     g_assert_cmpstr(commit,==,"đượ ");g_free(commit);
-    const gchar *phrases[]={"vn ",":SMILE: ","ko!",NULL};
-    const gchar *expected[]={"Việt Nam ","😊 ","không!"};
+    const gchar *phrases[]={"vn ",":SMILE:","ko!",NULL};
+    const gchar *expected[]={"Việt Nam ","😊","không!"};
     for(guint i=0;phrases[i];i++) {
         for(const gchar *p=phrases[i];*p;p++) {
             commit=gtv_engine_process(engine,*p,NULL);
@@ -195,6 +195,105 @@ static void test_vector_prediction(void) {
     g_assert_cmpstr(g_ptr_array_index(p4, 0), ==, "hồ chí minh");
     g_ptr_array_unref(p4);
 }
+
+static void test_macro_and_emoji(void) {
+    /* Test expand_word for emojis */
+    gchar *e1 = expand_word(":smile:");
+    g_assert_cmpstr(e1, ==, "😊");
+    g_free(e1);
+
+    gchar *e2 = expand_word(":heart:");
+    g_assert_cmpstr(e2, ==, "❤️");
+    g_free(e2);
+
+    gchar *e3 = expand_word(":fire:");
+    g_assert_cmpstr(e3, ==, "🔥");
+    g_free(e3);
+
+    /* Test expand_word for text emoticons */
+    gchar *m1 = expand_word(":)");
+    g_assert_cmpstr(m1, ==, "😊");
+    g_free(m1);
+
+    gchar *m2 = expand_word("<3");
+    g_assert_cmpstr(m2, ==, "❤️");
+    g_free(m2);
+
+    /* Test macro expansion */
+    gchar *mc1 = expand_word("vn");
+    g_assert_cmpstr(mc1, ==, "Việt Nam");
+    g_free(mc1);
+
+    gchar *mc2 = expand_word("dc");
+    g_assert_cmpstr(mc2, ==, "được");
+    g_free(mc2);
+
+    /* Test get_emoji_suggestions */
+    GPtrArray *sugs = get_emoji_suggestions(":sm");
+    g_assert_nonnull(sugs);
+    g_assert_cmpuint(sugs->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(sugs, 0), ==, "😊");
+    g_ptr_array_unref(sugs);
+
+    /* Test instant commit through gtv_engine_process */
+    GtvConfig cfg = {.mode = GTV_TELEX, .modern = TRUE};
+    GtvEngine *eng = gtv_engine_new(&cfg);
+
+    const char *seq = ":smile:";
+    gchar *commit = NULL;
+    for(const char *p = seq; *p; p++){
+        g_free(commit);
+        commit = gtv_engine_process(eng, (gunichar)*p, NULL);
+    }
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "😊");
+    g_free(commit);
+
+    /* Test instant commit for :) */
+    gtv_engine_reset(eng);
+    commit = gtv_engine_process(eng, ':', NULL);
+    g_assert_null(commit);
+    commit = gtv_engine_process(eng, ')', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "😊");
+    g_free(commit);
+
+    /* Test instant commit for :-) */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, ':', NULL));
+    g_assert_null(gtv_engine_process(eng, '-', NULL));
+    commit = gtv_engine_process(eng, ')', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "😊");
+    g_free(commit);
+
+    /* Test instant commit for <3 */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, '<', NULL));
+    commit = gtv_engine_process(eng, '3', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "❤️");
+    g_free(commit);
+
+    /* Test instant commit for :D */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, ':', NULL));
+    commit = gtv_engine_process(eng, 'D', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "😀");
+    g_free(commit);
+
+    /* Test normal colon after word */
+    gtv_engine_reset(eng);
+    for(const char *p = "chao"; *p; p++) g_assert_null(gtv_engine_process(eng, *p, NULL));
+    commit = gtv_engine_process(eng, ':', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "chao:");
+    g_free(commit);
+
+    gtv_engine_free(eng);
+}
+
 int main(int argc,char **argv) {
     const gchar *fixture=g_getenv("GTV_TEST_CURL_DIR");
     g_assert_nonnull(fixture);
@@ -207,6 +306,7 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/ollama",test_ollama);
     g_test_add_func("/support/spelling",test_spelling);
     g_test_add_func("/support/vector-prediction",test_vector_prediction);
+    g_test_add_func("/support/macro-and-emoji",test_macro_and_emoji);
     g_test_add_func("/algorithm/order-independence",test_order_independence);
     g_test_add_func("/algorithm/random-input",test_random_input);
     return g_test_run();

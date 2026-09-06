@@ -55,6 +55,7 @@ gboolean vni_transform(GArray *buf, gunichar key, gboolean modern);
 GArray* gstring_to_ucs4(GString *s);
 void ucs4_to_gstring(GArray *arr, GString *s);
 gchar* expand_word(const char *word);
+GPtrArray* get_emoji_suggestions(const char *prefix);
 
 gchar *gtv_json_quote(const gchar *text);
 gchar *gtv_json_response(const gchar *json);

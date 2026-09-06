@@ -72,7 +72,8 @@ static void hide_suggest(IBusGoTiengVietEngine *e, IBusEngine *engine){
 static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cursor, gboolean visible){
     glong plen=g_utf8_strlen(e->preedit->str, -1);
     debug_log("[push_preedit] str='%s' plen=%ld visible=%d\n", e->preedit->str, plen, visible);
-    gboolean bad=(e->spellcheck && plen>=2 && !spell_word_valid(e->preedit->str));
+    gboolean is_emoji=(e->preedit->str[0]==':' || e->preedit->str[0]==';' || e->preedit->str[0]=='<');
+    gboolean bad=(!is_emoji && e->spellcheck && plen>=2 && !spell_word_valid(e->preedit->str));
     IBusText *t=ibus_text_new_from_string(e->preedit->str);
     if(bad) ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_ERROR, 0, (gint)plen);
     else ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_SINGLE, 0, (gint)plen);
@@ -84,7 +85,9 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
     }
     clear_candidates(e);
     GPtrArray *sugs = NULL;
-    if(bad){
+    if(is_emoji && plen >= 2){
+        sugs = get_emoji_suggestions(e->preedit->str);
+    } else if(bad){
         sugs = get_suggestions(e->preedit->str);
     } else if(e->spellcheck && e->sentence_context && e->sentence_context->len > 0 && plen >= 1){
         sugs = gtv_vector_predict_next(e->sentence_context->str, e->preedit->str, 5);

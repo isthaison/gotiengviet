@@ -52,8 +52,30 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
         return NULL;
     }
     gboolean shortcut_key = engine->mode == GTV_TELEX && (key == '[' || key == ']' || key == '{' || key == '}');
-    if (!shortcut_key && key != ':' && (g_unichar_isspace(key) || g_unichar_ispunct(key) || (g_unichar_isdefined(key) && !g_unichar_isalnum(key) && !g_unichar_ismark(key)))) {
+    gboolean is_emoji_seq = FALSE;
+    if (buf->len == 0 && (key == ':' || key == ';' || key == '<')) {
+        is_emoji_seq = TRUE;
+    } else if (buf->len > 0 && g_array_index(buf, gunichar, 0) == ':' && key == ':') {
+        is_emoji_seq = TRUE;
+    } else if (buf->len == 1 && (g_array_index(buf, gunichar, 0) == ':' || g_array_index(buf, gunichar, 0) == ';') && key == '-') {
+        is_emoji_seq = TRUE;
+    }
+    if (!shortcut_key && !is_emoji_seq && (g_unichar_isspace(key) || g_unichar_ispunct(key) || (g_unichar_isdefined(key) && !g_unichar_isalnum(key) && !g_unichar_ismark(key)))) {
         gchar *word = gtv_engine_buffer(engine);
+        GString *combo = g_string_new(word);
+        g_string_append_unichar(combo, key);
+        gchar *combo_expanded = expand_word(combo->str);
+        if (strcmp(combo->str, combo_expanded) != 0) {
+            guint old_len = buf->len;
+            g_free(word);
+            g_string_free(combo, TRUE);
+            gtv_engine_reset(engine);
+            if (backspaces) *backspaces = old_len;
+            return combo_expanded;
+        }
+        g_free(combo_expanded);
+        g_string_free(combo, TRUE);
+
         gchar *expanded = expand_word(word);
         g_free(word);
         g_ptr_array_set_size(engine->suggestions, 0);
@@ -70,6 +92,17 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
     guint old_len = buf->len;
     gchar *before = gtv_engine_buffer(engine);
     gtv_compose(buf, key, engine->mode, engine->modern);
+    gchar *current = gtv_engine_buffer(engine);
+    gchar *expanded = expand_word(current);
+    if (strcmp(current, expanded) != 0 && (key == ':' || key == ')' || key == 'D' || key == 'P' || key == 'p' || key == '3' || key == '>')) {
+        g_free(current);
+        gtv_engine_reset(engine);
+        if (backspaces) *backspaces = old_len;
+        g_free(before);
+        return expanded;
+    }
+    g_free(current);
+    g_free(expanded);
     if (backspaces) {
         gchar *after = gtv_engine_buffer(engine);
         GString *literal = g_string_new(before);

@@ -1,6 +1,10 @@
 #ifndef RESOURCE_H
 #define RESOURCE_H
 
+#ifndef IDC_STATIC
+#define IDC_STATIC (-1)
+#endif
+
 #define IDI_APP_ICON        101
 #define IDI_TRAY_V          102
 #define IDI_TRAY_E          103

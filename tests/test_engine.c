@@ -65,6 +65,8 @@ static void test_telex(void) {
   {"[[", "["},
   {"]", "ư"},
   {"]]", "]"},
+  {"duocwjd", "được"},
+  {"duocjwd", "được"},
  };
  for (guint i=0;i<G_N_ELEMENTS(cases);i++) {
   gchar *got=gtv_transform(cases[i][0], GTV_TELEX, TRUE);
@@ -92,6 +94,8 @@ static void test_vni(void) {
   {"tieu3", "tiểu"},
   {"chuoi1", "chuối"},
   {"d9uoc75", "được"},
+  {"duoc579", "được"},
+  {"duoc795", "được"},
   {"d9uong72", "đường"},
   {"d99", "d9"},
   {"a88", "a8"},

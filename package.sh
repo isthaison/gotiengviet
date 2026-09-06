@@ -6,6 +6,7 @@ architecture=$(dpkg --print-architecture)
 dpkg --validate-version "$version"
 ./build.sh
 staging=$(mktemp -d /tmp/gotiengviet-package.XXXXXX)
+chmod 755 "$staging"
 trap 'rm -rf -- "$staging"' EXIT
 DESTDIR="$staging" ./install.sh
 mkdir -p "$staging/DEBIAN"
@@ -33,6 +34,8 @@ if command -v update-desktop-database >/dev/null; then
     update-desktop-database /usr/share/applications || true
 fi
 POST
+chmod -R u=rwX,go=rX "$staging"
+chmod 755 "$staging/DEBIAN"
 chmod 755 "$staging/DEBIAN/postinst"
 output="gotiengviet_${version}_${architecture}.deb"
 dpkg-deb --root-owner-group --build "$staging" "$output"

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.isthaison.gotiengviet</id>
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>GoTiengViet</name>
+  <summary>Bộ gõ tiếng Việt Telex/VNI thuần hệ thống</summary>
+  <description>
+    <p>
+      GoTiengViet là bộ gõ tiếng Việt cho Linux viết hoàn toàn bằng C thuần hệ thống, hỗ trợ kiểu gõ Telex và VNI, kiểm tra chính tả và khay hệ thống.
+    </p>
+  </description>
+  <developer id="io.github.isthaison">
+    <name>GoTiengViet Project</name>
+  </developer>
+  <launchable type="desktop-id">gotiengviet.desktop</launchable>
+  <provides>
+    <binary>gotiengviet</binary>
+    <binary>gotiengviet-demo</binary>
+  </provides>
+  <url type="homepage">https://github.com/isthaison/gotiengviet</url>
+  <content_rating type="oars-1.1" />
+</component>

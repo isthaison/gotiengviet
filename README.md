@@ -37,7 +37,7 @@ Ví dụ:
 
 **Thay đổi có chủ đích:** `test` ra `tét`, `pass` ra `pas`; không còn khôi phục tiếng Anh tự động. Để gõ chữ điều khiển thô, gõ lặp (`tesst → test`, `passs → pass`) hoặc chuyển nguồn bàn phím bằng `Super+Space`.
 
-Phím `w` khi chưa có nguyên âm thêm `ư`; theo cùng quy tắc bỏ móc, `ww → uw`, `sww → suw`. Các phím tắt `[`/`]` và `{`/`}` thêm `ươ`/`ư` và chữ hoa tương ứng; lặp phím tắt trả lại dấu ngoặc.
+Phím `w` khi chưa có nguyên âm thêm token `ư`; lặp phím tắt hoàn tác token đó: `ww → w`, `sww → sw`. Các phím tắt `[`/`]` và `{`/`}` thêm `ươ`/`ư` và chữ hoa tương ứng; lặp phím tắt trả lại dấu ngoặc.
 
 ## Build và kiểm thử
 

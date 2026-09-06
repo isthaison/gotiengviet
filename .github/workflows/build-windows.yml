@@ -27,13 +27,14 @@ jobs:
           install: >-
             git
             make
+            zip
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-glib2
             mingw-w64-x86_64-pkg-config
 
       - name: Run Test Suite
         run: |
-          make vet && make test
+          make -f Makefile.win test
 
       - name: Build gotiengviet.exe
         run: |
@@ -43,12 +44,20 @@ jobs:
         run: |
           mkdir -p release-pkg
           cp build/win/gotiengviet.exe release-pkg/
-          # Copy required MinGW runtime DLLs
-          cp /mingw64/bin/libglib-2.0-0.dll release-pkg/
-          cp /mingw64/bin/libintl-8.dll release-pkg/ 2>/dev/null || true
-          cp /mingw64/bin/libpcre2-8-0.dll release-pkg/ 2>/dev/null || true
-          cp /mingw64/bin/libwinpthread-1.dll release-pkg/ 2>/dev/null || true
-          cp /mingw64/bin/libiconv-2.dll release-pkg/ 2>/dev/null || true
+          # Bundle the full MinGW dependency closure, including GIO/GObject.
+          changed=1
+          while [ "$changed" = 1 ]; do
+            changed=0
+            for binary in release-pkg/*.exe release-pkg/*.dll; do
+              [ -f "$binary" ] || continue
+              while IFS= read -r dll; do
+                if [ -f "/mingw64/bin/$dll" ] && [ ! -f "release-pkg/$dll" ]; then
+                  cp "/mingw64/bin/$dll" release-pkg/
+                  changed=1
+                fi
+              done < <(objdump -p "$binary" | awk '/DLL Name:/ {print $3}')
+            done
+          done
           cp README.md release-pkg/
           cd release-pkg && zip -r ../gotiengviet-windows-x64.zip *
 

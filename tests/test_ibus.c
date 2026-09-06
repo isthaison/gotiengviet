@@ -24,14 +24,21 @@ int main(int argc,char **argv) {
     ibus_gotiengviet_engine_focus_in(engine);
     const struct {const gchar *input,*want;gboolean telex;} cases[]={
         {"bawst","bắt",TRUE},{"duocjwd","được",TRUE},{"DUOCJWD","ĐƯỢC",TRUE},
-        {"ass","as",TRUE},{"duoc579","được",FALSE},{"[[","[",TRUE},{":smile:",":smile:",TRUE}
+        {"ass","as",TRUE},{"duoc579","được",FALSE},{"[[","[",TRUE},{":smile:","",TRUE}
     };
     for(guint i=0;i<G_N_ELEMENTS(cases);i++) {
         ibus_gotiengviet_engine_reset(e);e->mode_telex=cases[i].telex;
-        for(const gchar *p=cases[i].input;*p;p++)
+        for(const gchar *p=cases[i].input;*p;p++) {
             g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,(guint)*p,0,0));
+            if(e->n_candidates > 1) {
+                g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Down,0,0));
+                g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Up,0,0));
+            }
+        }
         g_assert_cmpstr(e->preedit->str,==,cases[i].want);
     }
+    g_assert_cmpstr(e->sentence_context->str,==,"😊");
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_a,0,0));
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_space,0,0));
     g_assert_cmpstr(e->preedit->str,==,"");
     g_object_unref(engine);

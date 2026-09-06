@@ -101,6 +101,7 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
     e->cand_cursor=0;
     e->candidates=g_new(gchar*, sugs->len);
     IBusLookupTable *table=ibus_lookup_table_new(5, 0, TRUE, FALSE);
+    g_object_ref_sink(table); /* update_lookup_table consumes floating references. */
     for(guint i=0;i<sugs->len;i++){
         e->candidates[i]=g_strdup((char*)sugs->pdata[i]);
         ibus_lookup_table_append_candidate(table, ibus_text_new_from_string(e->candidates[i]));
@@ -189,6 +190,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             if(keyval==IBUS_Down) e->cand_cursor=(e->cand_cursor+1)%e->n_candidates;
             else e->cand_cursor=(e->cand_cursor+e->n_candidates-1)%e->n_candidates;
             IBusLookupTable *table=ibus_lookup_table_new(5, (guint)e->cand_cursor, TRUE, FALSE);
+            g_object_ref_sink(table);
             for(int i=0;i<e->n_candidates;i++)
                 ibus_lookup_table_append_candidate(table, ibus_text_new_from_string(e->candidates[i]));
             ibus_engine_update_lookup_table(engine, table, TRUE);
@@ -390,7 +392,15 @@ static void ibus_gotiengviet_engine_candidate_clicked(IBusEngine *engine, guint 
         hide_suggest(e, engine);
     }
 }
+static void ibus_gotiengviet_engine_finalize(GObject *object){
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)object;
+    clear_candidates(e);
+    if(e->preedit) g_string_free(e->preedit,TRUE);
+    if(e->sentence_context) g_string_free(e->sentence_context,TRUE);
+    G_OBJECT_CLASS(ibus_gotiengviet_engine_parent_class)->finalize(object);
+}
 static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass){
+    G_OBJECT_CLASS(klass)->finalize=ibus_gotiengviet_engine_finalize;
     IBusEngineClass *ec=IBUS_ENGINE_CLASS(klass);
     ec->process_key_event=ibus_gotiengviet_engine_process_key_event;
     ec->focus_in=ibus_gotiengviet_engine_focus_in;

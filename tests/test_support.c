@@ -297,7 +297,7 @@ static void test_macro_and_emoji(void) {
 int main(int argc,char **argv) {
     const gchar *fixture=g_getenv("GTV_TEST_CURL_DIR");
     g_assert_nonnull(fixture);
-    gchar *path=g_strconcat(fixture,":",g_getenv("PATH")?g_getenv("PATH"):"",NULL);
+    gchar *path=g_strconcat(fixture,G_SEARCHPATH_SEPARATOR_S,g_getenv("PATH")?g_getenv("PATH"):"",NULL);
     g_setenv("PATH",path,TRUE);g_free(path);
     g_test_init(&argc,&argv,NULL);gtv_init();
     g_test_add_func("/support/stateful",test_stateful);

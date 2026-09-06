@@ -2,8 +2,8 @@ CC ?= gcc
 WINDRES ?= windres
 PKG_CONFIG ?= pkg-config
 
-CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags glib-2.0)
-LDFLAGS ?= $(shell $(PKG_CONFIG) --libs glib-2.0) -mwindows -luser32 -lshell32 -ladvapi32
+CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
+LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -mwindows -luser32 -lshell32 -ladvapi32
 
 ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
               engine/engine.c engine/json.c engine/macro.c engine/phonology.c \
@@ -16,14 +16,25 @@ RC_SRC = windows/resource.rc
 ENGINE_OBJS = $(ENGINE_SRCS:%.c=build/win/%.o)
 WIN_OBJS = $(WIN_SRCS:%.c=build/win/%.o)
 RC_OBJ = build/win/windows/resource.o
+CORE_LIB = build/win/libgotiengviet.a
 
 TARGET = build/win/gotiengviet.exe
+TEST_ENGINE = build/win/test-engine.exe
+TEST_SUPPORT = build/win/test-support.exe
+FAKE_CURL = build/win/fixtures/curl.exe
+
+TEST_CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
+TEST_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0)
 
 all: $(TARGET)
 
 $(TARGET): $(ENGINE_OBJS) $(WIN_OBJS) $(RC_OBJ)
 	@mkdir -p $(dir $@)
 	$(CC) $(ENGINE_OBJS) $(WIN_OBJS) $(RC_OBJ) $(LDFLAGS) -o $@
+
+$(CORE_LIB): $(ENGINE_OBJS)
+	@mkdir -p $(dir $@)
+	$(AR) rcs $@ $^
 
 build/win/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -33,7 +44,23 @@ build/win/windows/resource.o: windows/resource.rc
 	@mkdir -p $(dir $@)
 	$(WINDRES) -Iwindows $< -o $@
 
+$(TEST_ENGINE): tests/test_engine.c $(CORE_LIB)
+	@mkdir -p $(dir $@)
+	$(CC) $(TEST_CFLAGS) $< $(CORE_LIB) $(TEST_LDFLAGS) -o $@
+
+$(TEST_SUPPORT): tests/test_support.c $(CORE_LIB)
+	@mkdir -p $(dir $@)
+	$(CC) $(TEST_CFLAGS) $< $(CORE_LIB) $(TEST_LDFLAGS) -o $@
+
+$(FAKE_CURL): tests/fake_curl.c
+	@mkdir -p $(dir $@)
+	$(CC) $(TEST_CFLAGS) $< $(TEST_LDFLAGS) -o $@
+
+test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(FAKE_CURL)
+	./$(TEST_ENGINE)
+	GTV_TEST_CURL_DIR="$(CURDIR)/build/win/fixtures" ./$(TEST_SUPPORT)
+
 clean:
 	rm -rf build/win
 
-.PHONY: all clean
+.PHONY: all clean test

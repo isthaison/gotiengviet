@@ -118,6 +118,20 @@ cmd/demo/main.c    demo C
  tests/             toàn bộ kiểm thử C
 ```
 
+## Phiên bản Windows
+
+GoTiengViet hỗ trợ Windows 10/11 native thông qua Win32 Low-Level Keyboard Hook (`WH_KEYBOARD_LL`) và System Tray:
+
+* **Tự động build CI/CD**: Mỗi bản release trên GitHub tự động build và đính kèm gói `gotiengviet-windows-x64.zip` (chạy ngay không cần cài đặt).
+* **Phím tắt chuyển ngôn ngữ**: `Ctrl + Shift` hoặc `Alt + Z` để đổi nhanh giữa chế độ [V] và [E].
+* **Khay hệ thống (System Tray)**: Nhấp chuột trái vào icon [V]/[E] để đổi ngôn ngữ; nhấp chuột phải để mở Bảng điều khiển, chuyển kiểu gõ Telex/VNI hoặc Thoát.
+* **Tự khởi động cùng Windows**: Tùy chọn trong bảng điều khiển hoặc menu chuột phải.
+* **Build từ mã nguồn (MSYS2 MinGW-w64)**:
+  ```sh
+  pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glib2 make
+  make -f Makefile.win
+  ```
+
 Các script shell chỉ phục vụ build, cài đặt và đóng gói. Không có mã nguồn ứng dụng Go, bridge CGO hoặc phụ thuộc toolchain Go.
 
 Giấy phép: [MIT](LICENSE).

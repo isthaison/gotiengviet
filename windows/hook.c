@@ -1,0 +1,173 @@
+#include "hook.h"
+#include "tray.h"
+#include <stdio.h>
+
+static void send_backspaces(int count) {
+    if (count <= 0) return;
+    INPUT *inputs = g_new0(INPUT, count * 2);
+    for (int i = 0; i < count; i++) {
+        inputs[i * 2].type = INPUT_KEYBOARD;
+        inputs[i * 2].ki.wVk = VK_BACK;
+        inputs[i * 2].ki.dwExtraInfo = GTV_HOOK_MAGIC;
+
+        inputs[i * 2 + 1].type = INPUT_KEYBOARD;
+        inputs[i * 2 + 1].ki.wVk = VK_BACK;
+        inputs[i * 2 + 1].ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[i * 2 + 1].ki.dwExtraInfo = GTV_HOOK_MAGIC;
+    }
+    SendInput(count * 2, inputs, sizeof(INPUT));
+    g_free(inputs);
+}
+
+static void send_unicode_string(const wchar_t *wstr) {
+    if (!wstr || !*wstr) return;
+    int len = (int)wcslen(wstr);
+    INPUT *inputs = g_new0(INPUT, len * 2);
+    for (int i = 0; i < len; i++) {
+        inputs[i * 2].type = INPUT_KEYBOARD;
+        inputs[i * 2].ki.wScan = (WORD)wstr[i];
+        inputs[i * 2].ki.dwFlags = KEYEVENTF_UNICODE;
+        inputs[i * 2].ki.dwExtraInfo = GTV_HOOK_MAGIC;
+
+        inputs[i * 2 + 1].type = INPUT_KEYBOARD;
+        inputs[i * 2 + 1].ki.wScan = (WORD)wstr[i];
+        inputs[i * 2 + 1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+        inputs[i * 2 + 1].ki.dwExtraInfo = GTV_HOOK_MAGIC;
+    }
+    SendInput(len * 2, inputs, sizeof(INPUT));
+    g_free(inputs);
+}
+
+void gtv_hook_reset_buffer(void) {
+    if (g_app.engine) {
+        gtv_engine_reset(g_app.engine);
+    }
+}
+
+void gtv_hook_set_mode(gboolean enabled) {
+    g_app.enabled = enabled;
+    gtv_hook_reset_buffer();
+    gtv_tray_update_icon(g_app.enabled);
+}
+
+void gtv_hook_toggle_mode(void) {
+    gtv_hook_set_mode(!g_app.enabled);
+}
+
+static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode != HC_ACTION) {
+        return CallNextHookEx(NULL, nCode, wParam, lParam);
+    }
+
+    KBDLLHOOKSTRUCT *kbd = (KBDLLHOOKSTRUCT *)lParam;
+
+    /* Ignore events injected by our own SendInput */
+    if (kbd->dwExtraInfo == GTV_HOOK_MAGIC) {
+        return CallNextHookEx(NULL, nCode, wParam, lParam);
+    }
+
+    /* Hotkey detection: Ctrl + Shift or Alt + Z toggles mode */
+    if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+        gboolean ctrl_down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        gboolean shift_down = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        gboolean alt_down = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+
+        if ((kbd->vkCode == VK_SHIFT && ctrl_down) ||
+            (kbd->vkCode == VK_CONTROL && shift_down) ||
+            (kbd->vkCode == 'Z' && alt_down)) {
+            gtv_hook_toggle_mode();
+            return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
+    }
+
+    /* If in English mode, do not process */
+    if (!g_app.enabled) {
+        return CallNextHookEx(NULL, nCode, wParam, lParam);
+    }
+
+    /* Navigation keys, modifiers, enter, tab, escape reset composition */
+    if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+        if (kbd->vkCode == VK_RETURN || kbd->vkCode == VK_ESCAPE || kbd->vkCode == VK_TAB ||
+            kbd->vkCode == VK_LEFT || kbd->vkCode == VK_RIGHT || kbd->vkCode == VK_UP || kbd->vkCode == VK_DOWN ||
+            kbd->vkCode == VK_HOME || kbd->vkCode == VK_END || kbd->vkCode == VK_PRIOR || kbd->vkCode == VK_NEXT) {
+            gtv_hook_reset_buffer();
+            return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
+
+        /* Modifiers like Ctrl+C, Ctrl+V, Alt+F4 reset buffer */
+        if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_MENU) & 0x8000) ||
+            (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
+            gtv_hook_reset_buffer();
+            return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
+
+        /* Backspace handling */
+        if (kbd->vkCode == VK_BACK) {
+            guint backspaces = 0;
+            gtv_engine_process(g_app.engine, '\b', &backspaces);
+            return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
+
+        /* Convert vkCode to Unicode character */
+        BYTE key_state[256];
+        GetKeyboardState(key_state);
+        key_state[VK_SHIFT] = (BYTE)((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 0x80 : 0);
+        key_state[VK_CAPITAL] = (BYTE)(GetKeyState(VK_CAPITAL) & 1);
+        key_state[VK_CONTROL] = 0;
+        key_state[VK_MENU] = 0;
+
+        WCHAR wchars[4] = {0};
+        HWND foreground = GetForegroundWindow();
+        DWORD thread_id = foreground ? GetWindowThreadProcessId(foreground, NULL) : 0;
+        HKL layout = GetKeyboardLayout(thread_id);
+        int count = ToUnicodeEx(kbd->vkCode, kbd->scanCode, key_state, wchars, 4, 0, layout);
+
+        if (count == 1 && wchars[0] >= 0x20) {
+            gunichar ch = (gunichar)wchars[0];
+            guint backspaces = 0;
+            gchar *commit = gtv_engine_process(g_app.engine, ch, &backspaces);
+
+            if (commit) {
+                if (backspaces > 0) {
+                    send_backspaces((int)backspaces);
+                }
+                glong wlen = 0;
+                gunichar2 *wstr = g_utf8_to_utf16(commit, -1, NULL, &wlen, NULL);
+                if (wstr) {
+                    send_unicode_string((const wchar_t *)wstr);
+                    g_free(wstr);
+                }
+                g_free(commit);
+                return 1; /* Suppress original key */
+            } else if (backspaces > 0) {
+                /* Buffer modified in place (e.g. aa -> â, as -> á) */
+                gchar *current = gtv_engine_buffer(g_app.engine);
+                send_backspaces((int)backspaces);
+                glong wlen = 0;
+                gunichar2 *wstr = g_utf8_to_utf16(current, -1, NULL, &wlen, NULL);
+                if (wstr) {
+                    send_unicode_string((const wchar_t *)wstr);
+                    g_free(wstr);
+                }
+                g_free(current);
+                return 1; /* Suppress original key */
+            }
+        }
+    }
+
+    return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
+gboolean gtv_hook_install(void) {
+    if (g_app.keyboard_hook) return TRUE;
+    HINSTANCE hinst = GetModuleHandle(NULL);
+    g_app.keyboard_hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hinst, 0);
+    return g_app.keyboard_hook != NULL;
+}
+
+void gtv_hook_uninstall(void) {
+    if (g_app.keyboard_hook) {
+        UnhookWindowsHookEx(g_app.keyboard_hook);
+        g_app.keyboard_hook = NULL;
+    }
+}

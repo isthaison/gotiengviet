@@ -1,0 +1,39 @@
+CC ?= gcc
+WINDRES ?= windres
+PKG_CONFIG ?= pkg-config
+
+CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags glib-2.0)
+LDFLAGS ?= $(shell $(PKG_CONFIG) --libs glib-2.0) -mwindows -luser32 -lshell32 -ladvapi32
+
+ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
+              engine/engine.c engine/json.c engine/macro.c engine/phonology.c \
+              engine/promotion.c engine/spell.c engine/telex.c engine/text.c \
+              engine/vector.c engine/vni.c
+
+WIN_SRCS = windows/main.c windows/hook.c windows/tray.c windows/setup.c
+RC_SRC = windows/resource.rc
+
+ENGINE_OBJS = $(ENGINE_SRCS:%.c=build/win/%.o)
+WIN_OBJS = $(WIN_SRCS:%.c=build/win/%.o)
+RC_OBJ = build/win/windows/resource.o
+
+TARGET = build/win/gotiengviet.exe
+
+all: $(TARGET)
+
+$(TARGET): $(ENGINE_OBJS) $(WIN_OBJS) $(RC_OBJ)
+	@mkdir -p $(dir $@)
+	$(CC) $(ENGINE_OBJS) $(WIN_OBJS) $(RC_OBJ) $(LDFLAGS) -o $@
+
+build/win/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/win/windows/resource.o: windows/resource.rc
+	@mkdir -p $(dir $@)
+	$(WINDRES) -Iwindows $< -o $@
+
+clean:
+	rm -rf build/win
+
+.PHONY: all clean

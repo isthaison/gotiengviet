@@ -68,7 +68,7 @@ Test hoán vị kiểm tra mọi thứ tự của phụ âm cuối, dấu thanh,
 
 ```sh
 sudo ./install.sh
-make package VERSION=0.2.0-1
+make package VERSION=0.2.1-1
 ```
 
 Script cài đặt dùng các binary đã build trong `build/`, không lấy binary cũ từ `/tmp`. Mở GoTiengViet để thêm vào Input Sources, rồi chọn bằng `Super+Space`. Cấu hình người dùng được giữ nguyên.

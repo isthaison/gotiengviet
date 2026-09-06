@@ -467,7 +467,7 @@ static void install_crash_handlers(void){
 }
 
 static void bus_connected_cb(IBusBus *b, gpointer user_data){
-    IBusComponent *c=ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.2.0","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
+    IBusComponent *c=ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.2.1","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
     IBusEngineDesc *d=ibus_engine_desc_new("gotiengviet","GoTiengViet","GoTiengViet: Telex/VNI (đổi Telex/VNI trên indicator của app) - github.com/isthaison/gotiengviet","vi","GPL","GoTiengViet","gotiengviet","us");
     ibus_component_add_engine(c,d);
     ibus_bus_register_component(bus,c);

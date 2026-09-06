@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd -- "$(dirname -- "$0")"
-version=${1:-0.2.1-1}
+version=${1:-0.3.0-1}
 architecture=$(dpkg --print-architecture)
 dpkg --validate-version "$version"
 ./build.sh

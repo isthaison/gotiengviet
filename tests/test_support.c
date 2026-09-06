@@ -196,6 +196,35 @@ static void test_vector_prediction(void) {
     g_ptr_array_unref(p4);
 }
 
+static void test_vector_normalization(void) {
+    const struct {const gchar *context,*prefix,*want;} cases[]={
+        {"  công\t\tnghệ  ","thong","thông tin"},
+        {"xin\302\240","chao","chào"},
+        {"Xin","","chào"}, {"xin","CH","CHÀO"}, {"xin","Ch","Chào"},
+        {"ho\314\202\314\200 chi\314\201","m","minh"},
+        {"học abc","t","tập"}, {"xin. học","t","tập"}
+    };
+    for(guint i=0;i<G_N_ELEMENTS(cases);i++){
+        GPtrArray *out=gtv_vector_predict_next(cases[i].context,cases[i].prefix,3);
+        g_assert_cmpuint(out->len,>,0);
+        g_assert_cmpstr(g_ptr_array_index(out,0),==,cases[i].want);
+        g_assert_cmpuint(out->len,<=,3);
+        for(guint j=0;j<out->len;j++) for(guint k=j+1;k<out->len;k++)
+            g_assert_cmpstr(g_ptr_array_index(out,j),!=,g_ptr_array_index(out,k));
+        g_ptr_array_unref(out);
+    }
+    const struct {const gchar *context,*prefix;guint limit;} empty[]={
+        {"xin.","",5},{"xin。", "",5},{"xin\n", "",5},
+        {"xin","chá",5},{"xin","chào",5},{"xin","",0},
+        {NULL,"",5},{"\xff","",5},{"xin","\xff",5},{"   ","",5},
+        {"học a b c d e f g h", "t",5}
+    };
+    for(guint i=0;i<G_N_ELEMENTS(empty);i++){
+        GPtrArray *out=gtv_vector_predict_next(empty[i].context,empty[i].prefix,empty[i].limit);
+        g_assert_cmpuint(out->len,==,0);g_ptr_array_unref(out);
+    }
+}
+
 static void test_macro_and_emoji(void) {
     /* Test expand_word for emojis */
     gchar *e1 = expand_word(":smile:");
@@ -306,6 +335,7 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/ollama",test_ollama);
     g_test_add_func("/support/spelling",test_spelling);
     g_test_add_func("/support/vector-prediction",test_vector_prediction);
+    g_test_add_func("/support/vector-normalization",test_vector_normalization);
     g_test_add_func("/support/macro-and-emoji",test_macro_and_emoji);
     g_test_add_func("/algorithm/order-independence",test_order_independence);
     g_test_add_func("/algorithm/random-input",test_random_input);

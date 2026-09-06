@@ -1,4 +1,5 @@
 *.deb
+*.zip
 *.tar.gz
 *.tar.xz
 *.dsc

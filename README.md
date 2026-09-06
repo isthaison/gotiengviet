@@ -135,3 +135,11 @@ GoTiengViet hỗ trợ Windows 10/11 native thông qua Win32 Low-Level Keyboard 
 Các script shell chỉ phục vụ build, cài đặt và đóng gói. Không có mã nguồn ứng dụng Go, bridge CGO hoặc phụ thuộc toolchain Go.
 
 Giấy phép: [MIT](LICENSE).
+
+### Gợi ý vector cục bộ
+
+Gợi ý kết hợp liên kết cụm từ với cosine similarity của tối đa tám từ gần nhất; từ càng gần có trọng số càng cao. Liên kết cụm từ trực tiếp được ưu tiên hơn từ chỉ tương tự về chủ đề. Bộ vector hiện là bảng 16 chiều nhỏ được khai báo trong mã C, chưa phải mô hình embedding được huấn luyện trên kho văn bản lớn.
+
+Tiền tố chưa gõ dấu vẫn tìm được từ có dấu (`công nghệ` + `thong` → `thông tin`); dấu đã gõ được tôn trọng. Kiểu chữ theo tiền tố (`Ch` → `Chào`, `CH` → `CHÀO`), không lấy theo chữ đầu của câu trước. Bộ xếp hạng chuẩn hóa Unicode NFC/NFD, bỏ khoảng trắng thừa, không dùng lại ngữ cảnh trước dấu kết thúc câu, không gợi ý lại chính từ đã hoàn thành.
+
+Trong IBus, gợi ý ngữ cảnh đứng trước gợi ý sửa chính tả khi đang gõ một phần từ. Danh sách được khử trùng và giới hạn năm mục. Không có request mạng trong đường xử lý phím này.

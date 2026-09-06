@@ -19,5 +19,12 @@
     <binary>gotiengviet-demo</binary>
   </provides>
   <url type="homepage">https://github.com/isthaison/gotiengviet</url>
+  <releases>
+    <release version="0.3.0" date="2026-09-06">
+      <description>
+        <p>Phát hành bản đa nền tảng (Linux &amp; Windows), hỗ trợ Emoji chuyển đổi tức thì và Win32 Hook.</p>
+      </description>
+    </release>
+  </releases>
   <content_rating type="oars-1.1" />
 </component>

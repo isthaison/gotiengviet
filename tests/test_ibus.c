@@ -41,6 +41,31 @@ int main(int argc,char **argv) {
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_a,0,0));
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_space,0,0));
     g_assert_cmpstr(e->preedit->str,==,"");
+    /* Partial syllables can be marked misspelled but must retain contextual completions. */
+    ibus_gotiengviet_engine_reset(e);
+    e->spellcheck=TRUE;e->mode_telex=TRUE;
+    g_string_assign(e->sentence_context,"xin");
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_c,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_h,0,0));
+    g_assert_cmpint(e->n_candidates,>,0);
+    g_assert_cmpstr(e->candidates[0],==,"chào");
+    g_assert_cmpint(e->n_candidates,<=,5);
+    /* Modifier/lock keys must pass through without committing the syllable. */
+    ibus_gotiengviet_engine_reset(e);
+    e->spellcheck=FALSE;
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_a,0,0));
+    const guint modifiers[]={IBUS_Shift_L,IBUS_Shift_R,IBUS_Caps_Lock,
+        IBUS_Shift_Lock,IBUS_Num_Lock,IBUS_Scroll_Lock};
+    for(guint i=0;i<G_N_ELEMENTS(modifiers);i++) {
+        g_assert_false(ibus_gotiengviet_engine_process_key_event(engine,modifiers[i],0,0));
+        g_assert_cmpstr(e->preedit->str,==,"a");
+        g_assert_false(ibus_gotiengviet_engine_process_key_event(engine,modifiers[i],0,IBUS_RELEASE_MASK));
+        g_assert_cmpstr(e->preedit->str,==,"a");
+    }
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_S,0,IBUS_LOCK_MASK));
+    g_assert_cmpstr(e->preedit->str,==,"á");
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_b,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"áb");
     g_object_unref(engine);
     g_dbus_connection_close_sync(connection,NULL,NULL);g_object_unref(connection);
     g_test_dbus_down(test_bus);g_object_unref(test_bus);

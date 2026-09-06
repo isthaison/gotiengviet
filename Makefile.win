@@ -3,7 +3,7 @@ WINDRES ?= windres
 PKG_CONFIG ?= pkg-config
 
 CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
-LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -mwindows -luser32 -lshell32 -ladvapi32
+LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32
 
 ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
               engine/engine.c engine/json.c engine/macro.c engine/phonology.c \
@@ -24,7 +24,7 @@ TEST_SUPPORT = build/win/test-support.exe
 FAKE_CURL = build/win/fixtures/curl.exe
 
 TEST_CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
-TEST_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0)
+TEST_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm
 
 all: $(TARGET)
 

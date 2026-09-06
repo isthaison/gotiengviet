@@ -87,10 +87,16 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
     GPtrArray *sugs = NULL;
     if(is_emoji && plen >= 2){
         sugs = get_emoji_suggestions(e->preedit->str);
-    } else if(bad){
-        sugs = get_suggestions(e->preedit->str);
-    } else if(e->spellcheck && e->sentence_context && e->sentence_context->len > 0 && plen >= 1){
-        sugs = gtv_vector_predict_next(e->sentence_context->str, e->preedit->str, 5);
+    } else {
+        if(e->spellcheck && e->sentence_context && e->sentence_context->len > 0 && plen >= 1)
+            sugs = gtv_vector_predict_next(e->sentence_context->str,e->preedit->str,5);
+        if(bad){
+            GPtrArray *corrections=get_suggestions(e->preedit->str);
+            if(!sugs) sugs=g_ptr_array_new_with_free_func(g_free);
+            for(guint i=0;i<corrections->len && sugs->len<5;i++)
+                add_candidate_unique(sugs,g_ptr_array_index(corrections,i));
+            g_ptr_array_unref(corrections);
+        }
     }
     if(!sugs || sugs->len == 0){
         if(sugs) g_ptr_array_free(sugs, TRUE);
@@ -132,6 +138,16 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     debug_log("[key] kv=0x%x ('%c') kc=%u mod=0x%x preedit='%s' purpose=%u caps=0x%x\n",
               keyval, (keyval>32 && keyval<127)?(char)keyval:' ', keycode, modifiers, e->preedit->str, e->purpose, e->caps);
     if(modifiers & IBUS_RELEASE_MASK) return FALSE;
+    /* Let the desktop handle Shift/locks without committing a partial word.
+     * Character case comes from keyval, already resolved by the keyboard layout. */
+    switch(keyval){
+        case IBUS_Shift_L: case IBUS_Shift_R:
+        case IBUS_Caps_Lock: case IBUS_Shift_Lock:
+        case IBUS_Num_Lock: case IBUS_Scroll_Lock:
+            return FALSE;
+        default:
+            break;
+    }
     // Phím tắt Ctrl/Alt/Super (Ctrl+C/V/X/Z, Ctrl+S...) — commit chữ đang dở rồi nhường cho app
     if(modifiers & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK | IBUS_SUPER_MASK | IBUS_HYPER_MASK | IBUS_META_MASK)){
         if(e->preedit->len>0){
@@ -485,7 +501,7 @@ static void bus_connected_cb(IBusBus *b, gpointer user_data){
         c = ibus_component_new_from_file("/usr/share/ibus/component/gotiengviet.xml");
     }
     if(!c){
-        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.2.1","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
+        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.3.0","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
         IBusEngineDesc *d = ibus_engine_desc_new_varargs(
             "name", "gotiengviet",
             "longname", "GoTiengViet",

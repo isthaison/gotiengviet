@@ -229,102 +229,112 @@ static gint compare_vector_cand(gconstpointer a, gconstpointer b){
     return strcmp(va->word, vb->word);
 }
 
-/* Áp dụng TitleCase nếu ngữ cảnh viết hoa */
-static gchar *format_casing(const char *template_ctx, const char *word){
-    if(!template_ctx || !word) return g_strdup(word ? word : "");
-    gunichar first = g_utf8_get_char(template_ctx);
-    if(g_unichar_isupper(first)){
-        glong wlen = 0;
-        gunichar *wu = g_utf8_to_ucs4(word, -1, NULL, &wlen, NULL);
-        if(wu && wlen > 0){
-            wu[0] = g_unichar_toupper(wu[0]);
-            gchar *res = g_ucs4_to_utf8(wu, wlen, NULL, NULL, NULL);
-            g_free(wu);
-            if(res) return res;
+/* Normalize canonically before token and prefix comparisons. */
+static gchar *normalize_text(const gchar *text){
+    gchar *lower = g_utf8_strdown(text, -1);
+    gchar *normalized = g_utf8_normalize(lower, -1, G_NORMALIZE_NFC);
+    g_free(lower);
+    return normalized;
+}
+static gchar *fold_accents(const gchar *text){
+    gchar *decomposed = g_utf8_normalize(text, -1, G_NORMALIZE_NFD);
+    GString *folded = g_string_new("");
+    for(const gchar *p=decomposed; *p; p=g_utf8_next_char(p)){
+        gunichar c=g_utf8_get_char(p);
+        if(!g_unichar_ismark(c)) g_string_append_unichar(folded,c == 0x0111 ? 'd' : c);
+    }
+    g_free(decomposed);
+    return g_string_free(folded,FALSE);
+}
+static gboolean prefix_matches(const gchar *target, const gchar *prefix, const gchar *folded_prefix){
+    if(g_str_has_prefix(target,prefix)) return TRUE;
+    /* Respect accents that the user has already explicitly entered. */
+    if(strcmp(prefix,folded_prefix)) return FALSE;
+    gchar *folded=fold_accents(target);
+    gboolean match=g_str_has_prefix(folded,folded_prefix);
+    g_free(folded);
+    return match;
+}
+/* Keep at most eight words, and never carry semantic context across a sentence. */
+static GPtrArray *context_tokens(const gchar *text){
+    GPtrArray *tokens=g_ptr_array_new_with_free_func(g_free);
+    GString *word=g_string_new("");
+    for(const gchar *p=text;;p=g_utf8_next_char(p)){
+        gunichar c=g_utf8_get_char(p);
+        if(g_unichar_isalnum(c) || g_unichar_ismark(c)) g_string_append_unichar(word,c);
+        else {
+            if(word->len){
+                if(tokens->len == 8) g_ptr_array_remove_index(tokens,0);
+                g_ptr_array_add(tokens,g_strdup(word->str));
+                g_string_truncate(word,0);
+            }
+            if(c && g_utf8_strchr(".!?;\n。！？",-1,c)) g_ptr_array_set_size(tokens,0);
         }
+        if(!c) break;
+    }
+    g_string_free(word,TRUE);
+    return tokens;
+}
+static gchar *format_casing(const gchar *prefix, const gchar *word){
+    gboolean any=FALSE, all_upper=TRUE;
+    for(const gchar *p=prefix;*p;p=g_utf8_next_char(p)){
+        gunichar c=g_utf8_get_char(p);
+        if(g_unichar_isalpha(c)){any=TRUE;if(!g_unichar_isupper(c)) all_upper=FALSE;}
+    }
+    if(any && all_upper && g_utf8_strlen(prefix,-1)>1) return g_utf8_strup(word,-1);
+    if(*prefix && g_unichar_isupper(g_utf8_get_char(prefix))){
+        GString *out=g_string_new("");
+        g_string_append_unichar(out,g_unichar_toupper(g_utf8_get_char(word)));
+        g_string_append(out,g_utf8_next_char(word));
+        return g_string_free(out,FALSE);
     }
     return g_strdup(word);
 }
 
 GPtrArray *gtv_vector_predict_next(const gchar *context, const gchar *prefix, guint max_results){
-    GPtrArray *results = g_ptr_array_new_with_free_func(g_free);
-    if(!context || !*context) return results;
+    GPtrArray *results=g_ptr_array_new_with_free_func(g_free);
+    if(!max_results || !context || !g_utf8_validate(context,-1,NULL) ||
+       (prefix && !g_utf8_validate(prefix,-1,NULL))) return results;
+    gchar *ctx=normalize_text(context);
+    gchar *typed=g_strdup(prefix ? prefix : "");g_strstrip(typed);
+    gchar *pfx=normalize_text(typed), *folded=fold_accents(pfx);
+    GPtrArray *tokens=context_tokens(ctx);
+    GArray *cands=g_array_new(FALSE,FALSE,sizeof(VectorCand));
+    if(!tokens->len) goto done;
+    const gchar *last=g_ptr_array_index(tokens,tokens->len-1);
+    gchar *pair=tokens->len>1 ? g_strjoin(" ",g_ptr_array_index(tokens,tokens->len-2),last,NULL) : NULL;
 
-    gchar *ctx_lower = g_utf8_strdown(context, -1);
-    g_strstrip(ctx_lower);
-    gchar *pfx_lower = prefix ? g_utf8_strdown(prefix, -1) : NULL;
-    if(pfx_lower) g_strstrip(pfx_lower);
-
-    /* Tách các từ trong ngữ cảnh */
-    gchar **tokens = g_strsplit_set(ctx_lower, " ,.?!;:\t\n", -1);
-    guint n_tokens = g_strv_length(tokens);
-    if(n_tokens == 0){
-        g_strfreev(tokens); g_free(ctx_lower); g_free(pfx_lower);
-        return results;
+    /* Recent words contribute most; unknown tokens still consume a time step. */
+    float context_vec[VEC_DIM]={0}, weight=1.0f;
+    for(gint i=(gint)tokens->len-1;i>=0;i--,weight*=0.5f){
+        const float *vec=find_word_vector(g_ptr_array_index(tokens,i));
+        if(vec) for(guint j=0;j<VEC_DIM;j++) context_vec[j]+=weight*vec[j];
     }
-
-    const gchar *last1 = tokens[n_tokens - 1];
-    gchar *last2 = NULL;
-    if(n_tokens >= 2){
-        last2 = g_strdup_printf("%s %s", tokens[n_tokens - 2], tokens[n_tokens - 1]);
-    }
-
-    GArray *cands = g_array_new(FALSE, FALSE, sizeof(VectorCand));
-
-    /* 1. Ưu tiên liên kết ngữ nghĩa chuyển tiếp trực tiếp (Transition Collocation) */
-    for(int i=0; g_transitions[i].from; i++){
-        gboolean match = FALSE;
-        if(last2 && strcmp(last2, g_transitions[i].from) == 0){
-            match = TRUE;
-        } else if(strcmp(last1, g_transitions[i].from) == 0){
-            match = TRUE;
-        }
-
-        if(match){
-            const char *target = g_transitions[i].to;
-            if(!pfx_lower || !*pfx_lower || g_str_has_prefix(target, pfx_lower)){
-                /* Điểm cao hơn cho bigram 2 từ */
-                float bonus = (last2 && strcmp(last2, g_transitions[i].from) == 0) ? 0.2f : 0.0f;
-                add_vector_cand(cands, target, g_transitions[i].weight + bonus);
-            }
+    /* Direct phrase transitions always outrank semantic-only neighbors. */
+    for(guint i=0;g_transitions[i].from;i++){
+        const TransitionPair *t=&g_transitions[i];
+        gboolean longer=pair && !strcmp(pair,t->from);
+        if((longer || !strcmp(last,t->from)) && prefix_matches(t->to,pfx,folded)){
+            float score=2.0f+t->weight+(longer ? 0.2f : 0);
+            add_vector_cand(cands,t->to,score);
         }
     }
-
-    /* 2. Tính tương đồng Vector trong không gian ngữ nghĩa 16 chiều */
-    const float *v_last = find_word_vector(last1);
-    if(v_last){
-        for(int i=0; g_word_vectors[i].word; i++){
-            const char *target = g_word_vectors[i].word;
-            if(strcmp(target, last1) == 0) continue;
-            if(pfx_lower && *pfx_lower && !g_str_has_prefix(target, pfx_lower)) continue;
-
-            float sim = cosine_similarity(v_last, g_word_vectors[i].vec, VEC_DIM);
-            if(sim > 0.6f){
-                add_vector_cand(cands, target, sim * 0.8f);
-            }
-        }
+    g_free(pair);
+    for(guint i=0;g_word_vectors[i].word;i++){
+        const WordVector *target=&g_word_vectors[i];
+        if(!strcmp(target->word,last) || !prefix_matches(target->word,pfx,folded)) continue;
+        float similarity=cosine_similarity(context_vec,target->vec,VEC_DIM);
+        if(similarity>0.6f) add_vector_cand(cands,target->word,similarity);
     }
-
-    /* 3. Sắp xếp các ứng viên theo độ tương đồng giảm dần */
-    g_array_sort(cands, compare_vector_cand);
-
-    /* 4. Trích xuất top kết quả và áp dụng định dạng hoa/thường */
-    for(guint i=0; i<cands->len && results->len < max_results; i++){
-        VectorCand *vc = &g_array_index(cands, VectorCand, i);
-        gchar *formatted = format_casing(context, vc->word);
-        g_ptr_array_add(results, formatted);
+    g_array_sort(cands,compare_vector_cand);
+    for(guint i=0;i<cands->len && results->len<max_results;i++){
+        const VectorCand *cand=&g_array_index(cands,VectorCand,i);
+        /* A completed word is not a completion suggestion. */
+        if(strcmp(cand->word,pfx)) g_ptr_array_add(results,format_casing(typed,cand->word));
     }
-
-    /* Dọn dẹp */
-    for(guint i=0; i<cands->len; i++){
-        VectorCand *vc = &g_array_index(cands, VectorCand, i);
-        g_free(vc->word);
-    }
-    g_array_unref(cands);
-    g_free(last2);
-    g_strfreev(tokens);
-    g_free(ctx_lower);
-    g_free(pfx_lower);
-
+done:
+    for(guint i=0;i<cands->len;i++) g_free(g_array_index(cands,VectorCand,i).word);
+    g_array_unref(cands);g_ptr_array_unref(tokens);
+    g_free(ctx);g_free(typed);g_free(pfx);g_free(folded);
     return results;
 }

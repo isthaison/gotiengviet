@@ -1,17 +1,110 @@
 package engine
 
-// tryEnglishRestore khôi phục từ tiếng Anh khi gõ tiếp phụ âm kết thúc:
-// test (tés+t), post (pós+t), fast (fás+t), fish (fís+h), task (tás+k), desk (dés+k), risk (rís+k)
+// isVietnameseCoda kiểm tra phụ âm cuối tiếng Việt hợp lệ:
+// Rỗng hoặc: c, ch, m, n, ng, nh, p, t
+func isVietnameseCoda(s string) bool {
+	switch s {
+	case "", "c", "ch", "m", "n", "ng", "nh", "p", "t":
+		return true
+	default:
+		return false
+	}
+}
+
+// isForeignWord kiểm tra từ mang cấu trúc ngoại lai / tiếng Anh:
+// 1. Bắt đầu bằng 'w'/'W'
+// 2. Chứa ký tự ngoại lai: f, j, z (hoặc w đơn lẻ giữa các phụ âm)
+// 3. Chứa phụ âm đôi (ss, ll, tt, pp, ff, kk, bb, mm, nn, cc...) ngoại trừ dd (đã thành đ)
+// 4. Có phụ âm sau nguyên âm mà không phải coda hợp lệ tiếng Việt
+func isForeignWord(buf []rune) bool {
+	if len(buf) == 0 {
+		return false
+	}
+	if buf[0] == 'w' || buf[0] == 'W' {
+		return true
+	}
+	lastV := -1
+	for i, r := range buf {
+		if isVowel(r) {
+			lastV = i
+		}
+		lc := bareLower(r)
+		if lc == 'f' || lc == 'j' || lc == 'z' {
+			return true
+		}
+		if i+1 < len(buf) {
+			next := buf[i+1]
+			if lc == bareLower(next) && isConsonant(r) && lc != 'd' {
+				return true
+			}
+		}
+	}
+	return lastV >= 0 && lastV < len(buf)-1 && !isVietnameseCoda(string(buf[lastV+1:]))
+}
+
+// autoPromoteDiphthong tự động nâng cấp nguyên âm đôi/ba khi có phụ âm cuối:
+// i + e + [coda] -> iê + [coda], u + o + [coda] -> uô + [coda], y + e + [coda] -> yê + [coda]
+func autoPromoteDiphthong(buf []rune) []rune {
+	if len(buf) < 3 {
+		return buf
+	}
+	n := len(buf)
+	// Ưu tiên bán nguyên âm cuối: ieu, yeu, uoi.
+	last, prev, first := bareLower(buf[n-1]), bareLower(buf[n-2]), bareLower(buf[n-3])
+	if (last == 'u' && prev == 'e' && (first == 'i' || first == 'y')) ||
+		(last == 'i' && prev == 'o' && first == 'u') {
+		if promoted, ok := promoteVowelPair(buf, n-2); ok {
+			return promoted
+		}
+	}
+
+	// Nếu có phụ âm cuối, nâng nguyên âm ngay trước nó.
+	lastV := lastVowelIndex(buf)
+	if lastV > 0 && lastV < n-1 {
+		if promoted, ok := promoteVowelPair(buf, lastV); ok {
+			return promoted
+		}
+	}
+	return buf
+}
+
+func lastVowelIndex(buf []rune) int {
+	for i := len(buf) - 1; i >= 0; i-- {
+		if isVowel(buf[i]) {
+			return i
+		}
+	}
+	return -1
+}
+
+// promoteVowelPair nâng ie/ye thành iê/yê và uo thành uô tại vị trí pos.
+func promoteVowelPair(buf []rune, pos int) ([]rune, bool) {
+	first, last := buf[pos-1], buf[pos]
+	pairMatches := (bareLower(last) == 'e' && (bareLower(first) == 'i' || bareLower(first) == 'y')) ||
+		(bareLower(last) == 'o' && bareLower(first) == 'u' && getDiacritic(first) == DiacriticNone)
+	if pairMatches && getDiacritic(last) == DiacriticNone {
+		if nr, ok := toggleCircumflex(last); ok {
+			result := append([]rune(nil), buf...)
+			result[pos] = nr
+			return result, true
+		}
+	}
+	return buf, false
+}
+
+// tryEnglishRestore khôi phục các đuôi tiếng Anh -st, -sh, -sk (test, post, fast, fish, task)
+// Tuyệt đối không áp dụng cho 'p' vì 'p' là phụ âm cuối tiếng Việt (pháp, tháp, cáp).
 func tryEnglishRestore(buf []rune, key rune) ([]rune, bool) {
 	if len(buf) == 0 {
 		return buf, false
 	}
 	lk := toLower(key)
-	if lk != 't' && lk != 'h' && lk != 'k' && lk != 'p' {
+	if lk != 't' && lk != 'h' && lk != 'k' {
 		return buf, false
 	}
 	last := buf[len(buf)-1]
-	if isVowel(last) && getTone(last) == ToneSac {
+	// Nguyên âm đã có mũ/móc/trăng là tiếng Việt: giữ dấu khi gõ phụ âm cuối.
+	if isVowel(last) && getTone(last) == ToneSac && getDiacritic(last) == DiacriticNone {
 		if bareChar, ok := lookup(bareLower(last), getDiacritic(last), ToneNone, isUpper(last)); ok {
 			newBuf := make([]rune, len(buf)-1, len(buf)+2)
 			copy(newBuf, buf[:len(buf)-1])
@@ -27,116 +120,11 @@ func tryEnglishRestore(buf []rune, key rune) ([]rune, bool) {
 	return buf, false
 }
 
-// autoPromoteDiphthong tự động nâng cấp nguyên âm đôi/ba khi có phụ âm cuối hoặc bán nguyên âm cuối:
-// i + e + [coda] -> iê + [coda] (hienr -> hiển, hienj -> hiện, vietj -> việt, tiens -> tiến, tieur -> tiểu)
-// u + o + [coda] -> uô + [coda] (muons -> muốn, cuocj -> cuộc, buonc -> buồn, chuois -> chuối)
-// y + e + [coda] -> yê + [coda] (chuyenr -> chuyển, khuyen -> khuyên)
-func autoPromoteDiphthong(buf []rune) []rune {
-	if len(buf) < 3 {
-		return buf
-	}
-	n := len(buf)
-
-	// 1. Bán nguyên âm cuối (triphthong): ...ieu, ...yeu, ...uoi
-	lastChar := bareLower(buf[n-1])
-	prevChar := bareLower(buf[n-2])
-	prev2Char := bareLower(buf[n-3])
-
-	if lastChar == 'u' && prevChar == 'e' && (prev2Char == 'i' || prev2Char == 'y') {
-		v2 := buf[n-2]
-		if getDiacritic(v2) == DiacriticNone {
-			if nc, ok := toggleCircumflex(v2); ok {
-				newBuf := make([]rune, n)
-				copy(newBuf, buf)
-				newBuf[n-2] = nc
-				return newBuf
-			}
-		}
-	}
-	if lastChar == 'i' && prevChar == 'o' && prev2Char == 'u' {
-		v1 := buf[n-3]
-		v2 := buf[n-2]
-		if getDiacritic(v1) == DiacriticNone && getDiacritic(v2) == DiacriticNone {
-			if nc, ok := toggleCircumflex(v2); ok {
-				newBuf := make([]rune, n)
-				copy(newBuf, buf)
-				newBuf[n-2] = nc
-				return newBuf
-			}
-		}
-	}
-
-	// 2. Có phụ âm cuối
-	lastV := -1
-	for i := n - 1; i >= 0; i-- {
-		if isVowel(buf[i]) {
-			lastV = i
-			break
-		}
-	}
-	if lastV <= 0 || lastV >= n-1 {
-		return buf
-	}
-	v2 := buf[lastV]
-	v1 := buf[lastV-1]
-	if bareLower(v1) == 'i' && bareLower(v2) == 'e' && getDiacritic(v2) == DiacriticNone {
-		if nc, ok := toggleCircumflex(v2); ok {
-			newBuf := make([]rune, n)
-			copy(newBuf, buf)
-			newBuf[lastV] = nc
-			return newBuf
-		}
-	} else if bareLower(v1) == 'y' && bareLower(v2) == 'e' && getDiacritic(v2) == DiacriticNone {
-		if nc, ok := toggleCircumflex(v2); ok {
-			newBuf := make([]rune, n)
-			copy(newBuf, buf)
-			newBuf[lastV] = nc
-			return newBuf
-		}
-	} else if bareLower(v1) == 'u' && bareLower(v2) == 'o' && getDiacritic(v1) == DiacriticNone && getDiacritic(v2) == DiacriticNone {
-		if nc, ok := toggleCircumflex(v2); ok {
-			newBuf := make([]rune, n)
-			copy(newBuf, buf)
-			newBuf[lastV] = nc
-			return newBuf
-		}
-	}
-	return buf
-}
-
-// TelexTransform attempts to transform buffer + key according to Telex rules.
-// Returns new buffer and whether key was consumed as transform (true) vs should be appended (false)
-// modern: tone placement style
+// TelexTransform xử lý gõ phím theo mô hình máy trạng thái âm tiết tiếng Việt thống nhất.
 func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
-	if len(buf) == 0 && key == 'w' {
-		// w alone -> ư
-		return []rune{'ư'}, true
-	}
-	if len(buf) == 0 && key == 'W' {
-		return []rune{'Ư'}, true
-	}
-	// Emoji: nếu đang trong :xxx chưa đóng, không áp dụng Telex cho nội dung emoji
-	if len(buf) > 0 && buf[0] == ':' {
-		// Kiểm tra đã có : đóng chưa (tìm : thứ 2)
-		hasClosing := false
-		for i := 1; i < len(buf); i++ {
-			if buf[i] == ':' {
-				hasClosing = true
-				break
-			}
-		}
-		if !hasClosing {
-			// Đang trong emoji code như :heart, :smile -> không transform
-			return buf, false
-		}
-	}
+	lk := toLower(key)
 
-	// Khôi phục từ tiếng Anh (test, post, fast...)
-	if newBuf, ok := tryEnglishRestore(buf, key); ok {
-		return newBuf, true
-	}
-
-	// Bracket shortcuts: [ -> ươ, [[ -> [, ] -> ư, ]] -> ]
+	// Phím gõ tắt ngoặc vuông: [, ], {, }
 	if key == '[' {
 		if len(buf) >= 2 && buf[len(buf)-2] == 'ư' && buf[len(buf)-1] == 'ơ' {
 			return append(buf[:len(buf)-2], '['), true
@@ -162,343 +150,307 @@ func TelexTransform(buf []rune, key rune, modern bool) ([]rune, bool) {
 		return append(buf, 'Ư'), true
 	}
 
-	// 1. Stroke dd -> đ, ddd -> dd
-	if toLower(key) == 'd' {
-		// Check if last char is d/đ
-		if len(buf) > 0 {
-			last := buf[len(buf)-1]
-			if bareLower(last) == 'd' {
-				if getDiacritic(last) == DiacriticStroke {
-					dBare := 'd'
-					if isUpper(last) {
-						dBare = 'D'
-					}
-					newBuf := make([]rune, len(buf))
-					copy(newBuf, buf)
-					newBuf[len(newBuf)-1] = dBare
-					return append(newBuf, key), true
-				}
-				nr, ok := toggleStroke(last)
-				if ok {
-					newBuf := make([]rune, len(buf))
-					copy(newBuf, buf)
-					newBuf[len(newBuf)-1] = nr
-					return newBuf, true
-				}
-			}
-		}
-	}
-
-	// 2. Diacritic tone modifiers: aa, ee, oo, aw, ow, uw
-	// We attempt to apply based on key
-	lk := toLower(key)
-	// aa -> â, aaa -> aa
-	if lk == 'a' && len(buf) > 0 {
-		last := buf[len(buf)-1]
-		if bareLower(last) == 'a' {
-			if getDiacritic(last) == DiacriticCircumflex {
-				tone := getTone(last)
-				var nc rune
-				if r, ok := lookup('a', DiacriticNone, tone, isUpper(last)); ok {
-					nc = r
-				} else {
-					nc = 'a'
-					if isUpper(last) {
-						nc = 'A'
-					}
-				}
-				newBuf := make([]rune, len(buf))
-				copy(newBuf, buf)
-				newBuf[len(newBuf)-1] = nc
-				return append(newBuf, key), true
-			} else if getDiacritic(last) == DiacriticNone {
-				nr, ok := toggleCircumflex(last)
-				if ok {
-					newBuf := make([]rune, len(buf))
-					copy(newBuf, buf)
-					newBuf[len(newBuf)-1] = nr
-					return newBuf, true
-				}
-			}
-		}
-	}
-	if lk == 'e' && len(buf) > 0 {
-		last := buf[len(buf)-1]
-		if bareLower(last) == 'e' {
-			if getDiacritic(last) == DiacriticCircumflex {
-				tone := getTone(last)
-				var nc rune
-				if r, ok := lookup('e', DiacriticNone, tone, isUpper(last)); ok {
-					nc = r
-				} else {
-					nc = 'e'
-					if isUpper(last) {
-						nc = 'E'
-					}
-				}
-				newBuf := make([]rune, len(buf))
-				copy(newBuf, buf)
-				newBuf[len(newBuf)-1] = nc
-				return append(newBuf, key), true
-			} else if getDiacritic(last) == DiacriticNone {
-				nr, ok := toggleCircumflex(last)
-				if ok {
-					newBuf := make([]rune, len(buf))
-					copy(newBuf, buf)
-					newBuf[len(newBuf)-1] = nr
-					return newBuf, true
-				}
-			}
-		}
-	}
-	if lk == 'o' && len(buf) > 0 {
-		last := buf[len(buf)-1]
-		if bareLower(last) == 'o' {
-			if getDiacritic(last) == DiacriticCircumflex {
-				tone := getTone(last)
-				var nc rune
-				if r, ok := lookup('o', DiacriticNone, tone, isUpper(last)); ok {
-					nc = r
-				} else {
-					nc = 'o'
-					if isUpper(last) {
-						nc = 'O'
-					}
-				}
-				newBuf := make([]rune, len(buf))
-				copy(newBuf, buf)
-				newBuf[len(newBuf)-1] = nc
-				return append(newBuf, key), true
-			} else if getDiacritic(last) == DiacriticNone {
-				nr, ok := toggleCircumflex(last)
-				if ok {
-					newBuf := make([]rune, len(buf))
-					copy(newBuf, buf)
-					newBuf[len(newBuf)-1] = nr
-					return newBuf, true
-				}
-			}
-		}
-	}
-	// w handling: uow -> ươ shortcut (must be before single o/u handling)
-	if lk == 'w' && len(buf) >= 2 {
-		secondLast := buf[len(buf)-2]
-		last := buf[len(buf)-1]
-		if bareLower(secondLast) == 'u' && bareLower(last) == 'o' && getDiacritic(secondLast) == DiacriticNone && getDiacritic(last) == DiacriticNone {
-			newBuf := make([]rune, len(buf))
-			copy(newBuf, buf)
-			if nr1, ok1 := toggleHorn(secondLast); ok1 {
-				newBuf[len(newBuf)-2] = nr1
-			}
-			if nr2, ok2 := toggleHorn(last); ok2 {
-				newBuf[len(newBuf)-1] = nr2
-			}
-			return newBuf, true
-		}
-	}
-	// w handling: tìm vowel thích hợp, cho phép gõ dấu sau (thuaw->thưa, hoacw->hoăc)
-	if lk == 'w' && len(buf) > 0 {
-		// Xác định có phụ âm cuối không (để phân biệt thuaw vs hoacw)
-		hasFinal := false
-		if len(buf) > 0 {
-			last := buf[len(buf)-1]
-			if isConsonant(last) {
-				for i := len(buf) - 1; i >= 0; i-- {
-					if isVowel(buf[i]) {
-						if i < len(buf)-1 {
-							hasFinal = true
-						}
-						break
-					}
-				}
-			}
-		}
-		// Nếu có phụ âm cuối và pattern oa/ua, ưu tiên a (breve) trước: hoac + w -> hoăc
-		if hasFinal {
-			for i := len(buf) - 1; i >= 0; i-- {
-				c := buf[i]
-				if bareLower(c) == 'a' {
-					dia := getDiacritic(c)
-					if dia == DiacriticNone || dia == DiacriticBreve {
-						if dia == DiacriticCircumflex {
-							continue
-						}
-						nr, ok := toggleBreve(c)
-						if ok {
-							newBuf := make([]rune, len(buf))
-							copy(newBuf, buf)
-							newBuf[i] = nr
-							return newBuf, true
-						}
-					}
-				}
-			}
-			// Không có a, tìm u/o
-			for i := len(buf) - 1; i >= 0; i-- {
-				c := buf[i]
-				bare := bareLower(c)
-				if bare == 'u' || bare == 'o' {
-					dia := getDiacritic(c)
-					if dia == DiacriticNone {
-						nr, ok := toggleHorn(c)
-						if ok {
-							newBuf := make([]rune, len(buf))
-							copy(newBuf, buf)
-							newBuf[i] = nr
-							return newBuf, true
-						}
-					} else if dia == DiacriticHorn {
-					// Nguyên tắc gõ lại để xóa: ư + w -> u, ơ + w -> o
-					nr, ok := toggleHorn(c)
-					if ok {
-						newBuf := make([]rune, len(buf))
-						copy(newBuf, buf)
-						newBuf[i] = nr
-						return newBuf, true
-					}
-				}
-				}
-			}
-		} else {
-			// Không có phụ âm cuối: ưu tiên u/o trước (thuaw -> thưa)
-			for i := len(buf) - 1; i >= 0; i-- {
-				c := buf[i]
-				bare := bareLower(c)
-				if bare == 'u' || bare == 'o' {
-					dia := getDiacritic(c)
-					if dia == DiacriticNone {
-						nr, ok := toggleHorn(c)
-						if ok {
-							newBuf := make([]rune, len(buf))
-							copy(newBuf, buf)
-							newBuf[i] = nr
-							return newBuf, true
-						}
-					} else if dia == DiacriticHorn {
-					// Nguyên tắc gõ lại để xóa: ư + w -> u, ơ + w -> o
-					nr, ok := toggleHorn(c)
-					if ok {
-						newBuf := make([]rune, len(buf))
-						copy(newBuf, buf)
-						newBuf[i] = nr
-						return newBuf, true
-					}
-				}
-				}
-			}
-			for i := len(buf) - 1; i >= 0; i-- {
-				c := buf[i]
-				if bareLower(c) == 'a' {
-					dia := getDiacritic(c)
-					if dia == DiacriticNone || dia == DiacriticBreve {
-						if dia == DiacriticCircumflex {
-							continue
-						}
-						nr, ok := toggleBreve(c)
-						if ok {
-							newBuf := make([]rune, len(buf))
-							copy(newBuf, buf)
-							newBuf[i] = nr
-							return newBuf, true
-						}
-					}
-				}
-			}
-		}
-		// w literal + w -> ư (vòng lặp)
-		for i := len(buf) - 1; i >= 0; i-- {
-			c := buf[i]
-			if c == 'w' || c == 'W' {
-				var uw rune
-				if isUpper(c) {
-					uw = 'Ư'
-				} else {
-					uw = 'ư'
-				}
-				newBuf := make([]rune, len(buf))
-				copy(newBuf, buf)
-				newBuf[i] = uw
-				return newBuf, true
-			}
-		}
-	}
-
-	// 3. Tone marks s f r x j - cho phép gõ t e s s t -> test (double s để ra s thường)
-	if tone, ok := telexIsToneKey(key); ok {
-		hasVowel := false
-		for _, r := range buf {
-			if isVowel(r) {
-				hasVowel = true
+	// Bỏ qua nội dung trong mã emoji :smile:
+	if len(buf) > 0 && buf[0] == ':' {
+		hasClosing := false
+		for i := 1; i < len(buf); i++ {
+			if buf[i] == ':' {
+				hasClosing = true
 				break
 			}
 		}
-		if hasVowel {
-			buf = autoPromoteDiphthong(buf)
-			pos := findTonePosition(buf, modern)
-			if pos != -1 && getTone(buf[pos]) == tone {
-				// Cùng dấu đã có -> gõ s lần 2 để ra s thường (xóa dấu và thêm s)
-				newBuf := make([]rune, len(buf))
-				copy(newBuf, buf)
-				if nr, ok := lookup(bareLower(newBuf[pos]), getDiacritic(newBuf[pos]), ToneNone, isUpper(newBuf[pos])); ok {
-					newBuf[pos] = nr
-				} else {
-					newBuf = removeAllTones(newBuf)
+		if !hasClosing {
+			return buf, false
+		}
+	}
+
+	// PHA 1: NGUYÊN TẮC HOÀN TÁC PHÍM LẶP THỐNG NHẤT (UNIVERSAL REPEAT-KEY UNDO)
+	// Khi gõ lại đúng phím điều khiển vừa tác động -> xóa dấu và trả về ký tự thô
+
+	// Lặp phím w: xóa dấu móc/trăng hoặc hoàn tác về w / uw / ow / aw
+	if lk == 'w' && len(buf) > 0 {
+		last := buf[len(buf)-1]
+		dia := getDiacritic(last)
+		bare := bareLower(last)
+
+		if bare == 'u' && dia == DiacriticHorn {
+			// Ký tự cuối là ư/Ư
+			if len(buf) == 1 {
+				// ww -> w
+				wChar := 'w'
+				if isUpper(last) || isUpper(key) {
+					wChar = 'W'
 				}
-				newBuf = append(newBuf, key)
+				return []rune{wChar}, true
+			}
+			prev := buf[len(buf)-2]
+			if isConsonant(prev) {
+				// Sau phụ âm: passư + w -> passw, sư + w -> sw
+				wChar := 'w'
+				if isUpper(last) || isUpper(key) {
+					wChar = 'W'
+				}
+				newBuf := append([]rune(nil), buf...)
+				newBuf[len(newBuf)-1] = wChar
 				return newBuf, true
 			}
-			newBuf, transformed := applyMark(buf, tone, modern)
-			if transformed {
-				return newBuf, true
+			// Sau nguyên âm: u + w + w -> uw
+			uBare := 'u'
+			if isUpper(last) {
+				uBare = 'U'
 			}
-		}
-	}
-
-	// 4. Remove z
-	if lk == 'z' {
-		newBuf, ok := tryRemove(buf)
-		if ok {
-			return newBuf, true
-		}
-	}
-
-	// 5. W as vowel: standalone w -> ư after failed horn/breve
-	if lk == 'w' {
-		// If buffer empty handled above, now if last char is consonant or buffer ends with consonant cluster
-		// We allow w -> ư when buffer last char is consonant or empty
-		// Check if last char is consonant (including not vowel)
-		should := false
-		if len(buf) == 0 {
-			should = true
-		} else {
-			last := buf[len(buf)-1]
-			if isConsonant(last) && bareLower(last) != 'd' {
-				should = true
-			} else if !isVowel(last) && !isLetter(last) {
-				// after space/punct already committed, but buf would be empty in engine, so not here
-				should = true
-			}
-		}
-		if should {
-			var r rune
-			if isUpper(key) {
-				r = 'Ư'
-			} else {
-				r = 'ư'
+			wChar := 'w'
+			if isUpper(last) && isUpper(key) {
+				wChar = 'W'
 			}
 			newBuf := append([]rune(nil), buf...)
-			newBuf = append(newBuf, r)
+			newBuf[len(newBuf)-1] = uBare
+			return append(newBuf, wChar), true
+		} else if bare == 'o' && dia == DiacriticHorn {
+			// o + w + w -> ow (khôi phục o + w, ví dụ showw -> show)
+			oBare := 'o'
+			if isUpper(last) {
+				oBare = 'O'
+			}
+			wChar := 'w'
+			if isUpper(last) && isUpper(key) {
+				wChar = 'W'
+			}
+			newBuf := append([]rune(nil), buf...)
+			newBuf[len(newBuf)-1] = oBare
+			return append(newBuf, wChar), true
+		} else if bare == 'a' && dia == DiacriticBreve {
+			// a + w + w -> aw (khôi phục a + w, ví dụ raww -> raw)
+			aBare := 'a'
+			if isUpper(last) {
+				aBare = 'A'
+			}
+			wChar := 'w'
+			if isUpper(last) && isUpper(key) {
+				wChar = 'W'
+			}
+			newBuf := append([]rune(nil), buf...)
+			newBuf[len(newBuf)-1] = aBare
+			return append(newBuf, wChar), true
+		}
+	}
+
+	// Lặp phím d: đ + d -> dd (reddit, hidden...)
+	if lk == 'd' && len(buf) > 0 {
+		last := buf[len(buf)-1]
+		if bareLower(last) == 'd' && getDiacritic(last) == DiacriticStroke {
+			dBare := 'd'
+			if isUpper(last) {
+				dBare = 'D'
+			}
+			newBuf := append([]rune(nil), buf...)
+			newBuf[len(newBuf)-1] = dBare
+			return append(newBuf, key), true
+		}
+	}
+
+	// Lặp a/e/o: bỏ mũ, giữ dấu thanh và trả lại phím thô.
+	if (lk == 'a' || lk == 'e' || lk == 'o') && len(buf) > 0 {
+		last := buf[len(buf)-1]
+		if bareLower(last) == lk && getDiacritic(last) == DiacriticCircumflex {
+			nc, ok := lookup(lk, DiacriticNone, getTone(last), isUpper(last))
+			if !ok {
+				nc = lk
+				if isUpper(last) {
+					nc = lk - 'a' + 'A'
+				}
+			}
+			newBuf := append([]rune(nil), buf...)
+			newBuf[len(newBuf)-1] = nc
+			return append(newBuf, key), true
+		}
+	}
+
+	// Lặp phím dấu thanh (s, f, r, x, j): gõ lại đúng phím đó thì xóa dấu thanh
+	if tone, ok := telexIsToneKey(key); ok {
+		pos := findTonePosition(buf, modern)
+		if pos != -1 && getTone(buf[pos]) == tone {
+			newBuf := append([]rune(nil), buf...)
+			if nr, ok := lookup(bareLower(newBuf[pos]), getDiacritic(newBuf[pos]), ToneNone, isUpper(newBuf[pos])); ok {
+				newBuf[pos] = nr
+			} else {
+				newBuf = removeAllTones(newBuf)
+			}
+			// Nếu dấu thanh ở ngay cuối từ (pa + s -> pá), gõ s lần 2 khôi phục cả 2 chữ: pass, buff, kiss...
+			if pos == len(buf)-1 {
+				newBuf = append(newBuf, key, key)
+			} else {
+				newBuf = append(newBuf, key)
+			}
 			return newBuf, true
 		}
 	}
-	// No transform consumed
+
+	// Phím z: xóa dấu thanh
+	if lk == 'z' {
+		if newBuf, ok := tryRemove(buf); ok {
+			return newBuf, true
+		}
+	}
+
+	// Khôi phục đuôi tiếng Anh -st, -sh, -sk (test, post, fast, fish, task)
+	// Tuyệt đối không áp dụng cho 'p' vì 'p' là phụ âm cuối tiếng Việt (pháp, tháp, cáp)
+	if newBuf, ok := tryEnglishRestore(buf, key); ok {
+		return newBuf, true
+	}
+
+	// PHA 2: BẢO VỆ TỪ NGOẠI LAI (FOREIGN WORD BYPASS)
+	// Khi từ đã mang cấu trúc tiếng Anh (password, class, word...), không can thiệp
+	if isForeignWord(buf) {
+		return buf, false
+	}
+
+	// PHA 3: BIẾN ĐỔI MŨ / MÓC / TRĂNG (a, e, o, w, d)
+
+	// Phím d -> đ
+	if lk == 'd' && len(buf) > 0 {
+		last := buf[len(buf)-1]
+		if bareLower(last) == 'd' && getDiacritic(last) == DiacriticNone {
+			if nr, ok := toggleStroke(last); ok {
+				newBuf := append([]rune(nil), buf...)
+				newBuf[len(newBuf)-1] = nr
+				return newBuf, true
+			}
+		}
+	}
+
+	// a/e/o biến đổi nguyên âm cùng loại ngay trước phím đang gõ.
+	if (lk == 'a' || lk == 'e' || lk == 'o') && len(buf) > 0 {
+		last := buf[len(buf)-1]
+		if bareLower(last) == lk && getDiacritic(last) == DiacriticNone {
+			if nr, ok := toggleCircumflex(last); ok {
+				newBuf := append([]rune(nil), buf...)
+				newBuf[len(newBuf)-1] = nr
+				return newBuf, true
+			}
+		}
+	}
+
+	// Phím w biến đổi:
+	if lk == 'w' {
+		// w đơn lẻ ở đầu từ -> ư
+		if len(buf) == 0 {
+			wRune := 'ư'
+			if isUpper(key) {
+				wRune = 'Ư'
+			}
+			return []rune{wRune}, true
+		}
+
+		// uow -> ươ shortcut
+		if len(buf) >= 2 {
+			secondLast := buf[len(buf)-2]
+			last := buf[len(buf)-1]
+			if bareLower(secondLast) == 'u' && bareLower(last) == 'o' &&
+				getDiacritic(secondLast) == DiacriticNone && getDiacritic(last) == DiacriticNone {
+				newBuf := append([]rune(nil), buf...)
+				if nr1, ok1 := toggleHorn(secondLast); ok1 {
+					newBuf[len(newBuf)-2] = nr1
+				}
+				if nr2, ok2 := toggleHorn(last); ok2 {
+					newBuf[len(newBuf)-1] = nr2
+				}
+				return newBuf, true
+			}
+		}
+
+		// Kiểm tra có phụ âm cuối tiếng Việt hợp lệ không
+		hasFinal := false
+		last := buf[len(buf)-1]
+		if isConsonant(last) {
+			lastV := lastVowelIndex(buf)
+			if lastV >= 0 && lastV < len(buf)-1 {
+				coda := string(buf[lastV+1:])
+				if isVietnameseCoda(coda) && coda != "" {
+					hasFinal = true
+				}
+			}
+		}
+
+		if hasFinal {
+			// Có phụ âm cuối hợp lệ: ưu tiên biến a -> ă (hoacw -> hoặc, ngoacw -> ngoặc)
+			for i := len(buf) - 1; i >= 0; i-- {
+				c := buf[i]
+				if bareLower(c) == 'a' && getDiacritic(c) == DiacriticNone {
+					if nr, ok := toggleBreve(c); ok {
+						newBuf := append([]rune(nil), buf...)
+						newBuf[i] = nr
+						return newBuf, true
+					}
+				}
+			}
+			// Nếu không có a, gắn móc cho u hoặc o
+			for i := len(buf) - 1; i >= 0; i-- {
+				c := buf[i]
+				bare := bareLower(c)
+				if (bare == 'u' || bare == 'o') && getDiacritic(c) == DiacriticNone {
+					if nr, ok := toggleHorn(c); ok {
+						newBuf := append([]rune(nil), buf...)
+						newBuf[i] = nr
+						return newBuf, true
+					}
+				}
+			}
+		} else if isVowel(buf[len(buf)-1]) {
+			// Không có phụ âm cuối: ký tự cuối PHẢI là nguyên âm (thuaw -> thưa, aw -> ă)
+			for i := len(buf) - 1; i >= 0; i-- {
+				c := buf[i]
+				bare := bareLower(c)
+				if (bare == 'u' || bare == 'o') && getDiacritic(c) == DiacriticNone {
+					if nr, ok := toggleHorn(c); ok {
+						newBuf := append([]rune(nil), buf...)
+						newBuf[i] = nr
+						return newBuf, true
+					}
+				}
+			}
+			for i := len(buf) - 1; i >= 0; i-- {
+				c := buf[i]
+				if bareLower(c) == 'a' && getDiacritic(c) == DiacriticNone {
+					if nr, ok := toggleBreve(c); ok {
+						newBuf := append([]rune(nil), buf...)
+						newBuf[i] = nr
+						return newBuf, true
+					}
+				}
+			}
+		} else {
+			// w đóng vai trò nguyên âm 'ư' sau phụ âm đầu (chưa có nguyên âm nào trong từ: sư, tư, như...)
+
+			if lastVowelIndex(buf) == -1 && isConsonant(last) && bareLower(last) != 'd' && bareLower(last) != 'w' {
+				wRune := 'ư'
+				if isUpper(key) {
+					wRune = 'Ư'
+				}
+				return append(buf, wRune), true
+			}
+		}
+	}
+
+	// PHA 4: BIẾN ĐỔI DẤU THANH (s, f, r, x, j)
+	if tone, ok := telexIsToneKey(key); ok {
+
+		if lastVowelIndex(buf) >= 0 {
+			buf = autoPromoteDiphthong(buf)
+			if newBuf, transformed := applyMark(buf, tone, modern); transformed {
+				return newBuf, true
+			}
+		}
+	}
+
+	// Không có biến đổi nào được tiêu thụ -> phím sẽ được append thông thường
 	return buf, false
 }
 
-// TransformStringTelex simulates typing whole word via Telex
+// TransformStringTelex mô phỏng gõ chuỗi qua Telex
 func TransformStringTelex(input string, modern bool) string {
 	buf := []rune{}
-	for _, r := range []rune(input) {
+	for _, r := range input {
 		newBuf, consumed := TelexTransform(buf, r, modern)
 		if consumed {
 			buf = newBuf

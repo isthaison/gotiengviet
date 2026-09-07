@@ -51,6 +51,13 @@ struct _GoTiengVietEngine {
     GHashTable *learned_fixes;
     gchar *learned_fixes_path;
     gboolean pending_bad;
+    /* Verified-deletion state for Ctrl+T replacement: 0 none,
+     * 1 surrounding-delete sent, 2 backspaces sent; bs_expected is the
+     * full client text expected after the deletion. */
+    gint bs_mode;
+    guint bs_checks;
+    gchar *bs_expected;
+    gchar *bs_probe;
     gboolean candidates_from_ai;
 };
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
@@ -491,6 +498,11 @@ static gboolean commit_selected_replacement(gpointer data){
     if(valid)ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Ứng dụng chưa chọn được đầy đủ câu gốc. Nhấn Enter để thử lại."),TRUE);
     return G_SOURCE_REMOVE;
 }
+static gboolean snapshot_text(IBusGoTiengVietEngine *e,gchar **text,gint *cursor,gint *anchor);
+static gchar *expected_after_delete(const gchar *text,gint caret,guint len);
+static void send_word_backspaces(IBusEngine *engine,guint count);
+static void cleanup_bs(IBusGoTiengVietEngine *e);
+static gboolean verify_deletion(gpointer data);
 static gboolean apply_replacement(gpointer data){
     IBusGoTiengVietEngine *e=data;
     if(++e->replacement_wait>100){
@@ -500,26 +512,178 @@ static gboolean apply_replacement(gpointer data){
     if(e->preedit->len || e->assistant_cancelled)return G_SOURCE_CONTINUE;
     if(e->focus_id && e->target_id && g_strcmp0(e->focus_id,e->target_id)!=0)return G_SOURCE_CONTINUE;
     if(e->purpose==IBUS_INPUT_PURPOSE_PASSWORD || e->purpose==IBUS_INPUT_PURPOSE_PIN)return G_SOURCE_CONTINUE;
-    gchar *original=e->target_backspaces ? g_strdup(e->target_text)
-        : assistant_input(e->target_text,e->target_cursor,e->target_anchor,"");
-    e->verified_target=select_text_target(original,e->replacement);g_free(original);
-    debug_log("[assistant-state] selection=%s\n",gtv_text_target_status());
-    if(e->verified_target){
-        e->replacing=TRUE;e->verify_attempts=0;
-        g_timeout_add_full(G_PRIORITY_DEFAULT,25,commit_selected_replacement,g_object_ref(e),g_object_unref);
+    /* AT-SPI selection+replace needs a modern client; without surrounding
+     * support the original text would stay and the commit insert on top. */
+    if(!e->target_backspaces && (e->caps & IBUS_CAP_SURROUNDING_TEXT)){
+        gchar *original=assistant_input(e->target_text,e->target_cursor,e->target_anchor,"");
+        e->verified_target=select_text_target(original,e->replacement);g_free(original);
+        debug_log("[assistant-state] selection=%s\n",gtv_text_target_status());
+        if(e->verified_target){
+            e->replacing=TRUE;e->verify_attempts=0;
+            g_timeout_add_full(G_PRIORITY_DEFAULT,25,commit_selected_replacement,g_object_ref(e),g_object_unref);
+            return G_SOURCE_REMOVE;
+        }
+    }
+    /* Terminal-safe deletion: some clients (notably VTE terminals) ignore
+     * DeleteSurroundingText and replace nothing on commit, so committing
+     * right away would INSERT the replacement on top of the original.
+     * Delete first, re-read, and commit only when the original text is
+     * really gone. Full-text comparison (not a range check) also stays
+     * correct when the original phrase repeats nearby. */
+    if(!e->target_backspaces){
+        IBusText *text=NULL;guint cursor=0,anchor=0;
+        ibus_engine_get_surrounding_text((IBusEngine*)e,&text,&cursor,&anchor);
+        gboolean matches=text && !g_strcmp0(text->text,e->target_text) && cursor==e->target_cursor && anchor==e->target_anchor;
+        if(matches){
+            gint start=0,end=0;
+            if(gtv_text_range(text->text,cursor,anchor,e->target_text,&start,&end)){
+                gchar *before=g_utf8_substring(text->text,0,start);
+                g_clear_pointer(&e->bs_expected,g_free);
+                g_clear_pointer(&e->bs_probe,g_free);
+                e->bs_expected=g_strconcat(before,g_utf8_offset_to_pointer(text->text,end),NULL);
+                e->bs_probe=g_utf8_substring(text->text,start,end);
+                g_free(before);
+                gint offset=cursor==anchor ? -(gint)e->target_length : (gint)MIN(cursor,anchor)-(gint)cursor;
+                ibus_engine_delete_surrounding_text((IBusEngine*)e,offset,e->target_length);
+                debug_log("[assistant-state] delete-sent len=%u, verifying\n",e->target_length);
+                e->bs_mode=1;e->bs_checks=0;e->replacing=TRUE;
+                g_timeout_add_full(G_PRIORITY_DEFAULT,150,verify_deletion,g_object_ref(e),g_object_unref);
+                g_clear_object(&text);
+                return G_SOURCE_REMOVE;
+            }
+        }
+        g_clear_object(&text);
+    }
+    /* Backspace fallback: exact character count, still verified before the
+     * commit below. Flood guard keeps long pastes from stalling the client. */
+    if(e->target_length==0){
+        commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
+        g_clear_pointer(&e->replacement,g_free);
         return G_SOURCE_REMOVE;
     }
-    /* Never fall back to unverified Backspaces after a selection/read failure. */
-    if(e->target_backspaces)return G_SOURCE_CONTINUE;
-    IBusText *text=NULL;guint cursor=0,anchor=0;
-    ibus_engine_get_surrounding_text((IBusEngine*)e,&text,&cursor,&anchor);
-    gboolean matches=text && !g_strcmp0(text->text,e->target_text) && cursor==e->target_cursor && anchor==e->target_anchor;
-    g_clear_object(&text);
-    if(!matches)return G_SOURCE_CONTINUE;
-    gint offset=cursor==anchor ? -(gint)e->target_length : (gint)MIN(cursor,anchor)-(gint)cursor;
-    ibus_engine_delete_surrounding_text((IBusEngine*)e,offset,e->target_length);
-    commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
-    g_clear_pointer(&e->replacement,g_free);
+    if(e->target_length<=300){
+        gchar *cur=NULL;gint cur_c=-1,cur_a=-1;
+        if(snapshot_text(e,&cur,&cur_c,&cur_a) && cur_c==cur_a){
+            gint s=0,en=0;
+            if(gtv_text_range(cur,cur_c,cur_a,e->target_text,&s,&en)){
+                g_clear_pointer(&e->bs_expected,g_free);
+                g_clear_pointer(&e->bs_probe,g_free);
+                e->bs_expected=expected_after_delete(cur,cur_c,e->target_length);
+                e->bs_probe=g_utf8_substring(cur,s,en);
+            }
+        }
+        g_free(cur);
+        if(e->bs_expected){
+            send_word_backspaces((IBusEngine*)e,e->target_length);
+            debug_log("[assistant-state] backspaces-sent len=%u, verifying\n",e->target_length);
+            e->bs_mode=2;e->bs_checks=0;e->replacing=TRUE;
+            g_timeout_add_full(G_PRIORITY_DEFAULT,150,verify_deletion,g_object_ref(e),g_object_unref);
+            return G_SOURCE_REMOVE;
+        }
+    }
+    /* Keep the replacement for a later Enter retry; the caller shows the
+     * retry message. Never insert blindly. */
+    debug_log("[assistant-state] delete-unverifiable, kept for retry\n");
+    return G_SOURCE_CONTINUE;
+}
+/* Full client text + caret/anchor snapshot. AT-SPI side never selects. */
+static gboolean snapshot_text(IBusGoTiengVietEngine *e,gchar **text,gint *cursor,gint *anchor){
+    *text=NULL;*cursor=-1;*anchor=-1;
+    if(e->caps & IBUS_CAP_SURROUNDING_TEXT){
+        IBusText *t=NULL;guint c=0,a=0;
+        ibus_engine_get_surrounding_text((IBusEngine*)e,&t,&c,&a);
+        if(t&&t->text){*text=g_strdup(t->text);*cursor=(gint)c;*anchor=(gint)a;}
+        g_clear_object(&t);
+        return *text!=NULL;
+    }
+    *text=gtv_text_current(cursor);
+    if(*text)*anchor=*cursor;
+    return *text!=NULL;
+}
+/* Expected full text after deleting len chars before caret (owned/NULL). */
+static gchar *expected_after_delete(const gchar *text,gint caret,guint len){
+    if(!text||!g_utf8_validate(text,-1,NULL))return NULL;
+    glong tlen=g_utf8_strlen(text,-1);
+    if(caret<0||caret>tlen||len>(guint)caret)return NULL;
+    gchar *head=g_utf8_substring(text,0,caret-(gint)len);
+    gchar *out=g_strconcat(head,g_utf8_offset_to_pointer(text,caret),NULL);
+    g_free(head);return out;
+}
+static void send_word_backspaces(IBusEngine *engine,guint count){
+    for(guint i=0;i<count;i++){
+        ibus_engine_forward_key_event(engine,IBUS_BackSpace,0,0);
+        ibus_engine_forward_key_event(engine,IBUS_BackSpace,0,IBUS_RELEASE_MASK);
+    }
+}
+static void cleanup_bs(IBusGoTiengVietEngine *e){
+    g_clear_pointer(&e->bs_expected,g_free);
+    g_clear_pointer(&e->bs_probe,g_free);
+    if(e->bs_mode!=0){e->bs_mode=0;e->replacing=FALSE;}
+    e->bs_checks=0;
+}
+/* Runs 150ms after a deletion. Commit only on full-text match; the probe
+ * (exact segment armed for deletion) aborts fast when the text changed
+ * under us, so a stale length can never eat neighboring characters.
+ * The replacement is kept for Enter retry; nothing is ever inserted
+ * without a verified deletion. */
+static gboolean verify_deletion(gpointer data){
+    IBusGoTiengVietEngine *e=data;
+    gboolean live=e->replacement && !e->assistant_cancelled && !e->preedit->len
+        && !(e->focus_id && e->target_id && g_strcmp0(e->focus_id,e->target_id))
+        && e->purpose!=IBUS_INPUT_PURPOSE_PASSWORD && e->purpose!=IBUS_INPUT_PURPOSE_PIN
+        && e->bs_expected && e->bs_probe && e->target_length>0;
+    if(live){
+        gchar *cur=NULL;gint c=-1,a=-1;
+        gboolean have=snapshot_text(e,&cur,&c,&a);
+        gboolean gone=have && !g_strcmp0(cur,e->bs_expected);
+        gboolean intact=FALSE;
+        if(!gone && have && c==a && e->target_length>0 && (guint)c>=e->target_length){
+            gchar *seg=g_utf8_substring(cur,c-(gint)e->target_length,c);
+            intact=seg && !g_strcmp0(seg,e->bs_probe);
+            g_free(seg);
+        }
+        debug_log("[assistant-state] verify mode=%d checks=%u gone=%d intact=%d\n",
+                  e->bs_mode,e->bs_checks,gone,intact);
+        if(gone){
+            g_free(cur);
+            commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
+            g_clear_pointer(&e->replacement,g_free);
+            ibus_engine_hide_auxiliary_text((IBusEngine*)e);
+            cleanup_bs(e);
+            return G_SOURCE_REMOVE;
+        }
+        if(!intact){
+            g_free(cur);
+            debug_log("[assistant-state] segment changed under us, kept for retry\n");
+            ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Câu gốc đã đổi trong lúc thay thế. Nhấn Enter để thử lại, Esc để hủy."),TRUE);
+            cleanup_bs(e);
+            return G_SOURCE_REMOVE;
+        }
+        if(e->bs_mode==1 && e->target_length<=300){
+            /* Surrounding delete was ignored: fall back to Backspaces,
+             * recomputing the expectation from this fresh snapshot. */
+            g_clear_pointer(&e->bs_expected,g_free);
+            e->bs_expected=expected_after_delete(cur,c,e->target_length);
+            g_free(cur);
+            if(!e->bs_expected){
+                ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Không xác nhận được câu gốc trong ô nhập. Nhấn Enter để thử lại, Ctrl+T để lấy lại câu, Esc để hủy."),TRUE);
+                cleanup_bs(e);
+                return G_SOURCE_REMOVE;
+            }
+            send_word_backspaces((IBusEngine*)e,e->target_length);
+            e->bs_mode=2;e->bs_checks=0;
+            return G_SOURCE_CONTINUE;
+        }
+        g_free(cur);
+        if(++e->bs_checks<=12)return G_SOURCE_CONTINUE;
+    }
+    if(e->replacement){
+        debug_log("[assistant-state] delete-unverifiable, kept for retry\n");
+        ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Không xác nhận được câu gốc trong ô nhập. Nhấn Enter để thử lại, Ctrl+T để lấy lại câu, Esc để hủy."),TRUE);
+    }else{
+        ibus_engine_hide_auxiliary_text((IBusEngine*)e);
+    }
+    cleanup_bs(e);
     return G_SOURCE_REMOVE;
 }
 /* Reply to ProcessKeyEvent before querying the client's accessibility service.
@@ -653,6 +817,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             g_clear_pointer(&e->replacement,g_free);toggle_assistant_action();return open_text_assistant(engine);
         }
         if((keyval==IBUS_Return || keyval==IBUS_KP_Enter) && bare_key){
+            if(e->bs_mode!=0)return TRUE; /* deletion verification in flight */
             e->replacement_wait=0;
             e->replacing=TRUE;
             g_timeout_add_full(G_PRIORITY_DEFAULT,25,accept_replacement,g_object_ref(e),g_object_unref);
@@ -981,6 +1146,7 @@ static void ibus_gotiengviet_engine_finalize(GObject *object){
     gtv_config_clear(&e->config);
     g_clear_pointer(&e->learned_words,g_hash_table_unref);g_free(e->learned_path);
     g_clear_pointer(&e->learned_fixes,g_hash_table_unref);g_free(e->learned_fixes_path);
+    g_clear_pointer(&e->bs_expected,g_free);
     g_free(e->focus_id);g_free(e->target_id);g_free(e->target_text);g_free(e->replacement);g_free(e->insertion);gtv_text_target_free(e->verified_target);
     g_string_free(e->typed_text,TRUE);
     if(e->preedit) g_string_free(e->preedit,TRUE);

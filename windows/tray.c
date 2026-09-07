@@ -109,6 +109,9 @@ void gtv_tray_show_menu(HWND hwnd) {
     UINT spell_flag = g_app.config.spellcheck ? MF_CHECKED : MF_UNCHECKED;
     InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | spell_flag, ID_TRAY_SPELLCHECK, "Kiểm tra chính tả");
 
+    UINT modern_flag = g_app.config.modern ? MF_CHECKED : MF_UNCHECKED;
+    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | modern_flag, ID_TRAY_MODERN, "Đặt dấu chuẩn mới");
+
     UINT start_flag = get_startup_enabled() ? MF_CHECKED : MF_UNCHECKED;
     InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | start_flag, ID_TRAY_STARTUP, "Khởi động cùng Windows");
 
@@ -137,6 +140,11 @@ void gtv_tray_show_menu(HWND hwnd) {
         case ID_TRAY_SPELLCHECK:
             g_app.config.spellcheck = !g_app.config.spellcheck;
             if (g_app.engine) g_app.engine->spellcheck = g_app.config.spellcheck;
+            save_app_config();
+            break;
+        case ID_TRAY_MODERN:
+            g_app.config.modern = !g_app.config.modern;
+            if (g_app.engine) g_app.engine->modern = g_app.config.modern;
             save_app_config();
             break;
         case ID_TRAY_STARTUP:

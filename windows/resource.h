@@ -28,5 +28,6 @@
 #define ID_TRAY_SPELLCHECK  305
 #define ID_TRAY_STARTUP     306
 #define ID_TRAY_EXIT        307
+#define ID_TRAY_MODERN      308
 
 #endif /* RESOURCE_H */

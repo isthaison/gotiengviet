@@ -1,6 +1,7 @@
 #include "hook.h"
 #include "tray.h"
 #include "internal.h"
+#include <glib/gstdio.h>
 #include <stdio.h>
 
 static void send_backspaces(int count) {
@@ -61,10 +62,40 @@ void gtv_hook_reset_buffer(void) {
     }
 }
 
+static gchar *windows_config_path(void) {
+    return g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+}
+
+void gtv_hook_save_enabled(void) {
+    gchar *path = windows_config_path();
+    GKeyFile *kf = g_key_file_new();
+    g_key_file_load_from_file(kf, path, G_KEY_FILE_KEEP_COMMENTS, NULL);
+    g_key_file_set_boolean(kf, "input", "enabled", g_app.enabled);
+    gchar *dir = g_path_get_dirname(path);
+    g_mkdir_with_parents(dir, 0755);
+    g_free(dir);
+    g_key_file_save_to_file(kf, path, NULL);
+    g_key_file_unref(kf);
+    g_free(path);
+}
+
+gboolean gtv_hook_load_enabled(gboolean def) {
+    gchar *path = windows_config_path();
+    GKeyFile *kf = g_key_file_new();
+    gboolean enabled = def;
+    if (g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)
+        && g_key_file_has_key(kf, "input", "enabled", NULL))
+        enabled = g_key_file_get_boolean(kf, "input", "enabled", NULL);
+    g_key_file_unref(kf);
+    g_free(path);
+    return enabled;
+}
+
 void gtv_hook_set_mode(gboolean enabled) {
     g_app.enabled = enabled;
     gtv_hook_reset_buffer();
     gtv_tray_update_icon(g_app.enabled);
+    gtv_hook_save_enabled();
 }
 
 void gtv_hook_toggle_mode(void) {
@@ -92,7 +123,13 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         if ((kbd->vkCode == VK_SHIFT && ctrl_down) ||
             (kbd->vkCode == VK_CONTROL && shift_down) ||
             (kbd->vkCode == 'Z' && alt_down)) {
-            gtv_hook_toggle_mode();
+            /* Debounce: holding the hotkey auto-repeats keydown. */
+            static DWORD last_toggle = 0;
+            DWORD now = GetTickCount();
+            if (now - last_toggle > 500) {
+                last_toggle = now;
+                gtv_hook_toggle_mode();
+            }
             return CallNextHookEx(NULL, nCode, wParam, lParam);
         }
     }

@@ -61,7 +61,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_free(config_dir);
 
     g_app.engine = gtv_engine_new(&g_app.config);
-    g_app.enabled = TRUE; /* Default to Vietnamese mode [V] */
+    g_app.enabled = gtv_hook_load_enabled(TRUE); /* Restore V/E mode, default [V] */
 
     /* 3. Register message window class */
     WNDCLASSEXA wc = {0};

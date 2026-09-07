@@ -97,6 +97,25 @@ gboolean gtv_text_target_ready(GtvTextTarget *target){
         && MAX(range->start_offset,range->end_offset)==target->end;
     g_clear_error(&error);g_free(range);return ready;
 }
+gchar *gtv_text_current(gint *caret){
+    if(caret)*caret=-1;
+    AtspiAccessible *editor=focused_editor();if(!editor)return NULL;
+    AtspiText *text=atspi_accessible_get_text_iface(editor);g_object_unref(editor);if(!text)return NULL;
+    GError *error=NULL;
+    gint length=atspi_text_get_character_count(text,&error);
+    gchar *all=NULL;
+    if(!error && length>=0 && length<=32768){
+        all=atspi_text_get_text(text,0,length,&error);
+        if(error){g_free(all);all=NULL;}
+    }
+    if(all && caret){
+        GError *cerr=NULL;
+        gint off=atspi_text_get_caret_offset(text,&cerr);
+        if(!cerr)*caret=off;
+        g_clear_error(&cerr);
+    }
+    g_clear_error(&error);g_object_unref(text);return all;
+}
 gboolean gtv_text_target_verify(GtvTextTarget *target){
     GError *error=NULL;gchar *actual=atspi_text_get_text(target->text,0,-1,&error);
     gboolean ok=!error && !g_strcmp0(actual,target->expected);g_clear_error(&error);g_free(actual);return ok;

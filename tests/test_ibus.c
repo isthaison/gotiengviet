@@ -5,6 +5,7 @@
 
 static GString *application_text;
 static guint application_cursor, replacement_signals;
+static IBusEngine *test_engine_ref;
 static gboolean application_backspace(gpointer data){
     g_assert_cmpuint(application_cursor,>,0);
     gchar *end=g_utf8_offset_to_pointer(application_text->str,application_cursor);
@@ -21,6 +22,13 @@ static void application_signal(GDBusConnection *connection,const gchar *sender,c
         gchar *end=g_utf8_offset_to_pointer(from,length);
         g_string_erase(application_text,from-application_text->str,end-from);application_cursor=start;
         replacement_signals++;
+        /* Behave like a real modern client: report the new surrounding text. */
+        if(test_engine_ref){
+            IBusText *cur=ibus_text_new_from_string(application_text->str);
+            g_object_ref_sink(cur);
+            g_signal_emit_by_name(test_engine_ref,"set-surrounding-text",cur,application_cursor,application_cursor);
+            g_object_unref(cur);
+        }
     }else if(!strcmp(name,"ForwardKeyEvent")){
         guint key,code,state;g_variant_get(parameters,"(uuu)",&key,&code,&state);
         g_assert_cmpuint(key,==,IBUS_BackSpace);
@@ -60,6 +68,10 @@ int main(int argc,char **argv) {
         "object-path","/org/freedesktop/IBus/Engine/Test","connection",connection,"has-focus-id",TRUE,NULL);
     g_object_ref_sink(engine);
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    test_engine_ref=engine;
+    /* Modern client for most of the suite; the headless environment has no
+     * AT-SPI bus, so all text snapshots go through cached surrounding text. */
+    e->caps|=(IBUS_CAP_SURROUNDING_TEXT);
     ibus_gotiengviet_engine_focus_in(engine);
     const struct {const gchar *input,*want;gboolean telex;} cases[]={
         {"bawst","bắt",TRUE},{"duocjwd","được",TRUE},{"DUOCJWD","ĐƯỢC",TRUE},
@@ -242,6 +254,9 @@ int main(int argc,char **argv) {
     e->replacement=g_strdup("Hello.");e->replacement_wait=0;
     IBusText *snapshot=ibus_text_new_from_string("Đã sửa");g_object_ref_sink(snapshot);
     g_signal_emit_by_name(engine,"set-surrounding-text",snapshot,6,6);g_object_unref(snapshot);
+    /* Surrounding mismatch with nothing readable to delete exactly:
+     * keep the replacement for Enter retry, never insert blindly. */
+    ibus_gotiengviet_engine_reset(e);
     g_assert_true(apply_replacement(e));g_assert_nonnull(e->replacement);
     snapshot=ibus_text_new_from_string("Xin chào.");g_object_ref_sink(snapshot);
     g_signal_emit_by_name(engine,"set-surrounding-text",snapshot,9,9);g_object_unref(snapshot);
@@ -268,8 +283,8 @@ int main(int argc,char **argv) {
     g_string_free(application_text,TRUE);g_dbus_connection_signal_unsubscribe(connection,subscription);
     g_assert_null(e->replacement);
     g_assert_true(g_str_has_suffix(e->typed_text->str,"Hello."));
-    /* The reported 0x9 client does not implement surrounding-text deletion. */
-    e->caps=IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
+    /* Nothing exactly deletable here: report instead of blind insertion. */
+    e->caps=IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS | IBUS_CAP_SURROUNDING_TEXT;
     g_string_assign(e->typed_text,"Xin chào.");
     g_assert_false(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Super_L,0,0));
     g_assert_cmpstr(e->typed_text->str,==,"Xin chào.");
@@ -302,6 +317,13 @@ int main(int argc,char **argv) {
     g_assert_true(apply_replacement(e));g_assert_nonnull(e->replacement);
     g_clear_pointer(&e->replacement,g_free);
     gint start,end;
+    /* Full-text expectation for verified deletion, including repeats. */
+    gchar *exp=expected_after_delete("Xin chào.",9,9);
+    g_assert_cmpstr(exp,==,"");g_free(exp);
+    exp=expected_after_delete("haha",4,2);
+    g_assert_cmpstr(exp,==,"ha");g_free(exp);
+    g_assert_null(expected_after_delete("abc",1,2));
+    g_assert_null(expected_after_delete(NULL,0,0));
     g_assert_true(gtv_text_range("Xin chào\xc2\xa0",9,9,"Xin chào ",&start,&end));
     g_assert_cmpint(start,==,0);g_assert_cmpint(end,==,9);
     g_assert_false(gtv_text_range("Xin chào\n",9,9,"Xin chào ",&start,&end));

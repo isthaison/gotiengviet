@@ -201,11 +201,11 @@ Mặc định khi chưa có file: Telex, `modern=true`, `spellcheck=true`, AI t�
 
 ## Chính tả, macro, emoji và gợi ý
 
-IBus sử dụng gợi ý chính tả cục bộ để không chặn xử lý phím. API C `gtv_ai_suggest` và lệnh demo hỗ trợ Ollama, tự quay về quy tắc khi dịch vụ không có hoặc trả lỗi:
+Gạch đỏ báo từ sai dùng kiểm tra ngoại tuyến (`spell_word_valid`: từ điển + quy tắc âm tiết) để không chặn xử lý phím. Gợi ý sửa lỗi và từ tiếp theo do Ollama xử lý (bất đồng bộ, có hủy khi gõ tiếp); khi tắt AI hoặc Ollama không phản hồi thì không có gợi ý:
 
 ```sh
 build/gotiengviet-demo --suggest kông
-# công
+# không  (cần Ollama đang chạy; tắt AI thì ra rỗng)
 build/gotiengviet-demo --predict "công nghệ" thong
 # thông tin ...
 ```
@@ -214,7 +214,7 @@ Ollama là tùy chọn; cần `curl` nếu bật provider này. Dữ liệu requ
 
 ### Macro gõ tắt
 
-Macro展開 khi kết thúc từ (gõ dấu cách/câu):
+Macro mở rộng khi kết thúc từ (gõ dấu cách/câu):
 
 | Gõ | Ra |
 |---|---|
@@ -300,9 +300,9 @@ gchar *commit = gtv_engine_process(e, 's', &backspaces); // NULL khi đang soạ
 g_free(gtv_engine_buffer(e));
 gtv_engine_free(e);
 
-GPtrArray *fix = gtv_ai_suggest(&cfg, "kông", "công nghệ");
-GPtrArray *next = gtv_predict_next(&cfg, "công nghệ", "thong");
-GPtrArray *vec = gtv_predict_next(&config, "công nghệ", "thong");
+GPtrArray *fix = gtv_ai_suggest(&cfg, "kông", "công nghệ");   // cần Ollama, không thì rỗng
+GPtrArray *next = gtv_predict_next(&cfg, "công nghệ", "thong"); // cần Ollama, không thì rỗng
+gboolean ok = spell_word_valid("được"); // kiểm tra ngoại tuyến, không cần mạng
 gtv_config_clear(&cfg);
 ```
 

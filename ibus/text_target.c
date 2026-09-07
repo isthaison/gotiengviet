@@ -64,7 +64,16 @@ static AtspiAccessible *focused_editor(void){
 GtvTextTarget *gtv_text_target_select(const gchar *original,const gchar *replacement){
     last_status="no-active-editable";
     AtspiAccessible *editor=focused_editor();if(!editor)return NULL;
-    AtspiText *text=atspi_accessible_get_text_iface(editor);g_object_unref(editor);if(!text)return NULL;
+    AtspiText *text=atspi_accessible_get_text_iface(editor);
+    gchar *detail=NULL;
+    if(text){
+        AtspiAccessible *app=atspi_accessible_get_application(editor,NULL);
+        gchar *app_name=app?atspi_accessible_get_name(app,NULL):NULL;
+        gchar *role=atspi_accessible_get_role_name(editor,NULL);
+        detail=g_strdup_printf("app=%s role=%s",app_name?app_name:"?",role?role:"?");
+        g_free(app_name);g_free(role);g_clear_object(&app);
+    }
+    g_object_unref(editor);if(!text){g_free(detail);return NULL;}
     last_status="text-read-failed";
     GtvTextTarget *target=NULL;gchar *all=NULL;AtspiRange *selection=NULL;GError *error=NULL;
     gint length=atspi_text_get_character_count(text,&error);if(error || length<0 || length>32768)goto done;
@@ -79,10 +88,11 @@ GtvTextTarget *gtv_text_target_select(const gchar *original,const gchar *replace
     if(error || !selected)goto done;
     last_status="selection-pending";
     gchar *before=g_utf8_substring(all,0,start);
-    target=g_new0(GtvTextTarget,1);target->text=g_object_ref(text);
+    target=g_new0(GtvTextTarget,1);target->text=g_object_ref(text);target->detail=detail;
     target->original=g_strdup(all);target->start=start;target->end=end;
     target->expected=g_strconcat(before,replacement,g_utf8_offset_to_pointer(all,end),NULL);g_free(before);
 done:
+    if(!target)g_free(detail);
     g_clear_error(&error);g_free(selection);g_free(all);g_object_unref(text);return target;
 }
 /* Chromium acknowledges SetSelection before its renderer updates the range. */
@@ -120,4 +130,4 @@ gboolean gtv_text_target_verify(GtvTextTarget *target){
     GError *error=NULL;gchar *actual=atspi_text_get_text(target->text,0,-1,&error);
     gboolean ok=!error && !g_strcmp0(actual,target->expected);g_clear_error(&error);g_free(actual);return ok;
 }
-void gtv_text_target_free(GtvTextTarget *target){if(!target)return;g_object_unref(target->text);g_free(target->expected);g_free(target->original);g_free(target);}
+void gtv_text_target_free(GtvTextTarget *target){if(!target)return;g_object_unref(target->text);g_free(target->expected);g_free(target->original);g_free(target->detail);g_free(target);}

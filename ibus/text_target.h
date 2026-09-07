@@ -1,7 +1,7 @@
 #ifndef GTV_TEXT_TARGET_H
 #define GTV_TEXT_TARGET_H
 #include <atspi/atspi.h>
-typedef struct { AtspiText *text; gchar *expected, *original; gint start, end; } GtvTextTarget;
+typedef struct { AtspiText *text; gchar *expected, *original; gint start, end; gchar *detail; } GtvTextTarget;
 gboolean gtv_text_range(const gchar *text,gint cursor,gint anchor,const gchar *original,gint *start,gint *end);
 GtvTextTarget *gtv_text_target_select(const gchar *original,const gchar *replacement);
 /* Read-only snapshot of the focused editable text (owned, or NULL). Caret is

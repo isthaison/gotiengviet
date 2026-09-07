@@ -283,6 +283,28 @@ int main(int argc,char **argv) {
     g_string_free(application_text,TRUE);g_dbus_connection_signal_unsubscribe(connection,subscription);
     g_assert_null(e->replacement);
     g_assert_true(g_str_has_suffix(e->typed_text->str,"Hello."));
+    g_assert_false(e->replace_busy);
+    /* Rapid double Enter must commit exactly once (single-flight): the
+     * second press is swallowed instead of scheduling a parallel flow. */
+    IBusText *dbl=ibus_text_new_from_string("Xin chào.");g_object_ref_sink(dbl);
+    g_signal_emit_by_name(engine,"set-surrounding-text",dbl,9,9);g_object_unref(dbl);
+    e->replacement=g_strdup("Hello.");e->replacement_wait=0;
+    application_text=g_string_new("Xin chào.");application_cursor=9;
+    replacement_signals=0;
+    guint sub2=g_dbus_connection_signal_subscribe(connection,NULL,IBUS_INTERFACE_ENGINE,NULL,
+        "/org/freedesktop/IBus/Engine/Test",NULL,G_DBUS_SIGNAL_FLAGS_NONE,application_signal,NULL,NULL);
+    e->assistant_inline=TRUE;
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Return,0,0));
+    g_assert_true(e->replace_busy);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Return,0,0));
+    for(guint i=0;i<200 && replacement_signals<2;i++){
+        while(g_main_context_iteration(NULL,FALSE));g_usleep(10000);
+    }
+    g_assert_cmpuint(replacement_signals,==,2);
+    g_assert_cmpstr(application_text->str,==,"Hello.");
+    g_assert_null(e->replacement);
+    g_assert_false(e->replace_busy);
+    g_string_free(application_text,TRUE);g_dbus_connection_signal_unsubscribe(connection,sub2);
     /* Nothing exactly deletable here: report instead of blind insertion. */
     e->caps=IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS | IBUS_CAP_SURROUNDING_TEXT;
     g_string_assign(e->typed_text,"Xin chào.");

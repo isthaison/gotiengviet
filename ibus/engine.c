@@ -37,7 +37,13 @@ struct _GoTiengVietEngine {
     gboolean spellcheck;
     guint caps;
     gboolean assistant_key_down, assistant_running, assistant_inline, assistant_cancelled;
+    GSubprocess *assistant_proc;
+    gint64 assistant_start;
     gchar *focus_id, *target_id, *target_text, *replacement;
+    /* Single-flight guard: rapid/held Enter must not schedule overlapping
+     * replacement flows (each would commit, duplicating the result). */
+    gboolean replace_busy;
+    guint flow_id;
     guint target_cursor, target_anchor, target_length;
     guint replacement_wait;
     gboolean replacing;
@@ -379,8 +385,8 @@ static gboolean verify_replacement(gpointer data){
     IBusGoTiengVietEngine *e=data;
     gboolean verified=gtv_text_target_verify(e->verified_target);
     if(!verified && ++e->verify_attempts<20)return G_SOURCE_CONTINUE;
-    debug_log("[assistant-state] verified-replacement=%d\n",verified);
-    e->replacing=FALSE;
+    debug_log("[assistant-state] verified-replacement=%d flow=%u\n",verified,e->flow_id);
+    e->replacing=FALSE;e->replace_busy=FALSE;
     if(verified)ibus_engine_hide_auxiliary_text((IBusEngine*)e);
     else ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Ứng dụng chưa xác nhận thay câu. Không tự xóa hoặc thử chèn lại."),TRUE);
     gtv_text_target_free(e->verified_target);e->verified_target=NULL;return G_SOURCE_REMOVE;
@@ -389,17 +395,40 @@ static gboolean commit_selected_replacement(gpointer data){
     IBusGoTiengVietEngine *e=data;
     gboolean valid=e->replacement && !e->assistant_cancelled && !e->preedit->len
         && !g_strcmp0(e->focus_id,e->target_id);
+    /* Both focus systems must still point at the captured text: re-read IBus
+     * surrounding and require the original segment at its place. Background
+     * output elsewhere in the buffer must not veto the commit, but a moved
+     * focus or edited segment aborts instead of committing wrongly.
+     * Unreadable surrounding (or backspaces mode, which has no IBus
+     * baseline) abstains; the AT-SPI checks below still guard. */
+    if(valid && !e->target_backspaces){
+        IBusText *st=NULL;guint sc=0,sa=0;
+        ibus_engine_get_surrounding_text((IBusEngine*)e,&st,&sc,&sa);
+        gboolean same=FALSE;
+        if(st&&st->text){
+            gint s=0,en=0;
+            same=gtv_text_range(st->text,sc,sa,e->target_text,&s,&en);
+        }else same=TRUE;
+        if(!same){
+            debug_log("[assistant-state] ibus-state moved (surr=%d cursor=%d anchor=%d target=%u), abort commit\n",
+                      st&&st->text?(int)g_utf8_strlen(st->text,-1):-1,(int)sc,(int)sa,e->target_length);
+            valid=FALSE;
+        }
+        g_clear_object(&st);
+    }
     if(valid && gtv_text_target_ready(e->verified_target)){
         e->verify_attempts=0;e->cursor_expected=TRUE;
         g_string_truncate(e->typed_text,0);
         commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
+        debug_log("[assistant-state] committed select-path flow=%u\n",e->flow_id);
         g_clear_pointer(&e->replacement,g_free);
+        e->replace_busy=FALSE;
         ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Đang xác nhận câu đã thay…"),TRUE);
         g_timeout_add_full(G_PRIORITY_DEFAULT,100,verify_replacement,g_object_ref(e),g_object_unref);
         return G_SOURCE_REMOVE;
     }
     if(valid && ++e->verify_attempts<20)return G_SOURCE_CONTINUE;
-    e->replacing=FALSE;
+    e->replacing=FALSE;e->replace_busy=FALSE;
     gtv_text_target_free(e->verified_target);e->verified_target=NULL;
     if(valid)ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Ứng dụng chưa chọn được đầy đủ câu gốc. Nhấn Enter để thử lại."),TRUE);
     return G_SOURCE_REMOVE;
@@ -456,7 +485,8 @@ static gboolean apply_replacement(gpointer data){
     if(!e->target_backspaces && (e->caps & IBUS_CAP_SURROUNDING_TEXT)){
         gchar *original=assistant_input(e->target_text,e->target_cursor,e->target_anchor,"");
         e->verified_target=select_text_target(original,e->replacement);g_free(original);
-        debug_log("[assistant-state] selection=%s\n",gtv_text_target_status());
+        debug_log("[assistant-state] selection=%s %s\n",gtv_text_target_status(),
+                  e->verified_target&&e->verified_target->detail?e->verified_target->detail:"-");
         if(e->verified_target){
             e->replacing=TRUE;e->verify_attempts=0;
             g_timeout_add_full(G_PRIORITY_DEFAULT,25,commit_selected_replacement,g_object_ref(e),g_object_unref);
@@ -531,6 +561,7 @@ static void cleanup_bs(IBusGoTiengVietEngine *e){
     if(e->bs_mode!=0){e->bs_mode=0;e->replacing=FALSE;}
     e->bs_checks=0;
     e->bs_caret=-1;
+    e->replace_busy=FALSE;
 }
 /* Per-channel verdict. An EMPTY expected text matching an empty snapshot is
  * weak evidence (a client may report nothing without deleting anything), so
@@ -586,11 +617,12 @@ static gboolean verify_deletion(gpointer data){
             }
             g_free(cur);
         }
-        debug_log("[assistant-state] verify mode=%d checks=%u gone=%d intact=%d surr=%d atsi=%d\n",
-                  e->bs_mode,e->bs_checks,gone,intact,vs,va);
+        debug_log("[assistant-state] verify mode=%d checks=%u gone=%d intact=%d surr=%d atsi=%d flow=%u\n",
+                  e->bs_mode,e->bs_checks,gone,intact,vs,va,e->flow_id);
         g_free(surr);g_free(atsi);
         if(gone){
             commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
+            debug_log("[assistant-state] committed bs-path flow=%u\n",e->flow_id);
             g_clear_pointer(&e->replacement,g_free);
             ibus_engine_hide_auxiliary_text((IBusEngine*)e);
             cleanup_bs(e);
@@ -635,17 +667,35 @@ static gboolean verify_deletion(gpointer data){
  * A synchronous IBus client cannot service AT-SPI calls while waiting for Enter. */
 static gboolean accept_replacement(gpointer data){
     IBusGoTiengVietEngine *e=data;
+    debug_log("[assistant-state] accept flow=%u\n",e->flow_id);
     e->replacing=FALSE;
-    if(!e->replacement || e->assistant_cancelled)return G_SOURCE_REMOVE;
-    if(!apply_replacement(e)){
+    if(!e->replacement || e->assistant_cancelled){e->replace_busy=FALSE;return G_SOURCE_REMOVE;}
+    gboolean stalled=apply_replacement(e);
+    /* A follow-up (select/verify timeout) keeps the flight alive; otherwise
+     * the flow settled here and the flag must clear for future Enters. */
+    if(!e->replacing && e->bs_mode==0)e->replace_busy=FALSE;
+    if(!stalled){
         if(!e->replacing)ibus_engine_hide_auxiliary_text((IBusEngine*)e);
     }else ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Không xác nhận được câu gốc trong ô nhập. Ctrl+T để lấy lại câu; Esc để hủy."),TRUE);
+    return G_SOURCE_REMOVE;
+}
+/* Kill-switch: no assistant run may outlive 150s (curl caps at 120s), so a
+ * wedged helper can never swallow Enter forever. Firing is harmless when
+ * the run already finished: force-exit just completes the callback. */
+static gboolean assistant_timeout(gpointer data){
+    IBusGoTiengVietEngine *e=data;
+    if(e->assistant_running && e->assistant_proc
+       && (g_get_monotonic_time()-e->assistant_start)/1000000>=150){
+        debug_log("[assistant-state] runaway assistant, force exit\n");
+        g_subprocess_force_exit(e->assistant_proc);
+    }
     return G_SOURCE_REMOVE;
 }
 static void assistant_closed(GObject *object,GAsyncResult *result,gpointer data){
     IBusGoTiengVietEngine *e=data;gchar *output=NULL;GError *error=NULL;
     gboolean ok=g_subprocess_communicate_utf8_finish(G_SUBPROCESS(object),result,&output,NULL,&error);
     e->assistant_running=FALSE;
+    g_clear_object(&e->assistant_proc);
     debug_log("[assistant-state] response ok=%d cancelled=%d length=%zu\n",ok,e->assistant_cancelled,output?strlen(output):0);
     if(e->assistant_cancelled){
         g_free(output);g_clear_error(&error);g_object_unref(e);return;
@@ -712,6 +762,12 @@ static gboolean open_text_assistant(IBusEngine *engine){
     }
     debug_log("[assistant] caps=0x%x focus=%d backspaces=%d length=%u\n",e->caps,e->focus_id!=NULL,e->target_backspaces,e->target_length);
     g_clear_object(&surrounding);
+    if(!*combined){
+        g_free(combined);
+        ibus_engine_update_auxiliary_text(engine,ibus_text_new_from_string("Không có nội dung để xử lý — gõ hoặc chọn văn bản rồi Ctrl+T lại."),TRUE);
+        g_clear_pointer(&e->target_id,g_free);g_clear_pointer(&e->target_text,g_free);
+        return FALSE;
+    }
     GError *error=NULL;
     e->assistant_inline=e->target_id!=NULL;
     GSubprocess *child=g_subprocess_new(G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE,&error,"gotiengviet-assistant","--stdin",e->assistant_inline ? "--headless" : NULL,NULL);
@@ -719,9 +775,13 @@ static gboolean open_text_assistant(IBusEngine *engine){
     e->cursor_expected=e->preedit->len>0;
     e->assistant_cancelled=FALSE;
     e->assistant_running=TRUE;
+    g_clear_object(&e->assistant_proc);
+    e->assistant_proc=child;
+    e->assistant_start=g_get_monotonic_time();
+    g_timeout_add_seconds_full(G_PRIORITY_DEFAULT,150,assistant_timeout,g_object_ref(e),g_object_unref);
     if(e->assistant_inline)ibus_engine_update_auxiliary_text(engine,ibus_text_new_from_string("Ollama đang xử lý…"),TRUE);
     g_subprocess_communicate_utf8_async(child,combined,NULL,assistant_closed,g_object_ref(e));
-    g_object_unref(child);g_free(combined);
+    g_free(combined);
     if(e->preedit->len){
         commit_and_remember(engine,ibus_text_new_from_string(e->preedit->str));
         ibus_gotiengviet_engine_reset(e);
@@ -752,7 +812,10 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     if(e->assistant_inline && e->assistant_running &&
        (keyval==IBUS_Return || keyval==IBUS_KP_Enter) && bare_key){
         debug_log("[assistant-state] enter-before-ready\n");
-        ibus_engine_update_auxiliary_text(engine,ibus_text_new_from_string("Ollama đang xử lý, chưa có kết quả để thay."),TRUE);
+        gint64 run_secs=(g_get_monotonic_time()-e->assistant_start)/1000000;
+        gchar *waitmsg=g_strdup_printf("Ollama đang xử lý (%lds) — Enter để đợi tiếp, Esc để hủy.",(long)MAX(run_secs,(gint64)0));
+        ibus_engine_update_auxiliary_text(engine,ibus_text_new_from_string(waitmsg),TRUE);
+        g_free(waitmsg);
         return TRUE;
     }
     if(e->assistant_inline && e->assistant_running && !is_modifier_key(keyval) &&
@@ -762,20 +825,25 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     }
     if(e->assistant_inline && e->replacement){
         if(keyval==IBUS_Tab && bare_key){
-            g_clear_pointer(&e->replacement,g_free);toggle_assistant_action();return open_text_assistant(engine);
+            g_clear_pointer(&e->replacement,g_free);e->replace_busy=FALSE;toggle_assistant_action();return open_text_assistant(engine);
         }
         if((keyval==IBUS_Return || keyval==IBUS_KP_Enter) && bare_key){
-            if(e->bs_mode!=0)return TRUE; /* deletion verification in flight */
+            if(e->bs_mode!=0||e->replace_busy){
+                debug_log("[assistant-state] enter swallowed flow=%u (in flight)\n",e->flow_id);
+                return TRUE; /* flow already in flight */
+            }
+            e->replace_busy=TRUE;
+            e->flow_id++;
             e->replacement_wait=0;
             e->replacing=TRUE;
             g_timeout_add_full(G_PRIORITY_DEFAULT,25,accept_replacement,g_object_ref(e),g_object_unref);
             return TRUE;
         }
         if(keyval==IBUS_Escape){
-            g_clear_pointer(&e->replacement,g_free);ibus_engine_hide_auxiliary_text(engine);return TRUE;
+            g_clear_pointer(&e->replacement,g_free);e->replace_busy=FALSE;ibus_engine_hide_auxiliary_text(engine);return TRUE;
         }
         if(!is_modifier_key(keyval)){
-            g_clear_pointer(&e->replacement,g_free);ibus_engine_hide_auxiliary_text(engine);
+            g_clear_pointer(&e->replacement,g_free);e->replace_busy=FALSE;ibus_engine_hide_auxiliary_text(engine);
         }
     }
     /* Let the desktop handle Shift/locks/modifiers without committing a partial word.
@@ -1095,6 +1163,7 @@ static void ibus_gotiengviet_engine_finalize(GObject *object){
     g_clear_pointer(&e->learned_words,g_hash_table_unref);g_free(e->learned_path);
     g_clear_pointer(&e->learned_fixes,g_hash_table_unref);g_free(e->learned_fixes_path);
     g_clear_pointer(&e->bs_expected,g_free);
+    g_clear_object(&e->assistant_proc);
     g_free(e->focus_id);g_free(e->target_id);g_free(e->target_text);g_free(e->replacement);g_free(e->insertion);gtv_text_target_free(e->verified_target);
     g_string_free(e->typed_text,TRUE);
     if(e->preedit) g_string_free(e->preedit,TRUE);

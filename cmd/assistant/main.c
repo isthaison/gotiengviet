@@ -59,14 +59,21 @@ static void finished(GObject *object,GAsyncResult *res,gpointer data){
     g_free(answer);g_free(out);g_free(diagnostic);g_clear_error(&error);g_clear_object(&request);
     gtk_widget_set_sensitive(run,TRUE);
 }
+/* Headless mode has no window to close: every early exit must quit the
+ * main loop, otherwise the helper hangs forever and the engine waits. */
+static void headless_done(const gchar *err){
+    if(!headless)return;
+    if(err){g_printerr("%s\n",err);application_status=1;}
+    gtk_main_quit();
+}
 static void generate(GtkButton *button,gpointer data){
     if(request)return;
     gchar *input=text_of(source);
-    if(!*g_strstrip(input)){g_free(input);gtk_label_set_text(GTK_LABEL(status),"Nhập đoạn văn cần xử lý.");return;}
-    if(strlen(input)>32768){g_free(input);gtk_label_set_text(GTK_LABEL(status),"Đoạn văn quá dài (tối đa 32 KB).");return;}
+    if(!*g_strstrip(input)){g_free(input);gtk_label_set_text(GTK_LABEL(status),"Nhập đoạn văn cần xử lý.");headless_done("Không có nội dung để xử lý.");return;}
+    if(strlen(input)>32768){g_free(input);gtk_label_set_text(GTK_LABEL(status),"Đoạn văn quá dài (tối đa 32 KB).");headless_done("Đoạn văn quá dài (tối đa 32 KB).");return;}
     const gchar *target=gtk_entry_get_text(GTK_ENTRY(language));
     gboolean translate=gtk_combo_box_get_active(GTK_COMBO_BOX(action))==1;
-    if(translate && !*target){g_free(input);gtk_label_set_text(GTK_LABEL(status),"Nhập ngôn ngữ đích.");return;}
+    if(translate && !*target){g_free(input);gtk_label_set_text(GTK_LABEL(status),"Nhập ngôn ngữ đích.");headless_done("Nhập ngôn ngữ đích.");return;}
     preferences(TRUE);
     set_text(result,"");
     GtvConfig config;gchar *dir=g_build_filename(g_get_user_config_dir(),"gotiengviet",NULL);
@@ -77,6 +84,7 @@ static void generate(GtkButton *button,gpointer data){
     if(!itempl || !sysraw){
         g_free(itempl);g_free(sysraw);g_free(input);gtv_config_clear(&config);g_free(dir);
         gtk_label_set_text(GTK_LABEL(status),"Thiếu mẫu prompt (prompts.conf). Hãy cài lại GoTiengViet.");
+        headless_done("Thiếu mẫu prompt (prompts.conf).");
         return;
     }
     gchar *instruction;
@@ -94,12 +102,13 @@ static void generate(GtkButton *button,gpointer data){
     if(request){
         gtk_widget_set_sensitive(run,FALSE);gtk_label_set_text(GTK_LABEL(status),"Ollama đang xử lý…");
         g_subprocess_communicate_utf8_async(request,body,cancel,finished,NULL);
-    }else gtk_label_set_text(GTK_LABEL(status),"Không chạy được curl. Hãy cài curl rồi thử lại.");
+    }else{ gtk_label_set_text(GTK_LABEL(status),"Không chạy được curl. Hãy cài curl rồi thử lại."); headless_done("Không chạy được curl."); }
     g_clear_error(&error);gtv_config_clear(&config);g_free(input);g_free(instruction);g_free(system);g_free(prompt);g_free(model);g_free(body);g_free(url);
 }
 static gboolean auto_generate(gpointer data){
     gchar *input=text_of(source);
     if(*g_strstrip(input))generate(NULL,NULL);
+    else headless_done("Không có nội dung để xử lý.");
     g_free(input);return G_SOURCE_REMOVE;
 }
 static void action_changed(GtkComboBox *combo,gpointer data){

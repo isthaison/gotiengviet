@@ -209,6 +209,7 @@ engine/
   spell.c           kiểm tra chính tả (quy tắc âm tiết)
   macro.c           nạp bảng macro/emoji từ file
   ai.c, json.c      Ollama và JSON
+  learn.c           từ điển học dùng chung (words/fixes, mọi nền tảng)
   text.c            chuyển UTF-8/UCS-4
   telex.c, vni.c    adapter mỏng vào thuật toán chung
 data/
@@ -270,10 +271,10 @@ Native Windows 10/11 qua Win32 Low-Level Keyboard Hook (`WH_KEYBOARD_LL`) + Syst
 * **Gói portable**: mỗi release GitHub đính kèm `gotiengviet-windows-x64.zip` (chạy ngay, `data/` nằm cạnh exe).
 * **Đổi ngôn ngữ**: `Ctrl + Shift` / `Alt + Z` (chống lặp khi giữ phím), hoặc click trái icon [V]/[E] (chế độ được nhớ qua restart); chuột phải mở menu: Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu, tự khởi động, Thoát.
 * **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (bật/tắt Ollama, model, URL) — lưu ở `%APPDATA%/gotiengviet/` như bản Linux.
-* **Gợi ý AI dạng balloon**: từ sai cấu trúc sau khi gõ xong được hỏi Ollama nền, hiện `"sai" co the ban muon go "dung"?` (không dấu cho mọi locale, chống spam 10 giây). Cần Ollama + `curl` (Windows 10+ có sẵn).
+* **Gợi ý AI dạng balloon**: từ sai cấu trúc sau khi gõ xong được hỏi Ollama nền, hiện `"sai" co the ban muon go "dung"?` (không dấu cho mọi locale, chống spam 10 giây). Cần Ollama + `curl` (Windows 10+ có sẵn). **Click vào balloon** để nhận gợi ý: văn bản còn nguyên thì tự xóa từ sai và gõ chữ đúng, gõ tiếp rồi thì copy chữ đúng vào clipboard; cả hai đều học mapping vào `learned-corrections.txt`, nên Ollama rớt vẫn gợi ý từ dữ liệu đã học. Từ điển học dùng chung định dạng và seed với bản Linux (module `engine/learn.c`).
 * **Macro/emoji/prompts/config**: chung engine và file `data/`; file người dùng vẫn ưu tiên. Seed từ điển kèm theo để đồng bộ, chưa dùng tới (chờ UI nhận gợi ý).
 * **Build (MSYS2 MinGW-w64)**: `pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glib2 make`, rồi `make -f Makefile.win`.
 
-Chưa có: gợi ý inline trong ô nhập, cửa sổ Ctrl+T, học từ điển từ gợi ý. Lõi gõ, cấu hình, macro/emoji, kiểm tra âm tiết và gợi ý AI đã ngang Linux.
+Chưa có: gợi ý inline trong ô nhập, cửa sổ Ctrl+T. Lõi gõ, cấu hình, macro/emoji, kiểm tra âm tiết, gợi ý AI (kèm nhận + học + offline) đã ngang Linux.
 
 Giấy phép: [MIT](LICENSE).

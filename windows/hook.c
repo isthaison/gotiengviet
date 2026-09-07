@@ -4,7 +4,7 @@
 #include <glib/gstdio.h>
 #include <stdio.h>
 
-static void send_backspaces(int count) {
+void gtv_hook_send_backspaces(int count) {
     if (count <= 0) return;
     INPUT *inputs = g_new0(INPUT, count * 2);
     for (int i = 0; i < count; i++) {
@@ -54,6 +54,16 @@ static void maybe_ai_suggest(const gchar *commit) {
     if (g_utf8_strlen(word, -1) >= 2 && !spell_word_valid(word))
         gtv_tray_check_spelling_async(word);
     g_free(word);
+}
+
+void gtv_hook_send_text(const gchar *utf8) {
+    if (!utf8 || !*utf8) return;
+    glong wlen = 0;
+    guint16 *wstr = g_utf8_to_utf16(utf8, -1, NULL, &wlen, NULL);
+    if (wstr) {
+        send_unicode_string((const wchar_t *)wstr);
+        g_free(wstr);
+    }
 }
 
 void gtv_hook_reset_buffer(void) {
@@ -116,6 +126,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
     /* Hotkey detection: Ctrl + Shift or Alt + Z toggles mode */
     if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+        g_app.last_input_tick = GetTickCount();
         gboolean ctrl_down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         gboolean shift_down = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         gboolean alt_down = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
@@ -183,7 +194,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
             if (commit) {
                 if (backspaces > 0) {
-                    send_backspaces((int)backspaces);
+                    gtv_hook_send_backspaces((int)backspaces);
                 }
                 glong wlen = 0;
                 guint16 *wstr = g_utf8_to_utf16(commit, -1, NULL, &wlen, NULL);
@@ -197,7 +208,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             } else if (backspaces > 0) {
                 /* Buffer modified in place (e.g. aa -> â, as -> á) */
                 gchar *current = gtv_engine_buffer(g_app.engine);
-                send_backspaces((int)backspaces);
+                gtv_hook_send_backspaces((int)backspaces);
                 glong wlen = 0;
                 guint16 *wstr = g_utf8_to_utf16(current, -1, NULL, &wlen, NULL);
                 if (wstr) {

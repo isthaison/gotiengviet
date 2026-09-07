@@ -13,6 +13,7 @@ typedef struct {
     GtvEngine *engine;
     HHOOK keyboard_hook;
     HWND hwnd_main;
+    DWORD last_input_tick;  /* GetTickCount at the last real keydown */
 } GtvWindowsApp;
 
 extern GtvWindowsApp g_app;
@@ -22,6 +23,8 @@ void gtv_hook_uninstall(void);
 void gtv_hook_toggle_mode(void);
 void gtv_hook_set_mode(gboolean enabled);
 void gtv_hook_reset_buffer(void);
+void gtv_hook_send_backspaces(int count);
+void gtv_hook_send_text(const gchar *utf8);
 /* Persist/restore the V/E mode in [input]/enabled of the user config file.
  * Unknown keys are ignored by the shared engine, so Linux is unaffected. */
 void gtv_hook_save_enabled(void);

@@ -177,6 +177,49 @@ static void test_config_defaults(void) {
     g_rmdir(empty);g_free(empty);
 }
 
+static void test_learn(void) {
+    /* word_key normalization. */
+    gchar *k = gtv_word_key("KÔNG");
+    g_assert_cmpstr(k, ==, "kông"); g_free(k);
+    g_assert_null(gtv_word_key(""));
+    g_assert_null(gtv_word_key("a b"));
+    g_assert_null(gtv_word_key(NULL));
+    /* Roundtrip through real files in a temp dir. */
+    gchar *tmp = g_dir_make_tmp("gotiengviet-learn-XXXXXX", NULL);
+    g_assert_nonnull(tmp);
+    gchar *wp = g_build_filename(tmp, "learned-words.txt", NULL);
+    gchar *fp = g_build_filename(tmp, "learned-corrections.txt", NULL);
+    GHashTable *words = gtv_words_table_new();
+    GHashTable *fixes = gtv_fixes_table_new();
+    g_assert_true(gtv_words_learn(words, "Thông"));
+    g_assert_false(gtv_words_learn(words, "thông")); /* dup */
+    g_assert_false(gtv_words_learn(words, "a b"));
+    g_assert_true(gtv_fixes_learn(fixes, "HOĂC", "Hoặc"));
+    g_assert_false(gtv_fixes_learn(fixes, "hoăc", "hoặc")); /* dup */
+    g_assert_false(gtv_fixes_learn(fixes, "x", "x")); /* identical */
+    g_assert_true(gtv_words_save(words, wp));
+    g_assert_true(gtv_fixes_save(fixes, fp));
+    g_hash_table_unref(words); g_hash_table_unref(fixes);
+    words = gtv_words_table_new();
+    fixes = gtv_fixes_table_new();
+    g_assert_true(gtv_words_load(words, wp));
+    g_assert_true(gtv_fixes_load(fixes, fp));
+    g_assert_true(g_hash_table_contains(words, "thông"));
+    gchar *f = gtv_fixes_lookup(fixes, "HOĂC");
+    g_assert_cmpstr(f, ==, "hoặc"); g_free(f);
+    g_assert_null(gtv_fixes_lookup(fixes, "việt"));
+    /* Completions straight from the shared table. */
+    GPtrArray *out = g_ptr_array_new_with_free_func(g_free);
+    gtv_learned_completions(words, "thong", out, 5);
+    g_assert_cmpuint(out->len, ==, 1);
+    g_assert_cmpstr(g_ptr_array_index(out, 0), ==, "thông");
+    g_ptr_array_unref(out);
+    g_hash_table_unref(words); g_hash_table_unref(fixes);
+    g_remove(wp); g_free(wp);
+    g_remove(fp); g_free(fp);
+    g_rmdir(tmp); g_free(tmp);
+}
+
 /* Every permutation of pending operations must converge to the same syllable. */
 static void permute(const gchar *prefix, gchar *keys, guint index, GtvMode mode, gboolean modern, const gchar *want) {
     if(!keys[index]) {
@@ -378,6 +421,7 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/suggest-combined",test_suggest_combined);
     g_test_add_func("/support/spelling",test_spelling);
     g_test_add_func("/support/macro-and-emoji",test_macro_and_emoji);
+    g_test_add_func("/support/learn",test_learn);
     g_test_add_func("/support/prompts",test_prompts);
     g_test_add_func("/support/config-defaults",test_config_defaults);
     g_test_add_func("/algorithm/order-independence",test_order_independence);

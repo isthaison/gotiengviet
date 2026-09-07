@@ -57,6 +57,23 @@ gchar *gtv_data_path(const gchar *name);
 void gtv_prompts_reload(void);
 gchar *gtv_prompt_get(const gchar *group, const gchar *key, const gchar *fallback);
 gchar *gtv_format_template(const gchar *templ, const gchar * const *args, guint n);
+/* File-backed learned vocabulary (engine/learn.c), shared by all platforms. */
+#define GTV_LEARNED_WORDS_MAX 10000
+#define GTV_LEARNED_FIXES_MAX 2000
+gchar *gtv_word_key(const gchar *word);
+gchar *gtv_learned_path(const gchar *filename);
+GHashTable *gtv_words_table_new(void);
+GHashTable *gtv_fixes_table_new(void);
+void gtv_words_parse(GHashTable *set, const gchar *contents);
+void gtv_fixes_parse(GHashTable *map, const gchar *contents);
+gboolean gtv_words_load(GHashTable *set, const gchar *user_path);
+gboolean gtv_fixes_load(GHashTable *map, const gchar *user_path);
+gboolean gtv_words_save(GHashTable *set, const gchar *path);
+gboolean gtv_fixes_save(GHashTable *map, const gchar *path);
+gboolean gtv_words_learn(GHashTable *set, const gchar *word);
+gboolean gtv_fixes_learn(GHashTable *map, const gchar *bad_word, const gchar *good_word);
+gchar *gtv_fixes_lookup(GHashTable *map, const gchar *word);
+void gtv_learned_completions(GHashTable *set, const gchar *prefix, GPtrArray *out, guint max);
 gboolean gtv_apply_key(GArray *buf, gunichar key, GtvMode mode, gboolean modern);
 void gtv_compose(GArray *buf, gunichar key, GtvMode mode, gboolean modern);
 

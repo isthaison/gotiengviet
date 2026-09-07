@@ -57,6 +57,7 @@ void gtv_tray_set_startup(gboolean enable) {
 }
 
 gboolean gtv_tray_init(HWND hwnd) {
+    InitializeCriticalSection(&learned_lock);
     HINSTANCE hinst = GetModuleHandle(NULL);
     icon_v = LoadIcon(hinst, MAKEINTRESOURCE(IDI_TRAY_V));
     icon_e = LoadIcon(hinst, MAKEINTRESOURCE(IDI_TRAY_E));
@@ -73,6 +74,7 @@ gboolean gtv_tray_init(HWND hwnd) {
 }
 
 void gtv_tray_cleanup(void) {
+    DeleteCriticalSection(&learned_lock);
     if (config_lock_ready) {
         DeleteCriticalSection(&config_lock);
         config_lock_ready = FALSE;
@@ -179,6 +181,106 @@ typedef struct { gchar *word; gchar *model; gchar *url; } AiJob;
 
 static volatile LONG ai_in_flight = 0;
 
+/* Learned store shared with the AI worker thread (CRITICAL_SECTION guards
+ * it; initialized in gtv_tray_init before any worker can exist). */
+static GHashTable *w_learned_words = NULL;
+static GHashTable *w_learned_fixes = NULL;
+static CRITICAL_SECTION learned_lock;
+static void w_learned_ensure(void){
+    if(!w_learned_words){
+        w_learned_words = gtv_words_table_new();
+        gchar *p = gtv_learned_path("learned-words.txt");
+        gtv_words_load(w_learned_words, p);
+        g_free(p);
+    }
+    if(!w_learned_fixes){
+        w_learned_fixes = gtv_fixes_table_new();
+        gchar *p = gtv_learned_path("learned-corrections.txt");
+        gtv_fixes_load(w_learned_fixes, p);
+        g_free(p);
+    }
+}
+
+/* Pending suggestion behind the balloon: click applies it when nothing was
+ * typed since, otherwise the correction is copied to the clipboard. */
+static gchar *pending_typed = NULL;
+static gchar *pending_fix = NULL;
+static DWORD pending_tick = 0;
+static DWORD pending_input_tick = 0;
+
+void gtv_tray_suggest_balloon(const gchar *typed, const gchar *correction){
+    g_free(pending_typed); g_free(pending_fix);
+    pending_typed = pending_fix = NULL;
+    if(!typed || !*typed || !correction || !*correction) return;
+    pending_typed = g_strdup(typed);
+    pending_fix = g_strdup(correction);
+    pending_tick = GetTickCount();
+    pending_input_tick = g_app.last_input_tick;
+    gchar *msg = g_strdup_printf("\"%s\" co the ban muon go \"%s\"?", typed, correction);
+    gtv_tray_balloon("GoTiengViet goi y", msg);
+    g_free(msg);
+}
+
+static void copy_to_clipboard(const gchar *utf8){
+    if(!utf8 || !g_app.hwnd_main) return;
+    glong wlen = 0;
+    gunichar2 *wstr = g_utf8_to_utf16(utf8, -1, NULL, &wlen, NULL);
+    if(!wstr) return;
+    if(OpenClipboard(g_app.hwnd_main)){
+        EmptyClipboard();
+        HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (wlen + 1) * sizeof(gunichar2));
+        if(h){
+            gunichar2 *dst = GlobalLock(h);
+            if(dst){
+                memcpy(dst, wstr, (wlen + 1) * sizeof(gunichar2));
+                GlobalUnlock(h);
+                SetClipboardData(CF_UNICODETEXT, h);
+            }else GlobalFree(h);
+        }
+        CloseClipboard();
+    }
+    g_free(wstr);
+}
+
+static void learn_accepted(const gchar *typed, const gchar *fix){
+    EnterCriticalSection(&learned_lock);
+    w_learned_ensure();
+    gboolean dirty_fix = gtv_fixes_learn(w_learned_fixes, typed, fix);
+    gboolean dirty_words = FALSE;
+    gchar **words = g_strsplit_set(fix, " \t", -1);
+    for(guint i = 0; words[i]; i++)
+        if(gtv_words_learn(w_learned_words, words[i])) dirty_words = TRUE;
+    g_strfreev(words);
+    if(dirty_fix){
+        gchar *p = gtv_learned_path("learned-corrections.txt");
+        gtv_fixes_save(w_learned_fixes, p);
+        g_free(p);
+    }
+    if(dirty_words){
+        gchar *p = gtv_learned_path("learned-words.txt");
+        gtv_words_save(w_learned_words, p);
+        g_free(p);
+    }
+    LeaveCriticalSection(&learned_lock);
+}
+
+void gtv_tray_apply_pending(void){
+    if(!pending_typed || !pending_fix) return;
+    gchar *typed = pending_typed, *fix = pending_fix;
+    pending_typed = pending_fix = NULL;
+    gboolean fresh = (DWORD)(GetTickCount() - pending_tick) < 15000
+        && g_app.last_input_tick == pending_input_tick;
+    if(fresh && g_utf8_validate(typed, -1, NULL) && g_utf8_validate(fix, -1, NULL)
+       && g_utf8_strlen(typed, -1) >= 2 && g_utf8_strlen(typed, -1) <= 64){
+        gtv_hook_send_backspaces((int)g_utf8_strlen(typed, -1));
+        gtv_hook_send_text(fix);
+    }else{
+        copy_to_clipboard(fix);
+    }
+    learn_accepted(typed, fix);
+    g_free(typed); g_free(fix);
+}
+
 static gpointer ai_worker(gpointer data) {
     AiJob *job = data;
     GtvConfig cfg = {0};
@@ -186,14 +288,25 @@ static gpointer ai_worker(gpointer data) {
     cfg.model = job->model;
     cfg.url = job->url;
     GPtrArray *sugs = gtv_suggest_combined(&cfg, "", job->word, TRUE);
-    if (sugs && sugs->len > 0) {
-        const gchar *fix = sugs->pdata[0];
-        if (g_strcmp0(fix, job->word) != 0) {
-            gchar *msg = g_strdup_printf("\"%s\" co the ban muon go \"%s\"?", job->word, fix);
-            PostMessage(g_app.hwnd_main, WM_GTV_AI_RESULT, 0, (LPARAM)msg);
-        }
-    }
+    gchar *fix = NULL;
+    if (sugs && sugs->len > 0 && g_strcmp0(sugs->pdata[0], job->word) != 0)
+        fix = g_strdup(sugs->pdata[0]);
     if (sugs) g_ptr_array_unref(sugs);
+    if (!fix) {
+        /* Ollama unreachable: reuse Ollama-taught corrections offline. */
+        EnterCriticalSection(&learned_lock);
+        w_learned_ensure();
+        fix = gtv_fixes_lookup(w_learned_fixes, job->word);
+        LeaveCriticalSection(&learned_lock);
+        if (fix && !g_strcmp0(fix, job->word)) { g_free(fix); fix = NULL; }
+    }
+    if (fix && g_app.hwnd_main) {
+        GtvAiResult *res = g_new(GtvAiResult, 1);
+        res->typed = job->word; job->word = NULL;
+        res->fix = fix; fix = NULL;
+        PostMessage(g_app.hwnd_main, WM_GTV_AI_RESULT, 0, (LPARAM)res);
+    }
+    g_free(fix);
     g_free(job->word); g_free(job->model); g_free(job->url); g_free(job);
     InterlockedExchange(&ai_in_flight, 0);
     return NULL;

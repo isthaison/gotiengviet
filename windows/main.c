@@ -19,13 +19,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 gtv_tray_show_menu(hwnd);
             } else if (lParam == WM_LBUTTONDBLCLK) {
                 gtv_setup_show(hwnd);
+            } else if (lParam == NIN_BALLOONUSERCLICK) {
+                gtv_tray_apply_pending();
             }
             break;
         }
         case WM_GTV_AI_RESULT: {
-            gchar *msg = (gchar *)lParam;
-            gtv_tray_balloon("GoTiengViet goi y", msg);
-            g_free(msg);
+            GtvAiResult *res = (GtvAiResult *)lParam;
+            if (res) {
+                gtv_tray_suggest_balloon(res->typed, res->fix);
+                g_free(res->typed); g_free(res->fix); g_free(res);
+            }
             break;
         }
         case WM_DESTROY:

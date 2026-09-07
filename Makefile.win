@@ -6,9 +6,9 @@ CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell
 LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32
 
 ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
-              engine/engine.c engine/json.c engine/macro.c engine/phonology.c \
-              engine/promotion.c engine/spell.c engine/telex.c engine/text.c \
-              engine/vni.c
+              engine/engine.c engine/json.c engine/learn.c engine/macro.c \
+              engine/phonology.c engine/promotion.c engine/spell.c \
+              engine/telex.c engine/text.c engine/vni.c
 
 WIN_SRCS = windows/main.c windows/hook.c windows/tray.c windows/setup.c
 RC_SRC = windows/resource.rc

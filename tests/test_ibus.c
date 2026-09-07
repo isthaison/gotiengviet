@@ -38,8 +38,10 @@ static void application_signal(GDBusConnection *connection,const gchar *sender,c
         g_object_unref(text);g_variant_unref(serialized);
     }
 }
+static GtvTextTarget *no_accessible_target(const gchar *a,const gchar *b){return NULL;}
 int main(int argc,char **argv) {
     g_test_init(&argc,&argv,NULL);
+    select_text_target=no_accessible_target;
     gchar *directory=g_dir_make_tmp("gotiengviet-ibus-test-XXXXXX",NULL);
     g_assert_nonnull(directory);
     g_setenv("XDG_CONFIG_HOME",directory,TRUE);
@@ -133,7 +135,7 @@ int main(int argc,char **argv) {
     g_setenv("PATH",test_path,TRUE);g_free(test_path);
     g_setenv("GTV_ASSISTANT_CAPTURE",capture,TRUE);
     ibus_gotiengviet_engine_reset(e);g_string_assign(e->typed_text,"Tôi ");g_string_assign(e->preedit,"được");
-    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_MOD4_MASK));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_CONTROL_MASK));
     gchar *captured=NULL;
     for(guint i=0;i<100 && !captured;i++){
         while(g_main_context_iteration(NULL,FALSE));
@@ -144,11 +146,11 @@ int main(int argc,char **argv) {
     g_assert_cmpstr(e->preedit->str,==,"");
     g_assert_true(e->assistant_key_down);
 
-    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_SUPER_MASK));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_CONTROL_MASK));
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_RELEASE_MASK));
     g_assert_false(e->assistant_key_down);
     e->purpose=IBUS_INPUT_PURPOSE_PASSWORD;
-    g_assert_false(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_SUPER_MASK));
+    g_assert_false(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_CONTROL_MASK));
     for(guint i=0;i<100 && e->assistant_running;i++){
         while(g_main_context_iteration(NULL,FALSE));g_usleep(10000);
     }
@@ -157,6 +159,7 @@ int main(int argc,char **argv) {
     g_free(e->focus_id);e->focus_id=g_strdup("/input/original");
     g_free(e->target_id);e->target_id=g_strdup("/input/original");
     g_free(e->target_text);e->target_text=g_strdup("Xin chào.");
+    e->target_backspaces=FALSE;
     e->target_cursor=e->target_anchor=9;e->target_length=9;
     e->replacement=g_strdup("Hello.");e->replacement_wait=0;
     IBusText *snapshot=ibus_text_new_from_string("Đã sửa");g_object_ref_sink(snapshot);
@@ -190,16 +193,9 @@ int main(int argc,char **argv) {
     g_assert_cmpstr(e->typed_text->str,==,"Xin chào.");
     e->target_backspaces=TRUE;e->target_length=9;
     e->replacement=g_strdup("Hello.");e->assistant_cancelled=FALSE;
-    application_text=g_string_new("Xin chào.");application_cursor=9;replacement_signals=0;
-    subscription=g_dbus_connection_signal_subscribe(connection,NULL,IBUS_INTERFACE_ENGINE,NULL,
-        "/org/freedesktop/IBus/Engine/Test",NULL,G_DBUS_SIGNAL_FLAGS_NONE,application_signal,NULL,NULL);
-    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Return,0,0));
-    for(guint i=0;i<100 && replacement_signals<19;i++){
-        while(g_main_context_iteration(NULL,FALSE));g_usleep(10000);
-    }
-    g_assert_cmpuint(replacement_signals,==,19);g_assert_cmpstr(application_text->str,==,"Hello.");
-    g_string_free(application_text,TRUE);g_dbus_connection_signal_unsubscribe(connection,subscription);
-    g_assert_cmpstr(e->typed_text->str,==,"Hello.");
+    /* No accessible selection means no destructive guess and no blind insertion. */
+    g_assert_true(apply_replacement(e));g_assert_nonnull(e->replacement);
+    g_assert_cmpstr(e->typed_text->str,==,"Xin chào.");g_clear_pointer(&e->replacement,g_free);
     g_assert_true(backspace_text_supported("Tôi được "));
     g_assert_false(backspace_text_supported("😊"));g_assert_false(backspace_text_supported("a\xcc\x81"));
     e->cursor_known=TRUE;e->cursor_expected=FALSE;e->last_cursor=(IBusRectangle){0,0,1,1};
@@ -217,6 +213,11 @@ int main(int argc,char **argv) {
     e->replacement=g_strdup("stale");e->replacement_wait=0;
     g_assert_true(apply_replacement(e));g_assert_nonnull(e->replacement);
     g_clear_pointer(&e->replacement,g_free);
+    gint start,end;
+    g_assert_true(gtv_text_range("Đầu câu: Xin chào.",18,18,"Xin chào.",&start,&end));
+    g_assert_cmpint(start,==,9);g_assert_cmpint(end,==,18);
+    g_assert_false(gtv_text_range("Khác",4,4,"Xin chào.",&start,&end));
+    g_assert_true(gtv_text_range("Xin chào.",0,9,"Xin chào.",&start,&end));
     g_object_unref(engine);
     g_dbus_connection_close_sync(connection,NULL,NULL);g_object_unref(connection);
     g_test_dbus_down(test_bus);g_object_unref(test_bus);

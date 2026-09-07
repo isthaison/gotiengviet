@@ -16,7 +16,7 @@ Version: $version
 Section: utils
 Priority: optional
 Architecture: $architecture
-Depends: ibus, libibus-1.0-5, libglib2.0-0, libgtk-3-0, libgdk-pixbuf-2.0-0, libayatana-appindicator3-1
+Depends: libatspi2.0-0, ibus, libibus-1.0-5, libglib2.0-0, libgtk-3-0, libgdk-pixbuf-2.0-0, libayatana-appindicator3-1
 Recommends: curl, libnotify-bin
 Maintainer: GoTiengViet Project <https://github.com/isthaison/gotiengviet>
 Homepage: https://github.com/isthaison/gotiengviet

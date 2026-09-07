@@ -61,4 +61,9 @@ gchar *gtv_json_quote(const gchar *text);
 gchar *gtv_json_response(const gchar *json);
 gboolean gtv_apply_key(GArray *buf, gunichar key, GtvMode mode, gboolean modern);
 void gtv_compose(GArray *buf, gunichar key, GtvMode mode, gboolean modern);
+
+GPtrArray *gtv_suggest_combined(const GtvConfig *config, const gchar *context, const gchar *preedit, gboolean bad);
+void gtv_suggest_combined_async(const GtvConfig *config, const gchar *context, const gchar *preedit, gboolean bad,
+                               GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data);
+GPtrArray *gtv_suggest_combined_finish(GAsyncResult *res, GError **error);
 #endif

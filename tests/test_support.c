@@ -169,6 +169,39 @@ static void test_ollama(void) {
     out=gtv_ai_suggest(&config,"được","");g_assert_cmpuint(out->len,==,0);g_ptr_array_unref(out);
 }
 
+static void on_async_suggest_done(GObject *src, GAsyncResult *res, gpointer data){
+    gboolean *done = data;
+    GError *error = NULL;
+    GPtrArray *out = gtv_suggest_combined_finish(res, &error);
+    g_assert_no_error(error);
+    g_assert_nonnull(out);
+    g_assert_cmpuint(out->len, >, 0);
+    g_ptr_array_unref(out);
+    *done = TRUE;
+}
+
+static void test_suggest_combined(void) {
+    GtvConfig config = {.ai_enabled = FALSE};
+    GPtrArray *s1 = gtv_suggest_combined(&config, "Tôi ", "kông", TRUE);
+    g_assert_nonnull(s1);
+    g_assert_cmpuint(s1->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(s1, 0), ==, "công");
+    g_ptr_array_unref(s1);
+
+    GPtrArray *s2 = gtv_suggest_combined(&config, "xin", "ch", FALSE);
+    g_assert_nonnull(s2);
+    g_assert_cmpuint(s2->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(s2, 0), ==, "chào");
+    g_ptr_array_unref(s2);
+
+    gboolean done = FALSE;
+    gtv_suggest_combined_async(&config, "xin", "ch", FALSE, NULL, on_async_suggest_done, &done);
+    while(!done) {
+        g_main_context_iteration(NULL, TRUE);
+    }
+    g_assert_true(done);
+}
+
 static void test_vector_prediction(void) {
     /* Test next-word predictions without prefix */
     GPtrArray *p1 = gtv_vector_predict_next("xin", "", 5);
@@ -336,6 +369,7 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/config",test_config);
     g_test_add_func("/support/json",test_json);
     g_test_add_func("/support/ollama",test_ollama);
+    g_test_add_func("/support/suggest-combined",test_suggest_combined);
     g_test_add_func("/support/spelling",test_spelling);
     g_test_add_func("/support/vector-prediction",test_vector_prediction);
     g_test_add_func("/support/vector-normalization",test_vector_normalization);

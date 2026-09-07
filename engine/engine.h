@@ -1,6 +1,7 @@
 #ifndef GTV_ENGINE_H
 #define GTV_ENGINE_H
 #include <glib.h>
+#include <gio/gio.h>
 
 /* Returned strings and arrays belong to the caller (g_free/g_ptr_array_unref). */
 typedef enum { GTV_TELEX, GTV_VNI } GtvMode;
@@ -36,4 +37,7 @@ GPtrArray *gtv_ai_suggest(const GtvConfig *config, const gchar *word, const gcha
  * Returns an owned array, bounded by max_results; invalid UTF-8 gives no results. */
 GPtrArray *gtv_vector_predict_next(const gchar *context, const gchar *prefix, guint max_results);
 GPtrArray *gtv_predict_next(const GtvConfig *config, const gchar *context, const gchar *prefix);
+void gtv_predict_next_async(const GtvConfig *config, const gchar *context, const gchar *prefix,
+                            GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data);
+GPtrArray *gtv_predict_next_finish(GAsyncResult *res, GError **error);
 #endif

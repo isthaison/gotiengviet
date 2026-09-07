@@ -8,7 +8,7 @@ if [[ -z "$DESTDIR" && "$EUID" -ne 0 ]]; then
     echo 'Cần sudo: sudo ./install.sh' >&2
     exit 1
 fi
-for binary in ibus-engine-gotiengviet ibus-setup-gotiengviet gotiengviet-demo; do
+for binary in gotiengviet-assistant ibus-engine-gotiengviet ibus-setup-gotiengviet gotiengviet-demo; do
     if [[ ! -x "$BUILD_DIR/$binary" ]]; then
         echo "Thiếu $BUILD_DIR/$binary. Chạy ./build.sh trước." >&2
         exit 1
@@ -23,6 +23,7 @@ if [[ -f ibus/gotiengviet.metainfo.xml ]]; then
 fi
 install -Dm644 ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet.svg"
 install -Dm644 ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet.svg"
+install -Dm755 "$BUILD_DIR/gotiengviet-assistant" "$DESTDIR/usr/bin/gotiengviet-assistant"
 for size in 16 22 24 32 48 64 128 256; do
     directory="$DESTDIR/usr/share/icons/hicolor/${size}x${size}/apps"
     mkdir -p "$directory"
@@ -69,7 +70,7 @@ if [[ -z "$DESTDIR" ]]; then
     update-desktop-database /usr/share/applications || true
     if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]]; then
         session_uid=$(id -u "$SUDO_USER")
-        sudo -u "$SUDO_USER" env DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$session_uid/bus" ibus restart || true
+        sudo -u "$SUDO_USER" env XDG_RUNTIME_DIR="/run/user/$session_uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$session_uid/bus" ibus restart || true
     fi
     echo 'Đã cài. Mở GoTiengViet rồi chọn bằng Super+Space.'
 else

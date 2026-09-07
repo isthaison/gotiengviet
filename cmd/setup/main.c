@@ -218,6 +218,29 @@ static void ai_log(const char *line){
     }
 }
 
+static gboolean syncing_endpoint;
+static gboolean local_endpoint(GUri *uri){
+    const gchar *host=uri ? g_uri_get_host(uri) : NULL;
+    return host && (!g_ascii_strcasecmp(host,"localhost") || !strcmp(host,"127.0.0.1") || !strcmp(host,"::1"));
+}
+static void port_changed(GtkSpinButton *spin,gpointer data){
+    if(syncing_endpoint)return;
+    GUri *uri=g_uri_parse(gtk_entry_get_text(GTK_ENTRY(entry_url)),G_URI_FLAGS_NONE,NULL);
+    if(local_endpoint(uri)){
+        gchar *url=g_uri_join(G_URI_FLAGS_NONE,g_uri_get_scheme(uri),g_uri_get_userinfo(uri),g_uri_get_host(uri),
+            gtk_spin_button_get_value_as_int(spin),g_uri_get_path(uri),g_uri_get_query(uri),g_uri_get_fragment(uri));
+        syncing_endpoint=TRUE;gtk_entry_set_text(GTK_ENTRY(entry_url),url);syncing_endpoint=FALSE;g_free(url);
+    }
+    if(uri)g_uri_unref(uri);
+}
+static void url_changed(GtkEditable *entry,gpointer data){
+    if(syncing_endpoint)return;
+    GUri *uri=g_uri_parse(gtk_entry_get_text(GTK_ENTRY(entry)),G_URI_FLAGS_NONE,NULL);
+    if(local_endpoint(uri) && g_uri_get_port(uri)>=1024){
+        syncing_endpoint=TRUE;gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_port),g_uri_get_port(uri));syncing_endpoint=FALSE;
+    }
+    if(uri)g_uri_unref(uri);
+}
 static gboolean ollama_serving(int port){
     char cmd[256];
     snprintf(cmd, sizeof(cmd), "curl -s -m 2 http://localhost:%d/api/tags -o /dev/null 2>/dev/null", port);
@@ -596,6 +619,9 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     }
     gtk_entry_set_text(GTK_ENTRY(entry_url), cur_url);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_port), atoi(cur_port));
+    g_signal_connect(spin_port,"value-changed",G_CALLBACK(port_changed),NULL);
+    g_signal_connect(entry_url,"changed",G_CALLBACK(url_changed),NULL);
+    url_changed(GTK_EDITABLE(entry_url),NULL);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cb_ai), strcmp(cur_ai_enable,"true")==0);
 
     GtkWidget *info = gtk_label_new(NULL);

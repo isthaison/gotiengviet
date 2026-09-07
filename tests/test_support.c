@@ -50,6 +50,9 @@ static void test_config(void) {
     gtv_config_load(&loaded,directory);
     g_assert_false(loaded.ai_enabled);g_assert_cmpstr(loaded.model,==,"override");
     gtv_config_clear(&loaded);
+    g_assert_true(g_file_set_contents(path,"[ai]\nmodel=qwen2:0.5b (~400MB)\n",-1,NULL));
+    gtv_config_load(&loaded,directory);
+    g_assert_cmpstr(loaded.model,==,"qwen2:0.5b");gtv_config_clear(&loaded);
     g_remove(path);g_free(path);
     path=g_build_filename(directory,"config",NULL);g_remove(path);g_free(path);
     g_rmdir(directory);g_free(directory);
@@ -81,15 +84,15 @@ static void test_spelling(void) {
     g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"công");
     g_ptr_array_unref(suggestions);
 
-    /* Casing tests: preserve TitleCase and UPPERCASE */
+    /* Suggestions no longer capitalize based on the input. */
     suggestions=gtv_ai_suggest(&config,"Kông","");
     g_assert_cmpuint(suggestions->len,>,0);
-    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"Công");
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"công");
     g_ptr_array_unref(suggestions);
 
     suggestions=gtv_ai_suggest(&config,"KÔNG","");
     g_assert_cmpuint(suggestions->len,>,0);
-    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"CÔNG");
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"công");
     g_ptr_array_unref(suggestions);
 
     /* Test voiceless stop correction */
@@ -200,7 +203,7 @@ static void test_vector_normalization(void) {
     const struct {const gchar *context,*prefix,*want;} cases[]={
         {"  công\t\tnghệ  ","thong","thông tin"},
         {"xin\302\240","chao","chào"},
-        {"Xin","","chào"}, {"xin","CH","CHÀO"}, {"xin","Ch","Chào"},
+        {"Xin","","chào"}, {"xin","CH","chào"}, {"xin","Ch","chào"},
         {"ho\314\202\314\200 chi\314\201","m","minh"},
         {"học abc","t","tập"}, {"xin. học","t","tập"}
     };

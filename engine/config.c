@@ -46,6 +46,9 @@ void gtv_config_load(GtvConfig *config, const gchar *directory) {
     }
     g_free(path);
     g_key_file_unref(file);
+    /* Older setup versions stored the display label instead of the model ID. */
+    gchar *label=strstr(config->model," (~");
+    if(label && g_str_has_suffix(config->model,")"))*label='\0';
 }
 
 gboolean gtv_config_save(const GtvConfig *config, const gchar *directory, GError **error) {

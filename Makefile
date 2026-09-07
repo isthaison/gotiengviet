@@ -10,7 +10,7 @@ CORE_SRC := $(wildcard engine/*.c)
 CORE_OBJ := $(patsubst engine/%.c,$(BUILD_DIR)/engine/%.o,$(CORE_SRC))
 CORE_LIB := $(BUILD_DIR)/libgotiengviet.a
 CORE_LIBS := $(shell $(PKG_CONFIG) --libs gio-2.0) -lm
-BINS := $(BUILD_DIR)/ibus-engine-gotiengviet $(BUILD_DIR)/ibus-setup-gotiengviet $(BUILD_DIR)/gotiengviet-demo
+BINS := $(BUILD_DIR)/gotiengviet-assistant $(BUILD_DIR)/ibus-engine-gotiengviet $(BUILD_DIR)/ibus-setup-gotiengviet $(BUILD_DIR)/gotiengviet-demo
 
 .PHONY: all build test vet install clean package help
 all: build
@@ -57,5 +57,18 @@ test-ui: $(BUILD_DIR)/test-setup
 $(BUILD_DIR)/test-ibus: tests/test_ibus.c ibus/engine.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0) $(CORE_LIBS) -o $@
 .PHONY: test-ibus
-test-ibus: $(BUILD_DIR)/test-ibus
-	$(BUILD_DIR)/test-ibus
+test-ibus: $(BUILD_DIR)/test-ibus $(BUILD_DIR)/fixtures/gotiengviet-assistant
+	GTV_TEST_CURL_DIR="$(abspath $(BUILD_DIR))/fixtures" $(BUILD_DIR)/test-ibus
+
+$(BUILD_DIR)/gotiengviet-assistant: cmd/assistant/main.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0) $(CORE_LIBS) -o $@
+
+$(BUILD_DIR)/test-assistant: tests/test_assistant.c cmd/assistant/main.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0) $(CORE_LIBS) -o $@
+.PHONY: test-assistant
+test-assistant: $(BUILD_DIR)/test-assistant $(BUILD_DIR)/fixtures/curl
+	GTV_TEST_CURL_DIR="$(abspath $(BUILD_DIR))/fixtures" $(BUILD_DIR)/test-assistant
+
+$(BUILD_DIR)/fixtures/gotiengviet-assistant: tests/fake_assistant.c
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(CORE_LIBS) -o $@

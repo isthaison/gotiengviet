@@ -12,6 +12,10 @@ static gboolean verify_setup(gpointer data) {
     g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry_url)),==,"http://localhost:55603");
     g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port)),==,55603);
     g_assert_cmpstr(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)),==,"qwen2:1.5b");
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_port),55604);
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(entry_url)),==,"http://localhost:55604");
+    gtk_entry_set_text(GTK_ENTRY(entry_url),"http://127.0.0.1:55605");
+    g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port)),==,55605);
     gtk_main_quit();
     return G_SOURCE_REMOVE;
 }

@@ -140,6 +140,22 @@ Giấy phép: [MIT](LICENSE).
 
 Gợi ý kết hợp liên kết cụm từ với cosine similarity của tối đa tám từ gần nhất; từ càng gần có trọng số càng cao. Liên kết cụm từ trực tiếp được ưu tiên hơn từ chỉ tương tự về chủ đề. Bộ vector hiện là bảng 16 chiều nhỏ được khai báo trong mã C, chưa phải mô hình embedding được huấn luyện trên kho văn bản lớn.
 
-Tiền tố chưa gõ dấu vẫn tìm được từ có dấu (`công nghệ` + `thong` → `thông tin`); dấu đã gõ được tôn trọng. Kiểu chữ theo tiền tố (`Ch` → `Chào`, `CH` → `CHÀO`), không lấy theo chữ đầu của câu trước. Bộ xếp hạng chuẩn hóa Unicode NFC/NFD, bỏ khoảng trắng thừa, không dùng lại ngữ cảnh trước dấu kết thúc câu, không gợi ý lại chính từ đã hoàn thành.
+Tiền tố chưa gõ dấu vẫn tìm được từ có dấu (`công nghệ` + `thong` → `thông tin`); dấu đã gõ được tôn trọng. Gợi ý giữ cách viết trong từ điển, không tự chuyển sang chữ hoa theo tiền tố (`Ch` hoặc `CH` đều gợi ý `chào`). Bộ xếp hạng chuẩn hóa Unicode NFC/NFD, bỏ khoảng trắng thừa, không dùng lại ngữ cảnh trước dấu kết thúc câu, không gợi ý lại chính từ đã hoàn thành.
 
 Trong IBus, gợi ý ngữ cảnh đứng trước gợi ý sửa chính tả khi đang gõ một phần từ. Danh sách được khử trùng và giới hạn năm mục. Không có request mạng trong đường xử lý phím này.
+
+### Win+T: viết lại và dịch với Ollama (Linux)
+
+Nhấn **Win+T** khi GoTiengViet đang hoạt động: bộ gõ tự lấy đoạn đang chọn hoặc nội dung trước con trỏ cùng chữ đang gõ dở, rồi xử lý theo lựa chọn gần nhất. Kết quả hiện ngay tại ô nhập trong bảng của IBus, không chuyển focus sang cửa sổ khác. **Enter** thay câu gốc, **Esc** hủy, **Tab** đổi giữa viết lại và dịch rồi xử lý lại. Nội dung và con trỏ phải còn khớp với lúc bắt đầu; nếu bạn đã sửa câu thì không ghi đè.
+
+Với ô nhập không cung cấp surrounding text nhưng có ID focus, bộ gõ có thể thay phần văn bản vừa gõ bằng các sự kiện Backspace qua IBus rồi chèn kết quả. Chỉ dùng phần bộ gõ đã ghi nhận trong ô hiện tại, tối đa 512 ký tự thông thường; không dùng cho emoji, dấu Unicode tách rời hoặc nhiều dòng. Gõ tiếp, đổi ô hoặc di chuyển con trỏ sẽ hủy kết quả cũ. Khả năng nhận phím được chuyển tiếp còn phụ thuộc ứng dụng.
+
+Nếu không có đủ thông tin để thay, mở cửa sổ gọn có nội dung gốc thu lại trong mục “Nội dung gốc”. Enter ở đây **sao chép** kết quả; không giả định mọi ô nhập Linux đều hỗ trợ thay tự động. Trường mật khẩu/PIN không kích hoạt trợ lý.
+
+Mặc định là **Viết lại**. Chạy `gotiengviet-assistant` để chọn **Dịch** và ngôn ngữ đích; thao tác/ngôn ngữ được nhớ trong `assistant.conf`, không lưu nội dung câu vào file này. Cửa sổ cho sửa kết quả; Shift+Enter xuống dòng, Esc hủy.
+
+Dùng model và URL Ollama trong Cài đặt GoTiengViet; Ollama cần chạy và model được tải sẵn. Yêu cầu chạy nền, tối đa 120 giây. Win+T gửi nội dung tới URL đã cấu hình theo thao tác gần nhất. Chất lượng phụ thuộc model.
+
+Win+T là phím tắt của engine IBus, không phải phím tắt toàn hệ thống. Có thể chạy `gotiengviet-assistant` khi dùng English (US) hoặc khi desktop giữ tổ hợp phím này; ở chế độ mở trực tiếp, Enter sao chép kết quả.
+
+Kiểm thử: `make test-ibus` và `make test-assistant` (cần `broadwayd`).

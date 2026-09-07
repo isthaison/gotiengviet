@@ -275,22 +275,6 @@ static GPtrArray *context_tokens(const gchar *text){
     g_string_free(word,TRUE);
     return tokens;
 }
-static gchar *format_casing(const gchar *prefix, const gchar *word){
-    gboolean any=FALSE, all_upper=TRUE;
-    for(const gchar *p=prefix;*p;p=g_utf8_next_char(p)){
-        gunichar c=g_utf8_get_char(p);
-        if(g_unichar_isalpha(c)){any=TRUE;if(!g_unichar_isupper(c)) all_upper=FALSE;}
-    }
-    if(any && all_upper && g_utf8_strlen(prefix,-1)>1) return g_utf8_strup(word,-1);
-    if(*prefix && g_unichar_isupper(g_utf8_get_char(prefix))){
-        GString *out=g_string_new("");
-        g_string_append_unichar(out,g_unichar_toupper(g_utf8_get_char(word)));
-        g_string_append(out,g_utf8_next_char(word));
-        return g_string_free(out,FALSE);
-    }
-    return g_strdup(word);
-}
-
 GPtrArray *gtv_vector_predict_next(const gchar *context, const gchar *prefix, guint max_results){
     GPtrArray *results=g_ptr_array_new_with_free_func(g_free);
     if(!max_results || !context || !g_utf8_validate(context,-1,NULL) ||
@@ -330,7 +314,7 @@ GPtrArray *gtv_vector_predict_next(const gchar *context, const gchar *prefix, gu
     for(guint i=0;i<cands->len && results->len<max_results;i++){
         const VectorCand *cand=&g_array_index(cands,VectorCand,i);
         /* A completed word is not a completion suggestion. */
-        if(strcmp(cand->word,pfx)) g_ptr_array_add(results,format_casing(typed,cand->word));
+        if(strcmp(cand->word,pfx)) g_ptr_array_add(results,g_strdup(cand->word));
     }
 done:
     for(guint i=0;i<cands->len;i++) g_free(g_array_index(cands,VectorCand,i).word);

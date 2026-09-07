@@ -297,34 +297,6 @@ void add_candidate_unique(GPtrArray *out, const char *cand){
     g_ptr_array_add(out, g_strdup(cand));
 }
 
-/* Áp dụng kiểu chữ hoa/thường của từ gốc lên từ gợi ý */
-static gchar *apply_casing(const char *orig, const char *cand){
-    if(!orig || !cand) return g_strdup(cand ? cand : "");
-    glong olen = 0, clen = 0;
-    gunichar *ou = g_utf8_to_ucs4(orig, -1, NULL, &olen, NULL);
-    gunichar *cu = g_utf8_to_ucs4(cand, -1, NULL, &clen, NULL);
-    if(!ou || !cu){
-        g_free(ou); g_free(cu);
-        return g_strdup(cand);
-    }
-    gboolean all_upper = TRUE;
-    gboolean first_upper = g_unichar_isupper(ou[0]);
-    for(glong i=0; i<olen; i++){
-        if(g_unichar_isalpha(ou[i]) && !g_unichar_isupper(ou[i])){
-            all_upper = FALSE;
-            break;
-        }
-    }
-    if(all_upper && olen > 1){
-        for(glong i=0; i<clen; i++) cu[i] = g_unichar_toupper(cu[i]);
-    } else if(first_upper && clen > 0){
-        cu[0] = g_unichar_toupper(cu[0]);
-    }
-    gchar *res = g_ucs4_to_utf8(cu, clen, NULL, NULL, NULL);
-    g_free(ou); g_free(cu);
-    return res ? res : g_strdup(cand);
-}
-
 typedef struct {
     char *word;
     int score;
@@ -592,13 +564,11 @@ GPtrArray* get_suggestions(const char *utf8){
         g_free(du);
     }
 
-    /* 7. Sắp xếp theo điểm và trích xuất top 5 với định dạng chữ hoa/thường nguyên bản */
+    /* 7. Return dictionary spelling without automatic capitalization. */
     g_array_sort(items, compare_scored_cand);
     for(guint i=0; i<items->len && out->len < 5; i++){
         ScoredCand *ci = &g_array_index(items, ScoredCand, i);
-        gchar *cased = apply_casing(utf8, ci->word);
-        add_candidate_unique(out, cased);
-        g_free(cased);
+        add_candidate_unique(out, ci->word);
     }
 
     /* Dọn dẹp */

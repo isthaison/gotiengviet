@@ -177,7 +177,10 @@ int tray_run(int argc, char *argv[]){
 
 static GtkWidget *rb_telex, *rb_vni, *cb_modern, *cb_spell;
 static GtkWidget *lbl_preview;
-static GtkWidget *cb_ai, *combo_model, *entry_url, *spin_port, *lbl_ai_status, *progress_ai, *btn_download;
+static GtkWidget *cb_ai, *combo_model, *entry_url, *spin_port, *lbl_ai_status, *progress_ai;
+static int model_wait_left = 0;
+static void auto_install_ollama(void);
+static void ensure_model_present(void);
 static GtkWidget *log_scroll = NULL, *log_view = NULL;
 static GtkTextBuffer *log_buf = NULL;
 static guint log_timer_id = 0;
@@ -187,6 +190,9 @@ static char active_log_path[256] = "/tmp/ollama_serve.log";
 static int serve_wait_left = 0;
 static char *config_path;
 static gboolean download_in_progress = FALSE;
+static int model_wait_left = 0;
+static void auto_install_ollama(void);
+static void ensure_model_present(void);
 
 static void update_preview(){
     gboolean modern = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_modern));
@@ -302,6 +308,7 @@ static gboolean check_serve_ready(gpointer data){
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
         ai_log(msg);
         serve_wait_left=0;
+        ensure_model_present();
         return FALSE;
     }
     if(--serve_wait_left <= 0){
@@ -320,11 +327,11 @@ static void ensure_ollama_serve(){
         snprintf(msg, sizeof(msg), "Ollama đang chạy ở port %d — sẵn sàng gợi ý.", port);
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
         ai_log(msg);
+        ensure_model_present();
         return;
     }
     if(!g_find_program_in_path("ollama")){
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Chưa cài Ollama — bấm nút 'Cài Ollama' bên dưới để cài trong app.");
-        ai_log("Chưa có lệnh 'ollama'. Bấm nút 'Cài Ollama' để cài tự động (hỏi mật khẩu root 1 lần).");
+        auto_install_ollama();
         return;
     }
     char msg[256];
@@ -359,9 +366,14 @@ static void on_install_exit(GPid pid, gint status, gpointer data){
     g_spawn_close_pid(pid);
     if(pid == install_pid) install_pid = 0;
     if(status == 0){
-        ai_log("Cài Ollama xong. Tự khởi động serve...");
-        snprintf(active_log_path, sizeof(active_log_path), "/tmp/ollama_serve.log");
-        ensure_ollama_serve();
+        ai_log("Cài Ollama xong.");
+        if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai))){
+            ai_log("Tự khởi động serve...");
+            snprintf(active_log_path, sizeof(active_log_path), "/tmp/ollama_serve.log");
+            ensure_ollama_serve();
+        } else {
+            ai_log("AI đã tắt trong lúc cài — bỏ qua khởi động serve.");
+        }
     } else {
         char msg[512];
         snprintf(msg, sizeof(msg), "Cài Ollama thất bại (mã %d). Xem %s", status, active_log_path);
@@ -370,15 +382,14 @@ static void on_install_exit(GPid pid, gint status, gpointer data){
     }
 }
 
-static void on_install_clicked(GtkWidget *w, gpointer data){
-    (void)w; (void)data;
+static void auto_install_ollama(void){
     if(g_find_program_in_path("ollama")){
-        ai_log("Ollama đã được cài — bỏ qua.");
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Ollama đã có. Check 'Bật AI' để tự chạy serve.");
+        ai_log("Ollama đã được cài.");
         return;
     }
     if(install_pid != 0){
         ai_log("Đang cài Ollama, vui lòng đợi...");
+        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang cài Ollama — xem log bên dưới.");
         return;
     }
     FILE *lf = fopen("/tmp/ollama_install.log", "w");
@@ -408,6 +419,128 @@ static void on_install_clicked(GtkWidget *w, gpointer data){
     }
     install_pid = pid;
     g_child_watch_add(pid, on_install_exit, NULL);
+}
+
+/* Model id đang chọn, cắt nhãn hiển thị sau dấu cách ("qwen2:0.5b (~400MB)" -> "qwen2:0.5b"). */
+static gchar *current_model_id(void){
+    const char *id = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)));
+    if(!id || !*id){ g_free((gpointer)id); return g_strdup("qwen2:0.5b"); }
+    char *sp = strchr(id, ' ');
+    if(sp) *sp = 0;
+    return (gchar *)id;
+}
+static gboolean model_name_ok(const char *model){
+    if(!model || !*model) return FALSE;
+    for(const char *p = model; *p; p++){
+        if(!g_ascii_isalnum(*p) && *p!=':' && *p!='.' && *p!='_' && *p!='-') return FALSE;
+    }
+    return TRUE;
+}
+/* Base URL từ ô URL, bỏ '/' thừa cuối. */
+static gchar *tags_url(void){
+    const char *raw = gtk_entry_get_text(GTK_ENTRY(entry_url));
+    if(!raw || !*raw) return NULL;
+    if(strpbrk(raw, "' \t\r\n")) return NULL;
+    gchar *base = g_strdup(raw);
+    gsize len = strlen(base);
+    while(len > 0 && base[len-1] == '/'){ base[--len] = 0; }
+    if(!*base){ g_free(base); return NULL; }
+    gchar *url = g_strconcat(base, "/api/tags", NULL);
+    g_free(base);
+    return url;
+}
+static void on_models_checked(GPid pid, gint status, gpointer data);
+static void query_models_async(void){
+    gchar *url = tags_url();
+    if(!url) return;
+    gchar *quoted = g_shell_quote(url);
+    g_free(url);
+    char shcmd[1024];
+    snprintf(shcmd, sizeof(shcmd), "curl -s -m 5 %s -o /tmp/ollama_models.json 2>/dev/null", quoted);
+    g_free(quoted);
+    gchar *argv[] = {"sh", "-c", shcmd, NULL};
+    GError *err = NULL;
+    GPid pid = 0;
+    if(!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, &err)){
+        g_clear_error(&err);
+        return;
+    }
+    g_child_watch_add(pid, on_models_checked, NULL);
+}
+static gboolean check_model_ready(gpointer data){
+    (void)data;
+    query_models_async();
+    return FALSE;
+}
+/* Tự kiểm tra model đã có chưa, thiếu thì pull nền rồi báo khi xong. */
+static void ensure_model_present(void){
+    if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai))) return;
+    if(download_in_progress) return;
+    gchar *model = current_model_id();
+    if(!strcmp(model, "rule")){ g_free(model); return; }
+    if(!model_name_ok(model)){
+        ai_log("Tên model không hợp lệ, bỏ qua tự tải.");
+        g_free(model);
+        return;
+    }
+    g_free(model);
+    model_wait_left = 40;
+    query_models_async();
+}
+static void on_models_checked(GPid pid, gint status, gpointer data){
+    (void)data;
+    g_spawn_close_pid(pid);
+    if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai))){ download_in_progress = FALSE; return; }
+    gchar *model = current_model_id();
+    if(!model || !strcmp(model, "rule")){ g_free(model); download_in_progress = FALSE; return; }
+    gboolean present = FALSE;
+    gchar *contents = NULL;
+    if(g_file_get_contents("/tmp/ollama_models.json", &contents, NULL, NULL)){
+        gchar *needle = g_strdup_printf("\"name\":\"%s", model);
+        present = strstr(contents, needle) != NULL;
+        g_free(needle);
+        g_free(contents);
+    }
+    if(present){
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Model %s đã sẵn sàng.", model);
+        gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
+        ai_log(msg);
+        download_in_progress = FALSE;
+        model_wait_left = 0;
+        g_free(model);
+        return;
+    }
+    if(!download_in_progress){
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Model %s chưa có — tự tải nền, xong sẽ báo.", model);
+        gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
+        ai_log(msg);
+        /* URL pull lấy từ ô URL để đúng port/host. */
+        char pull[1024];
+        {
+            const char *raw = gtk_entry_get_text(GTK_ENTRY(entry_url));
+            gchar *base = g_strdup(raw ? raw : "");
+            gsize blen = strlen(base);
+            while(blen > 0 && base[blen-1] == '/'){ base[--blen] = 0; }
+            snprintf(pull, sizeof(pull), "curl -s -X POST %s/api/pull -d '{\"name\":\"%s\"}' -H 'Content-Type: application/json' > /tmp/ollama_pull.log 2>&1 &",
+                *base ? base : "http://localhost:55602", model);
+            g_free(base);
+        }
+        run_shell(pull);
+        download_in_progress = TRUE;
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_ai), 0.0);
+        g_timeout_add(100, update_progress, NULL);
+    }
+    g_free(model);
+    if(--model_wait_left > 0){
+        g_timeout_add(15000, check_model_ready, NULL);
+    } else {
+        download_in_progress = FALSE;
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_ai), 1.0);
+        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Chờ model quá lâu — kiểm tra mạng/dung lượng rồi bật AI lại.");
+        ai_log("Chờ model quá 10 phút, dừng kiểm tra. Bật AI lại để thử tiếp.");
+    }
 }
 
 static void on_ai_toggled(GtkWidget *w, gpointer data){

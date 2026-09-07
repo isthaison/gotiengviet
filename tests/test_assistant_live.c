@@ -7,6 +7,7 @@ static GtkWidget *entry;
 static gchar *expected;
 static GtkWidget *probe_window;
 static gboolean passed;
+static gboolean uppercase;
 static gboolean finish(gpointer unused){
     passed=expected && !strcmp(gtk_entry_get_text(GTK_ENTRY(entry)),expected);
     g_print("Ctrl+T / Ollama / Enter / GTK text equality: %s\n",passed?"PASS":"FAIL");
@@ -23,21 +24,35 @@ static gboolean accept(gpointer unused){
     ibus_input_context_process_key_event(context,IBUS_Return,0,0);return G_SOURCE_REMOVE;
 }
 static void auxiliary(IBusInputContext *ctx,IBusText *text,gboolean visible,gpointer unused){
+    g_print("Auxiliary visible=%d bytes=%zu\n",visible,strlen(text->text));
     const gchar *footer=strstr(text->text,"\nEnter: thay câu");
-    if(visible && footer && !expected){expected=g_strndup(text->text,footer-text->text);g_idle_add(accept,NULL);}
+    if(visible && footer && !expected){
+        const gchar *source=uppercase ? "XIN CHÀO " : "xin chào ";
+        if(strcmp(gtk_entry_get_text(GTK_ENTRY(entry)),source)){
+            g_printerr("Source did not match the complete typed sample.\n");gtk_main_quit();return;
+        }
+        expected=g_strndup(text->text,footer-text->text);g_idle_add(accept,NULL);}
+}
+static gboolean type_sample(gpointer unused){
+    IBusEngineDesc *desc=ibus_input_context_get_engine(context);
+    g_print("Probe engine: %s\n",desc?ibus_engine_desc_get_name(desc):"none");
+    if(desc)g_object_unref(desc);
+    const gchar *keys=uppercase ? "XIN CHAOF " : "xin chaof ";
+    for(const gchar *p=keys;*p;p++)ibus_input_context_process_key_event(context,*p,0,0);
+    gboolean handled=ibus_input_context_process_key_event(context,IBUS_t,0,IBUS_CONTROL_MASK);
+    g_print("Ctrl+T handled: %d\n",handled);
+    ibus_input_context_process_key_event(context,IBUS_t,0,IBUS_CONTROL_MASK|IBUS_RELEASE_MASK);
+    return G_SOURCE_REMOVE;
 }
 static gboolean begin(gpointer unused){
     if(!gtk_window_is_active(GTK_WINDOW(probe_window))){g_printerr("Fixture did not get desktop focus; no input sent.\n");gtk_main_quit();return G_SOURCE_REMOVE;}
     ibus_input_context_focus_in(context);ibus_input_context_set_engine(context,"gotiengviet");
-    const gchar *keys="xin chaof ";
-    for(const gchar *p=keys;*p;p++)ibus_input_context_process_key_event(context,*p,0,0);
-    ibus_input_context_process_key_event(context,IBUS_Control_L,0,0);
-    ibus_input_context_process_key_event(context,IBUS_t,0,IBUS_CONTROL_MASK);
-    ibus_input_context_process_key_event(context,IBUS_t,0,IBUS_CONTROL_MASK|IBUS_RELEASE_MASK);
+    g_timeout_add(500,type_sample,NULL);
     return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer unused){g_printerr("Timed out waiting for replacement.\n");gtk_main_quit();return G_SOURCE_REMOVE;}
 int main(int argc,char **argv){
+    uppercase=argc>1 && !strcmp(argv[1],"--uppercase");
     g_setenv("GTK_IM_MODULE","gtk-im-context-simple",TRUE);gtk_init(&argc,&argv);ibus_init();
     IBusBus *bus=ibus_bus_new();if(!ibus_bus_is_connected(bus))return 2;
     context=ibus_bus_create_input_context(bus,"gtv-assistant-live-fixture");if(!context)return 3;

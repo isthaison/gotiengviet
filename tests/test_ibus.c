@@ -40,6 +40,8 @@ static void application_signal(GDBusConnection *connection,const gchar *sender,c
 }
 static GtvTextTarget *no_accessible_target(const gchar *a,const gchar *b){return NULL;}
 int main(int argc,char **argv) {
+    gchar *test_path=g_strconcat(g_getenv("GTV_TEST_CURL_DIR"),G_SEARCHPATH_SEPARATOR_S,g_getenv("PATH"),NULL);
+    g_setenv("PATH",test_path,TRUE);g_free(test_path);
     g_test_init(&argc,&argv,NULL);
     select_text_target=no_accessible_target;
     gchar *directory=g_dir_make_tmp("gotiengviet-ibus-test-XXXXXX",NULL);
@@ -80,13 +82,25 @@ int main(int argc,char **argv) {
     g_assert_cmpstr(e->preedit->str,==,"");
     /* Partial syllables can be marked misspelled but must retain contextual completions. */
     ibus_gotiengviet_engine_reset(e);
-    e->spellcheck=TRUE;e->mode_telex=TRUE;
+    e->spellcheck=TRUE;e->mode_telex=TRUE;e->config.ai_enabled=TRUE;
     g_string_assign(e->sentence_context,"xin");
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_c,0,0));
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_h,0,0));
+    g_assert_cmpint(e->n_candidates,==,0);
+    g_assert_cmpuint(e->suggest_timer,>,0);g_assert_null(e->ai_cancellable);
+    for(guint i=0;i<150 && !e->n_candidates;i++){while(g_main_context_iteration(NULL,FALSE));g_usleep(10000);}
     g_assert_cmpint(e->n_candidates,>,0);
     g_assert_cmpstr(e->candidates[0],==,"chào");
+    e->config.ai_enabled=FALSE;
     g_assert_cmpint(e->n_candidates,<=,5);
+    /* Only explicitly accepted AI candidates are persisted. */
+    g_assert_false(word_valid(e,"kông"));
+    e->candidates_from_ai=FALSE;learn_candidate(e,"kông");
+    g_assert_false(word_valid(e,"kông"));
+    e->candidates_from_ai=TRUE;learn_candidate(e,"kông");
+    g_assert_true(word_valid(e,"KÔNG"));
+    g_clear_pointer(&e->learned_words,g_hash_table_unref);
+    g_assert_true(word_valid(e,"kông"));
     /* Modifier/lock keys must pass through without committing the syllable. */
     ibus_gotiengviet_engine_reset(e);
     e->spellcheck=FALSE;
@@ -131,8 +145,7 @@ int main(int argc,char **argv) {
         g_assert_cmpstr(input,==,snapshots[i].want);g_free(input);
     }
     gchar *capture=g_build_filename(directory,"assistant-input",NULL);
-    gchar *test_path=g_strconcat(g_getenv("GTV_TEST_CURL_DIR"),G_SEARCHPATH_SEPARATOR_S,g_getenv("PATH"),NULL);
-    g_setenv("PATH",test_path,TRUE);g_free(test_path);
+
     g_setenv("GTV_ASSISTANT_CAPTURE",capture,TRUE);
     ibus_gotiengviet_engine_reset(e);g_string_assign(e->typed_text,"Tôi ");g_string_assign(e->preedit,"được");
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_CONTROL_MASK));
@@ -178,6 +191,10 @@ int main(int argc,char **argv) {
         "/org/freedesktop/IBus/Engine/Test",NULL,G_DBUS_SIGNAL_FLAGS_NONE,application_signal,NULL,NULL);
     e->assistant_inline=TRUE;
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Return,0,0));
+    /* Enter must return before any callback into the application. */
+    g_assert_nonnull(e->replacement);
+    g_assert_true(e->replacing);
+    g_assert_cmpuint(replacement_signals,==,0);
     for(guint i=0;i<100 && replacement_signals<2;i++){
         while(g_main_context_iteration(NULL,FALSE));g_usleep(10000);
     }
@@ -200,6 +217,12 @@ int main(int argc,char **argv) {
     g_assert_false(backspace_text_supported("😊"));g_assert_false(backspace_text_supported("a\xcc\x81"));
     e->cursor_known=TRUE;e->cursor_expected=FALSE;e->last_cursor=(IBusRectangle){0,0,1,1};
     e->replacement=g_strdup("stale");
+    /* A multiline selection moves the caret as part of the replacement itself. */
+    e->replacing=TRUE;
+    ibus_gotiengviet_engine_set_cursor_location(engine,25,0,1,1);
+    g_assert_false(e->assistant_cancelled);g_assert_nonnull(e->replacement);
+    g_assert_cmpstr(e->typed_text->str,==,"Xin chào.");
+    e->replacing=FALSE;
     ibus_gotiengviet_engine_set_cursor_location(engine,50,0,1,1);
     g_assert_true(e->assistant_cancelled);g_assert_null(e->replacement);g_assert_cmpstr(e->typed_text->str,==,"");
     /* Typing while inference runs invalidates that result without swallowing input. */
@@ -214,6 +237,9 @@ int main(int argc,char **argv) {
     g_assert_true(apply_replacement(e));g_assert_nonnull(e->replacement);
     g_clear_pointer(&e->replacement,g_free);
     gint start,end;
+    g_assert_true(gtv_text_range("Xin chào\xc2\xa0",9,9,"Xin chào ",&start,&end));
+    g_assert_cmpint(start,==,0);g_assert_cmpint(end,==,9);
+    g_assert_false(gtv_text_range("Xin chào\n",9,9,"Xin chào ",&start,&end));
     g_assert_true(gtv_text_range("Đầu câu: Xin chào.",18,18,"Xin chào.",&start,&end));
     g_assert_cmpint(start,==,9);g_assert_cmpint(end,==,18);
     g_assert_false(gtv_text_range("Khác",4,4,"Xin chào.",&start,&end));
@@ -223,6 +249,7 @@ int main(int argc,char **argv) {
     g_test_dbus_down(test_bus);g_object_unref(test_bus);
     const gchar *names[]={"config","ai.conf"};
     for(guint i=0;i<G_N_ELEMENTS(names);i++) {gchar *path=g_build_filename(config_dir,names[i],NULL);g_remove(path);g_free(path);}
+    gchar *learned=g_build_filename(config_dir,"learned-words.txt",NULL);g_remove(learned);g_free(learned);
     g_rmdir(config_dir);g_rmdir(directory);g_free(config_dir);g_free(directory);
     return 0;
 }

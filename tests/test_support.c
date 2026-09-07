@@ -78,33 +78,28 @@ static void test_spelling(void) {
     g_assert_false(spell_word_valid("ge"));
 
     GtvConfig config={.ai_enabled=FALSE};
-    g_assert_true(gtv_ai_available(&config));
+    g_assert_false(gtv_ai_available(&config));
     GPtrArray *suggestions=gtv_ai_suggest(&config,"kông","");
-    g_assert_cmpuint(suggestions->len,>,0);
-    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"công");
+    g_assert_cmpuint(suggestions->len,==,0);
     g_ptr_array_unref(suggestions);
 
     /* Suggestions no longer capitalize based on the input. */
     suggestions=gtv_ai_suggest(&config,"Kông","");
-    g_assert_cmpuint(suggestions->len,>,0);
-    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"công");
+    g_assert_cmpuint(suggestions->len,==,0);
     g_ptr_array_unref(suggestions);
 
     suggestions=gtv_ai_suggest(&config,"KÔNG","");
-    g_assert_cmpuint(suggestions->len,>,0);
-    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"công");
+    g_assert_cmpuint(suggestions->len,==,0);
     g_ptr_array_unref(suggestions);
 
     /* Test voiceless stop correction */
     suggestions=gtv_ai_suggest(&config,"vièt","");
-    g_assert_cmpuint(suggestions->len,>,0);
-    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"việt");
+    g_assert_cmpuint(suggestions->len,==,0);
     g_ptr_array_unref(suggestions);
 
     /* Test hoăc -> hoặc */
     suggestions=gtv_ai_suggest(&config,"hoăc","");
-    g_assert_cmpuint(suggestions->len,>,0);
-    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"hoặc");
+    g_assert_cmpuint(suggestions->len,==,0);
     g_ptr_array_unref(suggestions);
 
     suggestions=gtv_ai_suggest(&config,"được","");
@@ -163,7 +158,7 @@ static void test_ollama(void) {
     g_assert_cmpuint(out->len,==,1);g_assert_cmpstr(g_ptr_array_index(out,0),==,"không");g_ptr_array_unref(out);
     config.url="http://malformed";
     out=gtv_ai_suggest(&config,"kông","a\"b");
-    g_assert_cmpuint(out->len,>,0);g_ptr_array_unref(out);
+    g_assert_cmpuint(out->len,==,0);g_ptr_array_unref(out);
     config.url="http://fail";
     g_assert_false(gtv_ai_available(&config));
     out=gtv_ai_suggest(&config,"được","");g_assert_cmpuint(out->len,==,0);g_ptr_array_unref(out);
@@ -181,11 +176,11 @@ static void on_async_suggest_done(GObject *src, GAsyncResult *res, gpointer data
 }
 
 static void test_suggest_combined(void) {
-    GtvConfig config = {.ai_enabled = FALSE};
+    GtvConfig config = {.ai_enabled = TRUE,.url="http://localhost:55602",.model="qwen2:0.5b"};
     GPtrArray *s1 = gtv_suggest_combined(&config, "Tôi ", "kông", TRUE);
     g_assert_nonnull(s1);
     g_assert_cmpuint(s1->len, >, 0);
-    g_assert_cmpstr(g_ptr_array_index(s1, 0), ==, "công");
+    g_assert_cmpstr(g_ptr_array_index(s1, 0), ==, "không");
     g_ptr_array_unref(s1);
 
     GPtrArray *s2 = gtv_suggest_combined(&config, "xin", "ch", FALSE);
@@ -200,65 +195,6 @@ static void test_suggest_combined(void) {
         g_main_context_iteration(NULL, TRUE);
     }
     g_assert_true(done);
-}
-
-static void test_vector_prediction(void) {
-    /* Test next-word predictions without prefix */
-    GPtrArray *p1 = gtv_vector_predict_next("xin", "", 5);
-    g_assert_nonnull(p1);
-    g_assert_cmpuint(p1->len, >, 0);
-    g_assert_cmpstr(g_ptr_array_index(p1, 0), ==, "chào");
-    g_ptr_array_unref(p1);
-
-    GPtrArray *p2 = gtv_vector_predict_next("chúc mừng", "", 5);
-    g_assert_nonnull(p2);
-    g_assert_cmpuint(p2->len, >, 0);
-    g_assert_cmpstr(g_ptr_array_index(p2, 0), ==, "năm mới");
-    g_ptr_array_unref(p2);
-
-    /* Test next-word prediction with prefix filter */
-    GPtrArray *p3 = gtv_vector_predict_next("công nghệ", "th", 5);
-    g_assert_nonnull(p3);
-    g_assert_cmpuint(p3->len, >, 0);
-    g_assert_cmpstr(g_ptr_array_index(p3, 0), ==, "thông tin");
-    g_ptr_array_unref(p3);
-
-    /* Test fallback through gtv_predict_next */
-    GtvConfig config = {.ai_enabled = FALSE};
-    GPtrArray *p4 = gtv_predict_next(&config, "thành phố", "");
-    g_assert_nonnull(p4);
-    g_assert_cmpuint(p4->len, >, 0);
-    g_assert_cmpstr(g_ptr_array_index(p4, 0), ==, "hồ chí minh");
-    g_ptr_array_unref(p4);
-}
-
-static void test_vector_normalization(void) {
-    const struct {const gchar *context,*prefix,*want;} cases[]={
-        {"  công\t\tnghệ  ","thong","thông tin"},
-        {"xin\302\240","chao","chào"},
-        {"Xin","","chào"}, {"xin","CH","chào"}, {"xin","Ch","chào"},
-        {"ho\314\202\314\200 chi\314\201","m","minh"},
-        {"học abc","t","tập"}, {"xin. học","t","tập"}
-    };
-    for(guint i=0;i<G_N_ELEMENTS(cases);i++){
-        GPtrArray *out=gtv_vector_predict_next(cases[i].context,cases[i].prefix,3);
-        g_assert_cmpuint(out->len,>,0);
-        g_assert_cmpstr(g_ptr_array_index(out,0),==,cases[i].want);
-        g_assert_cmpuint(out->len,<=,3);
-        for(guint j=0;j<out->len;j++) for(guint k=j+1;k<out->len;k++)
-            g_assert_cmpstr(g_ptr_array_index(out,j),!=,g_ptr_array_index(out,k));
-        g_ptr_array_unref(out);
-    }
-    const struct {const gchar *context,*prefix;guint limit;} empty[]={
-        {"xin.","",5},{"xin。", "",5},{"xin\n", "",5},
-        {"xin","chá",5},{"xin","chào",5},{"xin","",0},
-        {NULL,"",5},{"\xff","",5},{"xin","\xff",5},{"   ","",5},
-        {"học a b c d e f g h", "t",5}
-    };
-    for(guint i=0;i<G_N_ELEMENTS(empty);i++){
-        GPtrArray *out=gtv_vector_predict_next(empty[i].context,empty[i].prefix,empty[i].limit);
-        g_assert_cmpuint(out->len,==,0);g_ptr_array_unref(out);
-    }
 }
 
 static void test_macro_and_emoji(void) {
@@ -371,8 +307,6 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/ollama",test_ollama);
     g_test_add_func("/support/suggest-combined",test_suggest_combined);
     g_test_add_func("/support/spelling",test_spelling);
-    g_test_add_func("/support/vector-prediction",test_vector_prediction);
-    g_test_add_func("/support/vector-normalization",test_vector_normalization);
     g_test_add_func("/support/macro-and-emoji",test_macro_and_emoji);
     g_test_add_func("/algorithm/order-independence",test_order_independence);
     g_test_add_func("/algorithm/random-input",test_random_input);

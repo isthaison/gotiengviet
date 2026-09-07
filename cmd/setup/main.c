@@ -562,7 +562,7 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     GtkWidget *box_ai = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_container_set_border_width(GTK_CONTAINER(box_ai), 8);
     gtk_container_add(GTK_CONTAINER(f_ai), box_ai);
-    cb_ai = gtk_check_button_new_with_label("Bật AI gợi ý (tự chạy Ollama serve + hiện log bên dưới)");
+    cb_ai = gtk_check_button_new_with_label("Gợi ý Ollama — chờ ngừng gõ 350 ms (debounce)");
     gtk_box_pack_start(GTK_BOX(box_ai), cb_ai, FALSE, FALSE, 0);
     g_signal_connect(cb_ai, "toggled", G_CALLBACK(on_ai_toggled), NULL);
     GtkWidget *hbox_ai = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);

@@ -81,3 +81,11 @@ $(BUILD_DIR)/test-text-target-live: tests/test_text_target_live.c ibus/text_targ
 # Explicit opt-in: briefly opens an isolated text field on the current desktop.
 test-text-target-live: $(BUILD_DIR)/test-text-target-live $(BUILD_DIR)/text-target-fixture
 	GTV_TEST_TEXT_FIXTURE="$(abspath $(BUILD_DIR))/text-target-fixture" $(BUILD_DIR)/test-text-target-live
+
+$(BUILD_DIR)/test-assistant-live: tests/test_assistant_live.c
+	$(CC) $(CFLAGS) $< $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0 ibus-1.0) -o $@
+.PHONY: test-assistant-live
+# Opt-in desktop check: requires the installed engine and configured local Ollama.
+test-assistant-live: $(BUILD_DIR)/test-assistant-live
+	$(BUILD_DIR)/test-assistant-live
+	$(BUILD_DIR)/test-assistant-live --uppercase

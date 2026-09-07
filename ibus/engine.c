@@ -4,7 +4,6 @@
 #include <linux/input-event-codes.h>
 #include <sys/stat.h>
 #include "../engine/internal.h"
-#define ENGINE_NAME "gotiengviet"
 
 #include <stdarg.h>
 static void debug_log(const char *fmt, ...){
@@ -33,7 +32,6 @@ struct _GoTiengVietEngine {
     guint target_cursor, target_anchor, target_length;
     guint replacement_wait;
     gboolean replacing;
-    guint erase_remaining, settle_ticks;
     gchar *insertion;
     GtvTextTarget *verified_target;
     guint verify_attempts;
@@ -41,16 +39,58 @@ struct _GoTiengVietEngine {
     IBusRectangle last_cursor;
     GString *typed_text;
     guint purpose;
-    guint hints;
     gchar **candidates;
     int n_candidates;
     int cand_cursor;
     GtvConfig config;
     GCancellable *ai_cancellable;
     gchar *pending_query;
+    guint suggest_timer;
+    GHashTable *learned_words;
+    gchar *learned_path;
+    gboolean candidates_from_ai;
 };
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
 G_DEFINE_TYPE(IBusGoTiengVietEngine, ibus_gotiengviet_engine, IBUS_TYPE_ENGINE)
+
+static gchar *word_key(const gchar *word){
+    if(!word || !g_utf8_validate(word,-1,NULL))return NULL;
+    gchar *lower=g_utf8_strdown(word,-1),*key=g_utf8_normalize(lower,-1,G_NORMALIZE_NFC);g_free(lower);
+    if(!*key || g_utf8_strlen(key,-1)>64){g_free(key);return NULL;}
+    for(const gchar *p=key;*p;p=g_utf8_next_char(p))if(!g_unichar_isalpha(g_utf8_get_char(p))){g_free(key);return NULL;}
+    return key;
+}
+static void load_learned_words(IBusGoTiengVietEngine *e){
+    if(e->learned_words)return;
+    e->learned_words=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
+    if(!e->learned_path)e->learned_path=g_build_filename(g_get_user_config_dir(),"gotiengviet","learned-words.txt",NULL);
+    gchar *contents=NULL;
+    if(g_file_get_contents(e->learned_path,&contents,NULL,NULL)){
+        gchar **lines=g_strsplit(contents,"\n",10001);
+        for(guint i=0;lines[i] && i<10000;i++){gchar *key=word_key(lines[i]);if(key)g_hash_table_add(e->learned_words,key);}
+        g_strfreev(lines);g_free(contents);
+    }
+}
+static gboolean word_valid(IBusGoTiengVietEngine *e,const gchar *word){
+    load_learned_words(e);gchar *key=word_key(word);
+    gboolean known=key && g_hash_table_contains(e->learned_words,key);g_free(key);
+    return known || spell_word_valid(word);
+}
+static void learn_candidate(IBusGoTiengVietEngine *e,const gchar *candidate){
+    if(!e->candidates_from_ai)return;
+    load_learned_words(e);gboolean changed=FALSE;
+    gchar **words=g_strsplit_set(candidate," \t",-1);
+    for(guint i=0;words[i] && g_hash_table_size(e->learned_words)<10000;i++){
+        gchar *key=word_key(words[i]);if(key)changed=g_hash_table_add(e->learned_words,key) || changed;
+    }
+    g_strfreev(words);if(!changed)return;
+    GString *contents=g_string_new("");GHashTableIter iter;gpointer key;
+    g_hash_table_iter_init(&iter,e->learned_words);
+    while(g_hash_table_iter_next(&iter,&key,NULL)){g_string_append(contents,key);g_string_append_c(contents,'\n');}
+    gchar *directory=g_path_get_dirname(e->learned_path);g_mkdir_with_parents(directory,0700);g_free(directory);
+    if(!g_file_set_contents(e->learned_path,contents->str,contents->len,NULL))debug_log("[dictionary] save failed\n");
+    g_string_free(contents,TRUE);
+}
 
 static void commit_and_remember(IBusEngine *engine,IBusText *text){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
@@ -83,6 +123,7 @@ static void update_context(IBusGoTiengVietEngine *e, const char *committed){
 }
 
 static void clear_candidates(IBusGoTiengVietEngine *e){
+    if(e->suggest_timer){g_source_remove(e->suggest_timer);e->suggest_timer=0;}
     if(e->ai_cancellable){
         g_cancellable_cancel(e->ai_cancellable);
         g_clear_object(&e->ai_cancellable);
@@ -102,6 +143,7 @@ static void hide_suggest(IBusGoTiengVietEngine *e, IBusEngine *engine){
 }
 
 static void show_candidates(IBusGoTiengVietEngine *e, IBusEngine *engine, GPtrArray *sugs){
+    e->candidates_from_ai=FALSE;
     if(e->candidates){
         for(int i=0;i<e->n_candidates;i++) g_free(e->candidates[i]);
         g_free(e->candidates);
@@ -135,11 +177,21 @@ static void on_ai_suggestions_ready(GObject *source, GAsyncResult *res, gpointer
         g_object_unref(e);
         return;
     }
-    if(sugs && e->pending_query && g_strcmp0(e->preedit->str, e->pending_query) == 0 && e->preedit->len > 0){
+    if(sugs && g_task_get_cancellable(G_TASK(res))==e->ai_cancellable && e->pending_query && g_strcmp0(e->preedit->str, e->pending_query) == 0 && e->preedit->len > 0){
         show_candidates(e, (IBusEngine*)e, sugs);
+        e->candidates_from_ai=TRUE;
     }
     if(sugs) g_ptr_array_unref(sugs);
     g_object_unref(e);
+}
+
+static gboolean request_suggestions(gpointer data){
+    IBusGoTiengVietEngine *e=data;e->suggest_timer=0;
+    gboolean bad=e->spellcheck && !word_valid(e,e->preedit->str);
+    e->ai_cancellable=g_cancellable_new();
+    gtv_suggest_combined_async(&e->config,e->sentence_context->str,e->preedit->str,bad,
+        e->ai_cancellable,on_ai_suggestions_ready,g_object_ref(e));
+    return G_SOURCE_REMOVE;
 }
 
 /* Đẩy preedit + gạch đỏ từ sai + bảng gợi ý (Tab chọn, Up/Down di chuyển, Esc bỏ) */
@@ -147,7 +199,7 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
     glong plen=g_utf8_strlen(e->preedit->str, -1);
     debug_log("[push_preedit] str='%s' plen=%ld visible=%d\n", e->preedit->str, plen, visible);
     gboolean is_emoji=(e->preedit->str[0]==':' || e->preedit->str[0]==';' || e->preedit->str[0]=='<');
-    gboolean bad=(!is_emoji && e->spellcheck && plen>=2 && !spell_word_valid(e->preedit->str));
+    gboolean bad=(!is_emoji && e->spellcheck && plen>=2 && !word_valid(e,e->preedit->str));
     IBusText *t=ibus_text_new_from_string(e->preedit->str);
     if(bad) ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_ERROR, 0, (gint)plen);
     else ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_SINGLE, 0, (gint)plen);
@@ -158,6 +210,7 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
         ibus_engine_hide_preedit_text(engine);
     }
 
+    if(e->suggest_timer){g_source_remove(e->suggest_timer);e->suggest_timer=0;}
     if(e->ai_cancellable){
         g_cancellable_cancel(e->ai_cancellable);
         g_clear_object(&e->ai_cancellable);
@@ -176,34 +229,15 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
         return;
     }
 
-    if(e->config.ai_enabled){
-        /* Query Qwen 2 0.5B via Ollama asynchronously so keyboard typing remains 100% smooth */
-        e->pending_query = g_strdup(e->preedit->str);
-        e->ai_cancellable = g_cancellable_new();
-        gtv_suggest_combined_async(&e->config,
-                                   (e->sentence_context && e->sentence_context->len > 0) ? e->sentence_context->str : "",
-                                   e->preedit->str,
-                                   bad,
-                                   e->ai_cancellable,
-                                   on_ai_suggestions_ready,
-                                   g_object_ref(e));
-    } else {
-        /* Offline rule / vector prediction */
-        GPtrArray *sugs = NULL;
-        if(e->spellcheck && e->sentence_context && e->sentence_context->len > 0 && plen >= 1)
-            sugs = gtv_vector_predict_next(e->sentence_context->str, e->preedit->str, 5);
-        if(bad){
-            GPtrArray *corrections = get_suggestions(e->preedit->str);
-            if(!sugs) sugs = g_ptr_array_new_with_free_func(g_free);
-            for(guint i=0; i<corrections->len && sugs->len < 5; i++)
-                add_candidate_unique(sugs, g_ptr_array_index(corrections, i));
-            g_ptr_array_unref(corrections);
-        }
-        show_candidates(e, engine, sugs);
-        if(sugs) g_ptr_array_unref(sugs);
+    show_candidates(e,engine,NULL);
+    if(e->config.ai_enabled && e->purpose!=IBUS_INPUT_PURPOSE_PASSWORD && e->purpose!=IBUS_INPUT_PURPOSE_PIN){
+        e->pending_query=g_strdup(e->preedit->str);
+        e->suggest_timer=g_timeout_add_full(G_PRIORITY_DEFAULT,350,request_suggestions,g_object_ref(e),g_object_unref);
     }
 }
+
 static void ibus_gotiengviet_engine_reset(IBusGoTiengVietEngine *e){
+    if(e->suggest_timer){g_source_remove(e->suggest_timer);e->suggest_timer=0;}
     if(e->ai_cancellable){
         g_cancellable_cancel(e->ai_cancellable);
         g_clear_object(&e->ai_cancellable);
@@ -290,6 +324,25 @@ static gboolean verify_replacement(gpointer data){
     else ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Ứng dụng chưa xác nhận thay câu. Không tự xóa hoặc thử chèn lại."),TRUE);
     gtv_text_target_free(e->verified_target);e->verified_target=NULL;return G_SOURCE_REMOVE;
 }
+static gboolean commit_selected_replacement(gpointer data){
+    IBusGoTiengVietEngine *e=data;
+    gboolean valid=e->replacement && !e->assistant_cancelled && !e->preedit->len
+        && !g_strcmp0(e->focus_id,e->target_id);
+    if(valid && gtv_text_target_ready(e->verified_target)){
+        e->verify_attempts=0;e->cursor_expected=TRUE;
+        g_string_truncate(e->typed_text,0);
+        commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
+        g_clear_pointer(&e->replacement,g_free);
+        ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Đang xác nhận câu đã thay…"),TRUE);
+        g_timeout_add_full(G_PRIORITY_DEFAULT,100,verify_replacement,g_object_ref(e),g_object_unref);
+        return G_SOURCE_REMOVE;
+    }
+    if(valid && ++e->verify_attempts<20)return G_SOURCE_CONTINUE;
+    e->replacing=FALSE;
+    gtv_text_target_free(e->verified_target);e->verified_target=NULL;
+    if(valid)ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Ứng dụng chưa chọn được đầy đủ câu gốc. Nhấn Enter để thử lại."),TRUE);
+    return G_SOURCE_REMOVE;
+}
 static gboolean apply_replacement(gpointer data){
     IBusGoTiengVietEngine *e=data;
     if(++e->replacement_wait>100){
@@ -304,12 +357,8 @@ static gboolean apply_replacement(gpointer data){
     e->verified_target=select_text_target(original,e->replacement);g_free(original);
     debug_log("[assistant-state] selection=%s\n",gtv_text_target_status());
     if(e->verified_target){
-        e->replacing=TRUE;e->verify_attempts=0;e->cursor_expected=TRUE;
-        g_string_truncate(e->typed_text,0);
-        commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
-        g_clear_pointer(&e->replacement,g_free);
-        ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Đang xác nhận câu đã thay…"),TRUE);
-        g_timeout_add_full(G_PRIORITY_DEFAULT,100,verify_replacement,g_object_ref(e),g_object_unref);
+        e->replacing=TRUE;e->verify_attempts=0;
+        g_timeout_add_full(G_PRIORITY_DEFAULT,25,commit_selected_replacement,g_object_ref(e),g_object_unref);
         return G_SOURCE_REMOVE;
     }
     /* Never fall back to unverified Backspaces after a selection/read failure. */
@@ -323,6 +372,17 @@ static gboolean apply_replacement(gpointer data){
     ibus_engine_delete_surrounding_text((IBusEngine*)e,offset,e->target_length);
     commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
     g_clear_pointer(&e->replacement,g_free);
+    return G_SOURCE_REMOVE;
+}
+/* Reply to ProcessKeyEvent before querying the client's accessibility service.
+ * A synchronous IBus client cannot service AT-SPI calls while waiting for Enter. */
+static gboolean accept_replacement(gpointer data){
+    IBusGoTiengVietEngine *e=data;
+    e->replacing=FALSE;
+    if(!e->replacement || e->assistant_cancelled)return G_SOURCE_REMOVE;
+    if(!apply_replacement(e)){
+        if(!e->replacing)ibus_engine_hide_auxiliary_text((IBusEngine*)e);
+    }else ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Không xác nhận được câu gốc trong ô nhập. Ctrl+T để lấy lại câu; Esc để hủy."),TRUE);
     return G_SOURCE_REMOVE;
 }
 static void assistant_closed(GObject *object,GAsyncResult *result,gpointer data){
@@ -446,8 +506,8 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         }
         if((keyval==IBUS_Return || keyval==IBUS_KP_Enter) && bare_key){
             e->replacement_wait=0;
-            if(!apply_replacement(e)){if(!e->replacing)ibus_engine_hide_auxiliary_text(engine);}
-            else ibus_engine_update_auxiliary_text(engine,ibus_text_new_from_string("Không xác nhận được câu gốc trong ô nhập. Ctrl+T để lấy lại câu; Esc để hủy."),TRUE);
+            e->replacing=TRUE;
+            g_timeout_add_full(G_PRIORITY_DEFAULT,25,accept_replacement,g_object_ref(e),g_object_unref);
             return TRUE;
         }
         if(keyval==IBUS_Escape){
@@ -505,6 +565,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     // Tab chọn gợi ý, 1..5 chọn nhanh, Up/Down di chuyển, Enter commit gợi ý, Esc bỏ bảng gợi ý
     if(e->n_candidates>0 && e->candidates){
         if(keyval==IBUS_Tab){
+            learn_candidate(e,e->candidates[e->cand_cursor]);
             g_string_assign(e->preedit, e->candidates[e->cand_cursor]);
             push_preedit(e, engine, e->preedit->len, TRUE);
             return TRUE;
@@ -512,6 +573,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         if(e->mode_telex && ((keyval>=IBUS_1 && keyval<=IBUS_5) || (keyval>=IBUS_KP_1 && keyval<=IBUS_KP_5))){
             int idx = (keyval>=IBUS_1 && keyval<=IBUS_5) ? (keyval - IBUS_1) : (keyval - IBUS_KP_1);
             if(idx < e->n_candidates){
+                learn_candidate(e,e->candidates[idx]);
                 g_string_assign(e->preedit, e->candidates[idx]);
                 gchar *word=expand_word(e->preedit->str);
                 update_context(e, word);
@@ -537,6 +599,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             return TRUE;
         }
         if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
+            learn_candidate(e,e->candidates[e->cand_cursor]);
             g_string_assign(e->preedit, e->candidates[e->cand_cursor]);
             gchar *word=expand_word(e->preedit->str);
             update_context(e, word);
@@ -731,14 +794,14 @@ static void ibus_gotiengviet_engine_set_capabilities(IBusEngine *engine, guint c
 }
 static void ibus_gotiengviet_engine_set_content_type(IBusEngine *engine, guint purpose, guint hints){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    (void)hints;
     debug_log("[set_content_type] engine=%p purpose=%u hints=%u\n", engine, purpose, hints);
     e->purpose = purpose;
-    e->hints = hints;
 }
 static void ibus_gotiengviet_engine_set_cursor_location(IBusEngine *engine, gint x, gint y, gint w, gint h){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     gboolean moved=e->cursor_known && (e->last_cursor.x!=x || e->last_cursor.y!=y);
-    if(moved && !e->cursor_expected){
+    if(moved && !e->cursor_expected && !e->replacing){
         g_string_truncate(e->typed_text,0);
         if(e->target_backspaces && e->assistant_inline){
             e->assistant_cancelled=TRUE;g_clear_pointer(&e->replacement,g_free);
@@ -751,6 +814,7 @@ static void ibus_gotiengviet_engine_candidate_clicked(IBusEngine *engine, guint 
     (void)button; (void)state;
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     if(index < (guint)e->n_candidates && e->candidates){
+        learn_candidate(e,e->candidates[index]);
         g_string_assign(e->preedit, e->candidates[index]);
         gchar *word=expand_word(e->preedit->str);
         update_context(e, word);
@@ -767,6 +831,7 @@ static void ibus_gotiengviet_engine_finalize(GObject *object){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)object;
     clear_candidates(e);
     gtv_config_clear(&e->config);
+    g_clear_pointer(&e->learned_words,g_hash_table_unref);g_free(e->learned_path);
     g_free(e->focus_id);g_free(e->target_id);g_free(e->target_text);g_free(e->replacement);g_free(e->insertion);gtv_text_target_free(e->verified_target);
     g_string_free(e->typed_text,TRUE);
     if(e->preedit) g_string_free(e->preedit,TRUE);
@@ -796,7 +861,6 @@ static void ibus_gotiengviet_engine_init(IBusGoTiengVietEngine *e){
     e->modern=TRUE;
     e->caps=IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
     e->purpose=IBUS_INPUT_PURPOSE_FREE_FORM;
-    e->hints=IBUS_INPUT_HINT_NONE;
     reload_engine_config(e);
 }
 static IBusBus *bus=NULL;

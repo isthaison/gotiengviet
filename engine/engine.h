@@ -14,7 +14,6 @@ typedef struct {
     GtvMode mode;
     gboolean modern, spellcheck;
     GArray *buffer;
-    GPtrArray *suggestions;
 } GtvEngine;
 
 void gtv_init(void);
@@ -28,16 +27,8 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces);
 void gtv_config_load(GtvConfig *config, const gchar *directory);
 gboolean gtv_config_save(const GtvConfig *config, const gchar *directory, GError **error);
 void gtv_config_clear(GtvConfig *config);
-/* Ollama is optional; unavailable/invalid responses fall back to spelling rules. */
+/* Ollama-only suggestions; disabled/unavailable providers return no candidates. */
 gboolean gtv_ai_available(const GtvConfig *config);
 GPtrArray *gtv_ai_suggest(const GtvConfig *config, const gchar *word, const gchar *context);
-/* Offline next-word ranking: phrase transitions + a recency-weighted vector of
- * the last eight words in the current sentence. Accepts NFC/NFD UTF-8 and
- * unaccented prefixes; explicit prefix accents/casing are respected.
- * Returns an owned array, bounded by max_results; invalid UTF-8 gives no results. */
-GPtrArray *gtv_vector_predict_next(const gchar *context, const gchar *prefix, guint max_results);
 GPtrArray *gtv_predict_next(const GtvConfig *config, const gchar *context, const gchar *prefix);
-void gtv_predict_next_async(const GtvConfig *config, const gchar *context, const gchar *prefix,
-                            GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data);
-GPtrArray *gtv_predict_next_finish(GAsyncResult *res, GError **error);
 #endif

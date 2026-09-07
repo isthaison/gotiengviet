@@ -28,13 +28,11 @@ GtvEngine *gtv_engine_new(const GtvConfig *config) {
     engine->modern = config->modern;
     engine->spellcheck = config->spellcheck;
     engine->buffer = g_array_new(FALSE, FALSE, sizeof(gunichar));
-    engine->suggestions = g_ptr_array_new_with_free_func(g_free);
     return engine;
 }
 void gtv_engine_free(GtvEngine *engine) {
     if (!engine) return;
     g_array_unref(engine->buffer);
-    g_ptr_array_unref(engine->suggestions);
     g_free(engine);
 }
 void gtv_engine_reset(GtvEngine *engine) { g_array_set_size(engine->buffer, 0); }
@@ -78,11 +76,6 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
 
         gchar *expanded = expand_word(word);
         g_free(word);
-        g_ptr_array_set_size(engine->suggestions, 0);
-        if (engine->spellcheck && *expanded && !spell_word_valid(expanded)) {
-            g_ptr_array_unref(engine->suggestions);
-            engine->suggestions = get_suggestions(expanded);
-        }
         GString *commit = g_string_new(expanded);
         g_string_append_unichar(commit, key);
         g_free(expanded);

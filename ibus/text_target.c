@@ -3,6 +3,18 @@
 static const gchar *last_status="not-started";
 const gchar *gtv_text_target_status(void){return last_status;}
 
+/* HTML editors preserve visible trailing spaces as NBSP. Keep offsets intact:
+ * only this one-codepoint representation difference is accepted. */
+static gboolean same_typed_text(const gchar *left,const gchar *right){
+    while(*left && *right){
+        gunichar a=g_utf8_get_char(left),b=g_utf8_get_char(right);
+        if(a==0xa0)a=' ';
+        if(b==0xa0)b=' ';
+        if(a!=b)return FALSE;
+        left=g_utf8_next_char(left);right=g_utf8_next_char(right);
+    }
+    return !*left && !*right;
+}
 gboolean gtv_text_range(const gchar *text,gint cursor,gint anchor,const gchar *original,gint *start,gint *end){
     if(!text || !original || !*original || !g_utf8_validate(text,-1,NULL) || !g_utf8_validate(original,-1,NULL))return FALSE;
     gint length=g_utf8_strlen(text,-1),n=g_utf8_strlen(original,-1);
@@ -10,7 +22,7 @@ gboolean gtv_text_range(const gchar *text,gint cursor,gint anchor,const gchar *o
     *end=MAX(cursor,anchor);*start=cursor==anchor ? cursor-n : MIN(cursor,anchor);
     if(*start<0)return FALSE;
     gchar *part=g_utf8_substring(text,*start,*end);
-    gboolean matches=!strcmp(part,original);g_free(part);return matches;
+    gboolean matches=same_typed_text(part,original);g_free(part);return matches;
 }
 static gboolean has_state(AtspiAccessible *obj,AtspiStateType state){
     AtspiStateSet *states=atspi_accessible_get_state_set(obj);
@@ -65,18 +77,28 @@ GtvTextTarget *gtv_text_target_select(const gchar *original,const gchar *replace
     last_status="selection-rejected";
     gboolean selected=selections>0 ? atspi_text_set_selection(text,0,start,end,&error) : atspi_text_add_selection(text,start,end,&error);
     if(error || !selected)goto done;
-    last_status="selection-not-confirmed";
-    selection=atspi_text_get_selection(text,0,&error);
-    if(error || !selection || MIN(selection->start_offset,selection->end_offset)!=start || MAX(selection->start_offset,selection->end_offset)!=end)goto done;
-    last_status="selected";
+    last_status="selection-pending";
     gchar *before=g_utf8_substring(all,0,start);
     target=g_new0(GtvTextTarget,1);target->text=g_object_ref(text);
+    target->original=g_strdup(all);target->start=start;target->end=end;
     target->expected=g_strconcat(before,replacement,g_utf8_offset_to_pointer(all,end),NULL);g_free(before);
 done:
     g_clear_error(&error);g_free(selection);g_free(all);g_object_unref(text);return target;
+}
+/* Chromium acknowledges SetSelection before its renderer updates the range. */
+gboolean gtv_text_target_ready(GtvTextTarget *target){
+    GError *error=NULL;
+    gchar *actual=atspi_text_get_text(target->text,0,-1,&error);
+    gboolean same=!error && !g_strcmp0(actual,target->original);
+    g_clear_error(&error);g_free(actual);
+    if(!same)return FALSE;
+    AtspiRange *range=atspi_text_get_selection(target->text,0,&error);
+    gboolean ready=!error && range && MIN(range->start_offset,range->end_offset)==target->start
+        && MAX(range->start_offset,range->end_offset)==target->end;
+    g_clear_error(&error);g_free(range);return ready;
 }
 gboolean gtv_text_target_verify(GtvTextTarget *target){
     GError *error=NULL;gchar *actual=atspi_text_get_text(target->text,0,-1,&error);
     gboolean ok=!error && !g_strcmp0(actual,target->expected);g_clear_error(&error);g_free(actual);return ok;
 }
-void gtv_text_target_free(GtvTextTarget *target){if(!target)return;g_object_unref(target->text);g_free(target->expected);g_free(target);}
+void gtv_text_target_free(GtvTextTarget *target){if(!target)return;g_object_unref(target->text);g_free(target->expected);g_free(target->original);g_free(target);}

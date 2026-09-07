@@ -90,47 +90,9 @@ gboolean is_vowel(gunichar c){
     if (info->bare == 'd') return FALSE;
     return TRUE;
 }
-gboolean is_consonant(gunichar c){
-    if (is_vowel(c)) return FALSE;
-    return g_unichar_isalpha(c);
-}
 gunichar to_lower_g(gunichar c){ return g_unichar_tolower(c); }
 gint get_tone(gunichar c){ CharInfo *i=get_info(c); return i?i->tone:TONE_NONE; }
 gint get_diac(gunichar c){ CharInfo *i=get_info(c); return i?i->diacritic:DIAC_NONE; }
 gunichar bare_lower(gunichar c){ CharInfo *i=get_info(c); if(i) return i->bare; return to_lower_g(c); }
-
-gboolean toggle_breve(gunichar in, gunichar *out){
-    CharInfo *info=get_info(in); if(!info||info->bare!='a') return FALSE;
-    int ndia=-1;
-    if(info->diacritic==DIAC_BREVE) ndia=DIAC_NONE;
-    else if(info->diacritic==DIAC_NONE || info->diacritic==DIAC_CIRCUMFLEX) ndia=DIAC_BREVE;
-    else return FALSE;
-    return lookup_char(info->bare, ndia, info->tone, info->is_upper, out);
-}
-gboolean toggle_circumflex(gunichar in, gunichar *out){
-    CharInfo *info=get_info(in); if(!info) return FALSE;
-    int ndia=-1;
-    if(info->bare=='a' || info->bare=='e' || info->bare=='o'){
-        if(info->diacritic==DIAC_CIRCUMFLEX) ndia=DIAC_NONE;
-        else if(info->diacritic==DIAC_NONE || info->diacritic==DIAC_BREVE) ndia=DIAC_CIRCUMFLEX;
-        else return FALSE;
-        return lookup_char(info->bare, ndia, info->tone, info->is_upper, out);
-    }
-    return FALSE;
-}
-gboolean toggle_horn(gunichar in, gunichar *out){
-    CharInfo *info=get_info(in); if(!info) return FALSE;
-    if(info->bare!='o' && info->bare!='u') return FALSE;
-    int ndia=-1;
-    if(info->diacritic==DIAC_HORN) ndia=DIAC_NONE;
-    else if(info->diacritic==DIAC_NONE || info->diacritic==DIAC_CIRCUMFLEX) ndia=DIAC_HORN;
-    else return FALSE;
-    return lookup_char(info->bare, ndia, info->tone, info->is_upper, out);
-}
-gboolean toggle_stroke(gunichar in, gunichar *out){
-    CharInfo *info=get_info(in); if(!info||info->bare!='d') return FALSE;
-    int ndia = (info->diacritic==DIAC_STROKE)?DIAC_NONE:DIAC_STROKE;
-    return lookup_char(info->bare, ndia, TONE_NONE, info->is_upper, out);
-}
 
 /* Phonology: find tone position */

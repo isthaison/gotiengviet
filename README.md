@@ -191,7 +191,7 @@ build/gotiengviet-demo --predict "công nghệ" thong
 
 Nhấn **Ctrl+T** khi đang gõ: bộ gõ lấy đoạn đang chọn (hoặc nội dung trước con trỏ + chữ gõ dở), xử lý theo lựa chọn gần nhất, hiện kết quả ngay tại ô nhập. **Enter** thay câu gốc, **Esc** hủy, **Tab** đổi viết lại/dịch. Nội dung/con trỏ đổi rồi thì không ghi đè.
 
-Khi Enter, câu gốc bị xóa theo thứ tự AT-SPI → surrounding text → Backspace đúng số ký tự, và **luôn đọc lại để xác nhận câu gốc đã mất mới chèn** (so toàn văn — an toàn cả khi câu lặp; đoạn cần xóa đổi giữa chừng thì dừng). Terminal thường lờ lệnh xóa selection/surrounding nên sẽ tự rơi vào nhánh Backspace đã xác minh thay vì chèn thêm. Kẹt hẳn thì báo lỗi, giữ kết quả cho Enter thử lại.
+Khi Enter, câu gốc bị xóa bằng surrounding text đã xác minh trước, rồi mới tới AT-SPI select và cuối cùng là Backspace đúng số ký tự. Mọi nhánh đều **xác nhận câu gốc đã mất mới chèn** — đọc độc lập 2 kênh (surrounding + AT-SPI), kênh nào mâu thuẫn là dừng; snapshot rỗng chỉ được tin khi con trỏ cũng đứng đúng điểm xóa (terminal báo text rỗng mà không xóa thật sẽ bị bắt). Đoạn cần xóa đổi giữa chừng thì dừng. Terminal thường lờ lệnh xóa nên tự rơi vào nhánh Backspace đã xác minh thay vì chèn thêm. Kẹt hẳn thì báo lỗi, giữ kết quả cho Enter thử lại.
 
 Ô mật khẩu/PIN không kích hoạt. Một số app giữ Ctrl+T trước IBus (ví dụ mở tab mới) nên không đảm bảo mọi nơi. Mặc định **Viết lại**; chạy `gotiengviet-assistant` để chọn **Dịch** + ngôn ngữ đích (nhớ trong `assistant.conf`). Ollama phải chạy sẵn, model đã tải; mỗi yêu cầu tối đa 120 giây. Mở tay `gotiengviet-assistant` khi dùng layout English thì Enter sao chép kết quả.
 
@@ -259,7 +259,7 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 - **Không thấy GoTiengViet trong Input Sources:** `ibus restart`, đăng xuất/đăng nhập lại, kiểm tra `/usr/share/ibus/component/gotiengviet.xml`.
 - **Gõ không ra dấu:** đang ở engine `gotiengviet` (không phải English US)? Kiểm tra `Super+Space` và `method` trong `~/.config/gotiengviet/config`.
 - **Muốn chữ điều khiển thô** (`test`, `pass`): gõ lặp (`tesst`, `passs`) hoặc tạm chuyển English.
-- **Ctrl+T không phản hồi:** thử ô nhập khác, kiểm tra Ollama/model, xem `/tmp/gotiengviet_debug.log`.
+- **Ctrl+T không phản hồi:** thử ô nhập khác, kiểm tra Ollama/model, xem `~/.cache/gotiengviet/debug.log`.
 - **Ctrl+T trong terminal, Enter chèn thêm:** cập nhật bản mới rồi `ibus restart`. Còn lỗi thì gửi các dòng `[assistant-state]` trong log (cho biết đã đi nhánh AT-SPI, surrounding hay Backspace).
 - **Crash:** xem `~/.cache/gotiengviet/crash.log`, báo kèm phiên bản `.deb` và log liên quan.
 - **Thử cài đặt không chạm hệ thống:** `DESTDIR=/tmp/gotiengviet-staging ./install.sh`.
@@ -272,7 +272,7 @@ Native Windows 10/11 qua Win32 Low-Level Keyboard Hook (`WH_KEYBOARD_LL`) + Syst
 * **Đổi ngôn ngữ**: `Ctrl + Shift` / `Alt + Z` (chống lặp khi giữ phím), hoặc click trái icon [V]/[E] (chế độ được nhớ qua restart); chuột phải mở menu: Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu, tự khởi động, Thoát.
 * **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (bật/tắt Ollama, model, URL) — lưu ở `%APPDATA%/gotiengviet/` như bản Linux.
 * **Gợi ý AI dạng balloon**: từ sai cấu trúc sau khi gõ xong được hỏi Ollama nền, hiện `"sai" co the ban muon go "dung"?` (không dấu cho mọi locale, chống spam 10 giây). Cần Ollama + `curl` (Windows 10+ có sẵn). **Click vào balloon** để nhận gợi ý: văn bản còn nguyên thì tự xóa từ sai và gõ chữ đúng, gõ tiếp rồi thì copy chữ đúng vào clipboard; cả hai đều học mapping vào `learned-corrections.txt`, nên Ollama rớt vẫn gợi ý từ dữ liệu đã học. Từ điển học dùng chung định dạng và seed với bản Linux (module `engine/learn.c`).
-* **Macro/emoji/prompts/config**: chung engine và file `data/`; file người dùng vẫn ưu tiên. Seed từ điển kèm theo để đồng bộ, chưa dùng tới (chờ UI nhận gợi ý).
+* **Macro/emoji/prompts/config**: chung engine và file `data/`; file người dùng vẫn ưu tiên. Typo đã học/seed (`hoăc`, `kông`, …) vẫn balloon ngay cả khi Ollama rớt, click để nhận + học tiếp.
 * **Build (MSYS2 MinGW-w64)**: `pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glib2 make`, rồi `make -f Makefile.win`.
 
 Chưa có: gợi ý inline trong ô nhập, cửa sổ Ctrl+T. Lõi gõ, cấu hình, macro/emoji, kiểm tra âm tiết, gợi ý AI (kèm nhận + học + offline) đã ngang Linux.

@@ -312,6 +312,18 @@ static gpointer ai_worker(gpointer data) {
     return NULL;
 }
 
+gboolean gtv_tray_should_check(const gchar *word){
+    if(!word || g_utf8_strlen(word, -1) < 2) return FALSE;
+    if(!spell_word_valid(word)) return TRUE;
+    EnterCriticalSection(&learned_lock);
+    w_learned_ensure();
+    gchar *fix = gtv_fixes_lookup(w_learned_fixes, word);
+    LeaveCriticalSection(&learned_lock);
+    gboolean hit = fix && *fix;
+    g_free(fix);
+    return hit;
+}
+
 void gtv_tray_check_spelling_async(const gchar *word) {
     if (!word || InterlockedCompareExchange(&ai_in_flight, 1, 0) != 0) return;
     AiJob *job = g_new0(AiJob, 1);

@@ -324,6 +324,13 @@ int main(int argc,char **argv) {
     g_assert_cmpstr(exp,==,"ha");g_free(exp);
     g_assert_null(expected_after_delete("abc",1,2));
     g_assert_null(expected_after_delete(NULL,0,0));
+    /* An empty snapshot proves nothing unless the caret sits at the
+     * deletion point: a client may report "" without deleting anything. */
+    g_assert_cmpint(channel_verdict("",4,4,"",0),==,CH_MISMATCH);
+    g_assert_cmpint(channel_verdict("",0,0,"",0),==,CH_MATCH);
+    g_assert_cmpint(channel_verdict("Hi",2,2,"",0),==,CH_MISMATCH);
+    g_assert_cmpint(channel_verdict(NULL,-1,-1,"",0),==,CH_UNREADABLE);
+    g_assert_cmpint(channel_verdict("ab",2,2,"ab",-1),==,CH_MATCH);
     g_assert_true(gtv_text_range("Xin chào\xc2\xa0",9,9,"Xin chào ",&start,&end));
     g_assert_cmpint(start,==,0);g_assert_cmpint(end,==,9);
     g_assert_false(gtv_text_range("Xin chào\n",9,9,"Xin chào ",&start,&end));

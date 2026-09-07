@@ -1,4 +1,5 @@
 #include "../../engine/engine.h"
+#include <glib/gstdio.h>
 #include <gtk/gtk.h>
 #include <libayatana-appindicator/app-indicator.h>
 #include <stdlib.h>
@@ -178,9 +179,6 @@ int tray_run(int argc, char *argv[]){
 static GtkWidget *rb_telex, *rb_vni, *cb_modern, *cb_spell;
 static GtkWidget *lbl_preview;
 static GtkWidget *cb_ai, *combo_model, *entry_url, *spin_port, *lbl_ai_status, *progress_ai;
-static int model_wait_left = 0;
-static void auto_install_ollama(void);
-static void ensure_model_present(void);
 static GtkWidget *log_scroll = NULL, *log_view = NULL;
 static GtkTextBuffer *log_buf = NULL;
 static guint log_timer_id = 0;
@@ -193,6 +191,7 @@ static gboolean download_in_progress = FALSE;
 static int model_wait_left = 0;
 static void auto_install_ollama(void);
 static void ensure_model_present(void);
+static gboolean update_progress(gpointer data);
 
 static void update_preview(){
     gboolean modern = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_modern));
@@ -453,6 +452,7 @@ static void on_models_checked(GPid pid, gint status, gpointer data);
 static void query_models_async(void){
     gchar *url = tags_url();
     if(!url) return;
+    g_remove("/tmp/ollama_models.json"); /* tránh đọc kết quả cũ khi query fail */
     gchar *quoted = g_shell_quote(url);
     g_free(url);
     char shcmd[1024];
@@ -599,44 +599,6 @@ static gboolean update_progress(gpointer data){
     }
     return FALSE;
 }
-static void on_download_clicked(GtkWidget *w, gpointer data){
-    if(download_in_progress){
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang tải, vui lòng đợi...");
-        return;
-    }
-    const char *model = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)));
-    if(!model || strlen(model)==0) { g_free((gpointer)model); model = g_strdup("qwen2:0.5b"); }
-    // Lấy model name trước " ("
-    char model_name[64]; strncpy(model_name, model, 63); model_name[63]=0;
-    char *sp = strchr(model_name, ' '); if(sp) *sp=0;
-    g_free((gpointer)model);
-    // Đảm bảo ollama serve đang chạy (tự start nếu chưa)
-    int port = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port));
-    if(!ollama_serving(port)){
-        ensure_ollama_serve();
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang khởi động Ollama serve — đợi vài giây rồi bấm Tải Model lại.");
-        return;
-    }
-    download_in_progress = TRUE;
-    gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang tải model, vui lòng đợi (có thể mất vài phút)...");
-    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_ai), 0.0);
-    g_timeout_add(100, update_progress, NULL);
-    char pull_url[512];
-    snprintf(pull_url, sizeof(pull_url), "http://localhost:%d/api/pull", port);
-    char json[256];
-    snprintf(json, sizeof(json), "{\"name\":\"%s\"}", model_name);
-    char curl_cmd[1024];
-    snprintf(curl_cmd, sizeof(curl_cmd), "curl -s -X POST %s -d '%s' -H 'Content-Type: application/json' > /tmp/ollama_pull.log 2>&1 &", pull_url, json);
-    run_shell(curl_cmd);
-    // Giả lập progress
-    gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đã gửi yêu cầu tải, kiểm tra với: curl http://localhost:55602/api/tags");
-    download_in_progress = FALSE;
-    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_ai), 1.0);
-    GtkWidget *dlg2 = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
-        "Đã gửi yêu cầu tải %s qua port %d.\nKiểm tra tiến trình: watch -n1 'curl -s http://localhost:%d/api/tags | grep %s'", model_name, port, port, model_name);
-    gtk_dialog_run(GTK_DIALOG(dlg2));
-    gtk_widget_destroy(dlg2);
-}
 int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_modern, const char *cur_spell, const char *cur_ai_enable, const char *cur_model, const char *cur_url, const char *cur_port, const char *cfg){
     g_set_prgname("gotiengviet");
     g_set_application_name("GoTiengViet");
@@ -730,16 +692,9 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     gtk_entry_set_text(GTK_ENTRY(entry_url), "http://localhost:55602");
     gtk_entry_set_placeholder_text(GTK_ENTRY(entry_url), "http://localhost:55602");
     gtk_box_pack_start(GTK_BOX(hbox_url), entry_url, TRUE, TRUE, 0);
-    btn_download = gtk_button_new_with_label("Tải Model");
-    g_signal_connect(btn_download, "clicked", G_CALLBACK(on_download_clicked), NULL);
-    gtk_box_pack_start(GTK_BOX(hbox_url), btn_download, FALSE, FALSE, 0);
-    GtkWidget *btn_install = gtk_button_new_with_label("Cài Ollama");
-    gtk_widget_set_tooltip_text(btn_install, "Tải và cài Ollama ngay trong app (hỏi mật khẩu root 1 lần), log hiện bên dưới");
-    g_signal_connect(btn_install, "clicked", G_CALLBACK(on_install_clicked), NULL);
-    gtk_box_pack_start(GTK_BOX(hbox_url), btn_install, FALSE, FALSE, 0);
-    progress_ai = gtk_progress_bar_new();
+        progress_ai = gtk_progress_bar_new();
     gtk_box_pack_start(GTK_BOX(box_ai), progress_ai, FALSE, FALSE, 0);
-    lbl_ai_status = gtk_label_new("Chưa tải - bấm Tải Model để tải qwen2:0.5b qua Ollama 55602");
+    lbl_ai_status = gtk_label_new("Bật AI để Ollama và model tự động.");
     gtk_label_set_line_wrap(GTK_LABEL(lbl_ai_status), TRUE);
     gtk_label_set_xalign(GTK_LABEL(lbl_ai_status), 0.0);
     gtk_box_pack_start(GTK_BOX(box_ai), lbl_ai_status, FALSE, FALSE, 0);

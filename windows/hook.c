@@ -51,7 +51,7 @@ static void maybe_ai_suggest(const gchar *commit) {
     gunichar delim = g_utf8_get_char(end);
     if (!g_unichar_isspace(delim) && !g_unichar_ispunct(delim)) return;
     gchar *word = g_utf8_substring(commit, 0, len - 1);
-    if (g_utf8_strlen(word, -1) >= 2 && !spell_word_valid(word))
+    if (gtv_tray_should_check(word))
         gtv_tray_check_spelling_async(word);
     g_free(word);
 }

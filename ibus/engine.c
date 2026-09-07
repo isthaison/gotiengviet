@@ -6,8 +6,17 @@
 #include "../engine/internal.h"
 
 #include <stdarg.h>
+/* Per-user cache dir: /tmp collides between users (a root-owned file would
+ * silence everyone else's logging), so each UID gets its own debug log. */
+static char *debug_path = NULL;
 static void debug_log(const char *fmt, ...){
-    FILE *f = fopen("/tmp/gotiengviet_debug.log", "a");
+    if(!debug_path){
+        gchar *dir = g_build_filename(g_get_user_cache_dir(), "gotiengviet", NULL);
+        g_mkdir_with_parents(dir, 0755);
+        debug_path = g_build_filename(dir, "debug.log", NULL);
+        g_free(dir);
+    }
+    FILE *f = fopen(debug_path, "a");
     if(!f) return;
     va_list args;
     va_start(args, fmt);
@@ -58,6 +67,7 @@ struct _GoTiengVietEngine {
     guint bs_checks;
     gchar *bs_expected;
     gchar *bs_probe;
+    gint bs_caret;
     gboolean candidates_from_ai;
 };
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
@@ -408,18 +418,6 @@ static gboolean apply_replacement(gpointer data){
     if(e->preedit->len || e->assistant_cancelled)return G_SOURCE_CONTINUE;
     if(e->focus_id && e->target_id && g_strcmp0(e->focus_id,e->target_id)!=0)return G_SOURCE_CONTINUE;
     if(e->purpose==IBUS_INPUT_PURPOSE_PASSWORD || e->purpose==IBUS_INPUT_PURPOSE_PIN)return G_SOURCE_CONTINUE;
-    /* AT-SPI selection+replace needs a modern client; without surrounding
-     * support the original text would stay and the commit insert on top. */
-    if(!e->target_backspaces && (e->caps & IBUS_CAP_SURROUNDING_TEXT)){
-        gchar *original=assistant_input(e->target_text,e->target_cursor,e->target_anchor,"");
-        e->verified_target=select_text_target(original,e->replacement);g_free(original);
-        debug_log("[assistant-state] selection=%s\n",gtv_text_target_status());
-        if(e->verified_target){
-            e->replacing=TRUE;e->verify_attempts=0;
-            g_timeout_add_full(G_PRIORITY_DEFAULT,25,commit_selected_replacement,g_object_ref(e),g_object_unref);
-            return G_SOURCE_REMOVE;
-        }
-    }
     /* Terminal-safe deletion: some clients (notably VTE terminals) ignore
      * DeleteSurroundingText and replace nothing on commit, so committing
      * right away would INSERT the replacement on top of the original.
@@ -440,6 +438,7 @@ static gboolean apply_replacement(gpointer data){
                 e->bs_probe=g_utf8_substring(text->text,start,end);
                 g_free(before);
                 gint offset=cursor==anchor ? -(gint)e->target_length : (gint)MIN(cursor,anchor)-(gint)cursor;
+                e->bs_caret=cursor+offset;
                 ibus_engine_delete_surrounding_text((IBusEngine*)e,offset,e->target_length);
                 debug_log("[assistant-state] delete-sent len=%u, verifying\n",e->target_length);
                 e->bs_mode=1;e->bs_checks=0;e->replacing=TRUE;
@@ -449,6 +448,20 @@ static gboolean apply_replacement(gpointer data){
             }
         }
         g_clear_object(&text);
+    }
+    /* AT-SPI selection as fallback (only when surrounding text cannot
+     * locate the original). Some terminals select fine but ignore
+     * selection-replace on commit, so this stays behind the fully
+     * verified deletion above. */
+    if(!e->target_backspaces && (e->caps & IBUS_CAP_SURROUNDING_TEXT)){
+        gchar *original=assistant_input(e->target_text,e->target_cursor,e->target_anchor,"");
+        e->verified_target=select_text_target(original,e->replacement);g_free(original);
+        debug_log("[assistant-state] selection=%s\n",gtv_text_target_status());
+        if(e->verified_target){
+            e->replacing=TRUE;e->verify_attempts=0;
+            g_timeout_add_full(G_PRIORITY_DEFAULT,25,commit_selected_replacement,g_object_ref(e),g_object_unref);
+            return G_SOURCE_REMOVE;
+        }
     }
     /* Backspace fallback: exact character count, still verified before the
      * commit below. Flood guard keeps long pastes from stalling the client. */
@@ -466,6 +479,7 @@ static gboolean apply_replacement(gpointer data){
                 g_clear_pointer(&e->bs_probe,g_free);
                 e->bs_expected=expected_after_delete(cur,cur_c,e->target_length);
                 e->bs_probe=g_utf8_substring(cur,s,en);
+                if(e->bs_expected)e->bs_caret=cur_c-(gint)e->target_length;
             }
         }
         g_free(cur);
@@ -516,6 +530,20 @@ static void cleanup_bs(IBusGoTiengVietEngine *e){
     g_clear_pointer(&e->bs_probe,g_free);
     if(e->bs_mode!=0){e->bs_mode=0;e->replacing=FALSE;}
     e->bs_checks=0;
+    e->bs_caret=-1;
+}
+/* Per-channel verdict. An EMPTY expected text matching an empty snapshot is
+ * weak evidence (a client may report nothing without deleting anything), so
+ * it additionally requires the caret to sit at the deletion point. */
+typedef enum { CH_UNREADABLE, CH_MATCH, CH_MISMATCH } ChVerdict;
+static ChVerdict channel_verdict(const gchar *text,gint caret,gint anchor,
+                                 const gchar *expected,gint exp_caret){
+    if(!text)return CH_UNREADABLE;
+    if(g_strcmp0(text,expected)!=0)return CH_MISMATCH;
+    if(expected[0]!='\0')return CH_MATCH;
+    if(exp_caret<0)return CH_MATCH;
+    if(caret==exp_caret && (anchor<0 || anchor==exp_caret))return CH_MATCH;
+    return CH_MISMATCH;
 }
 /* Runs 150ms after a deletion. Commit only on full-text match; the probe
  * (exact segment armed for deletion) aborts fast when the text changed
@@ -529,19 +557,39 @@ static gboolean verify_deletion(gpointer data){
         && e->purpose!=IBUS_INPUT_PURPOSE_PASSWORD && e->purpose!=IBUS_INPUT_PURPOSE_PIN
         && e->bs_expected && e->bs_probe && e->target_length>0;
     if(live){
-        gchar *cur=NULL;gint c=-1,a=-1;
-        gboolean have=snapshot_text(e,&cur,&c,&a);
-        gboolean gone=have && !g_strcmp0(cur,e->bs_expected);
-        gboolean intact=FALSE;
-        if(!gone && have && c==a && e->target_length>0 && (guint)c>=e->target_length){
-            gchar *seg=g_utf8_substring(cur,c-(gint)e->target_length,c);
-            intact=seg && !g_strcmp0(seg,e->bs_probe);
-            g_free(seg);
+        /* Two independent channels: IBus surrounding and AT-SPI full text.
+         * Commit only when one corroborates the deletion and the other does
+         * not contradict it (a lying channel alone can no longer fake it).
+         * AT-SPI is consulted only when surrounding cannot corroborate, as
+         * the extra round trip is pointless otherwise. */
+        gchar *surr=NULL,*atsi=NULL;gint sc=-1,sa=-1,ac=-1;
+        if(e->caps & IBUS_CAP_SURROUNDING_TEXT){
+            IBusText *t=NULL;guint c=0,a=0;
+            ibus_engine_get_surrounding_text((IBusEngine*)e,&t,&c,&a);
+            if(t&&t->text){surr=g_strdup(t->text);sc=(gint)c;sa=(gint)a;}
+            g_clear_object(&t);
         }
-        debug_log("[assistant-state] verify mode=%d checks=%u gone=%d intact=%d\n",
-                  e->bs_mode,e->bs_checks,gone,intact);
-        if(gone){
+        ChVerdict vs=channel_verdict(surr,sc,sa,e->bs_expected,e->bs_caret);
+        ChVerdict va=CH_UNREADABLE;
+        if(vs!=CH_MATCH){
+            atsi=gtv_text_current(&ac);
+            va=channel_verdict(atsi,ac,ac,e->bs_expected,e->bs_caret);
+        }
+        gboolean gone=(vs==CH_MATCH||va==CH_MATCH)&&vs!=CH_MISMATCH&&va!=CH_MISMATCH;
+        gboolean intact=FALSE;
+        if(!gone){
+            gchar *cur=NULL;gint c=-1,a=-1;
+            if(snapshot_text(e,&cur,&c,&a) && c==a && e->target_length>0 && (guint)c>=e->target_length){
+                gchar *seg=g_utf8_substring(cur,c-(gint)e->target_length,c);
+                intact=seg && !g_strcmp0(seg,e->bs_probe);
+                g_free(seg);
+            }
             g_free(cur);
+        }
+        debug_log("[assistant-state] verify mode=%d checks=%u gone=%d intact=%d surr=%d atsi=%d\n",
+                  e->bs_mode,e->bs_checks,gone,intact,vs,va);
+        g_free(surr);g_free(atsi);
+        if(gone){
             commit_and_remember((IBusEngine*)e,ibus_text_new_from_string(e->replacement));
             g_clear_pointer(&e->replacement,g_free);
             ibus_engine_hide_auxiliary_text((IBusEngine*)e);
@@ -549,7 +597,6 @@ static gboolean verify_deletion(gpointer data){
             return G_SOURCE_REMOVE;
         }
         if(!intact){
-            g_free(cur);
             debug_log("[assistant-state] segment changed under us, kept for retry\n");
             ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Câu gốc đã đổi trong lúc thay thế. Nhấn Enter để thử lại, Esc để hủy."),TRUE);
             cleanup_bs(e);
@@ -558,9 +605,12 @@ static gboolean verify_deletion(gpointer data){
         if(e->bs_mode==1 && e->target_length<=300){
             /* Surrounding delete was ignored: fall back to Backspaces,
              * recomputing the expectation from this fresh snapshot. */
+            gchar *now=NULL;gint nc=-1,na=-1;
+            if(snapshot_text(e,&now,&nc,&na) && nc==na)
+                e->bs_caret=nc-(gint)e->target_length;
             g_clear_pointer(&e->bs_expected,g_free);
-            e->bs_expected=expected_after_delete(cur,c,e->target_length);
-            g_free(cur);
+            e->bs_expected=(now && nc==na) ? expected_after_delete(now,nc,e->target_length) : NULL;
+            g_free(now);
             if(!e->bs_expected){
                 ibus_engine_update_auxiliary_text((IBusEngine*)e,ibus_text_new_from_string("Không xác nhận được câu gốc trong ô nhập. Nhấn Enter để thử lại, Ctrl+T để lấy lại câu, Esc để hủy."),TRUE);
                 cleanup_bs(e);
@@ -570,7 +620,6 @@ static gboolean verify_deletion(gpointer data){
             e->bs_mode=2;e->bs_checks=0;
             return G_SOURCE_CONTINUE;
         }
-        g_free(cur);
         if(++e->bs_checks<=12)return G_SOURCE_CONTINUE;
     }
     if(e->replacement){
@@ -601,6 +650,9 @@ static void assistant_closed(GObject *object,GAsyncResult *result,gpointer data)
     if(e->assistant_cancelled){
         g_free(output);g_clear_error(&error);g_object_unref(e);return;
     }
+    /* Ollama often ends the answer with a newline; committing it raw would
+     * execute a stray Enter in terminals. */
+    if(output) g_strchomp(output);
     if(ok && g_subprocess_get_successful(G_SUBPROCESS(object)) && output && *output && e->target_id){
         g_free(e->replacement);e->replacement=g_strdup(output);e->replacement_wait=0;
         if(e->assistant_inline){

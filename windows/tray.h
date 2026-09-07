@@ -15,6 +15,9 @@ void gtv_tray_cleanup(void);
 void gtv_tray_update_icon(gboolean enabled);
 void gtv_tray_show_menu(HWND hwnd);
 void gtv_tray_balloon(const gchar *title, const gchar *msg);
+/* TRUE when a word deserves an AI/lookup check: phonologically wrong or a
+ * known (learned/seed) typo. Keeps seed typos working fully offline. */
+gboolean gtv_tray_should_check(const gchar *word);
 /* AI suggestion result passed from the worker thread to the UI thread. */
 typedef struct { gchar *typed; gchar *fix; } GtvAiResult;
 /* Remember a suggestion and show it; clicking the balloon applies it. */

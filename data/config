@@ -1,0 +1,14 @@
+# GoTiengViet default configuration.
+# Copy to ~/.config/gotiengviet/config to customize. Values in ai.conf
+# take precedence over the [ai] section below.
+[input]
+method=telex
+modern=true
+spellcheck=true
+charset=unicode
+
+[ai]
+enable=false
+model=qwen2:0.5b
+url=http://localhost:55602
+port=55602

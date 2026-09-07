@@ -28,6 +28,9 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             CheckDlgButton(hwnd, IDC_CHECK_MODERN, g_app.config.modern ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, IDC_CHECK_SPELL, g_app.config.spellcheck ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, IDC_CHECK_STARTUP, get_startup_enabled_local() ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwnd, IDC_CHECK_AI, g_app.config.ai_enabled ? BST_CHECKED : BST_UNCHECKED);
+            SetDlgItemText(hwnd, IDC_EDIT_MODEL, g_app.config.model ? g_app.config.model : "");
+            SetDlgItemText(hwnd, IDC_EDIT_URL, g_app.config.url ? g_app.config.url : "");
 
             /* Center dialog on screen */
             RECT rc, rcOwner;
@@ -50,6 +53,22 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 }
                 g_app.config.modern = (IsDlgButtonChecked(hwnd, IDC_CHECK_MODERN) == BST_CHECKED);
                 g_app.config.spellcheck = (IsDlgButtonChecked(hwnd, IDC_CHECK_SPELL) == BST_CHECKED);
+                g_app.config.ai_enabled = (IsDlgButtonChecked(hwnd, IDC_CHECK_AI) == BST_CHECKED);
+
+                /* String swap under lock: the AI worker may be copying them. */
+                char buf[512];
+                gtv_config_strings_lock();
+                GetDlgItemText(hwnd, IDC_EDIT_MODEL, buf, sizeof(buf));
+                if (*g_strstrip(buf)) {
+                    g_free(g_app.config.model);
+                    g_app.config.model = g_strdup(buf);
+                }
+                GetDlgItemText(hwnd, IDC_EDIT_URL, buf, sizeof(buf));
+                if (*g_strstrip(buf)) {
+                    g_free(g_app.config.url);
+                    g_app.config.url = g_strdup(buf);
+                }
+                gtv_config_strings_unlock();
 
                 gboolean want_startup = (IsDlgButtonChecked(hwnd, IDC_CHECK_STARTUP) == BST_CHECKED);
                 gtv_tray_set_startup(want_startup);

@@ -8,7 +8,7 @@ LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell3
 ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
               engine/engine.c engine/json.c engine/macro.c engine/phonology.c \
               engine/promotion.c engine/spell.c engine/telex.c engine/text.c \
-              engine/vector.c engine/vni.c
+              engine/vni.c
 
 WIN_SRCS = windows/main.c windows/hook.c windows/tray.c windows/setup.c
 RC_SRC = windows/resource.rc
@@ -57,8 +57,8 @@ $(FAKE_CURL): tests/fake_curl.c
 	$(CC) $(TEST_CFLAGS) $< $(TEST_LDFLAGS) -o $@
 
 test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(FAKE_CURL)
-	./$(TEST_ENGINE)
-	GTV_TEST_CURL_DIR="$(CURDIR)/build/win/fixtures" ./$(TEST_SUPPORT)
+	GTV_DATA_DIR="$(CURDIR)/data" ./$(TEST_ENGINE)
+	GTV_DATA_DIR="$(CURDIR)/data" GTV_TEST_CURL_DIR="$(CURDIR)/build/win/fixtures" ./$(TEST_SUPPORT)
 
 clean:
 	rm -rf build/win

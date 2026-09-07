@@ -37,7 +37,6 @@ gunichar bare_lower(gunichar c);
 int find_tone_position(GArray *word, gboolean modern);
 void remove_all_tones(GArray *word);
 gboolean apply_tone_at(GArray *word, int pos, int tone);
-int dict_lookup(const char *lower_utf8);
 gboolean is_valid_coda(const char *coda, int coda_len);
 gboolean is_valid_onset(const gunichar *ucs, glong first_v);
 gboolean spell_word_valid(const char *utf8);
@@ -49,9 +48,15 @@ GArray* gstring_to_ucs4(GString *s);
 void ucs4_to_gstring(GArray *arr, GString *s);
 gchar* expand_word(const char *word);
 GPtrArray* get_emoji_suggestions(const char *prefix);
+void gtv_tables_reload(void);
 
 gchar *gtv_json_quote(const gchar *text);
 gchar *gtv_json_response(const gchar *json);
+gchar *gtv_fold_accents(const gchar *text);
+gchar *gtv_data_path(const gchar *name);
+void gtv_prompts_reload(void);
+gchar *gtv_prompt_get(const gchar *group, const gchar *key, const gchar *fallback);
+gchar *gtv_format_template(const gchar *templ, const gchar * const *args, guint n);
 gboolean gtv_apply_key(GArray *buf, gunichar key, GtvMode mode, gboolean modern);
 void gtv_compose(GArray *buf, gunichar key, GtvMode mode, gboolean modern);
 

@@ -1,0 +1,11 @@
+# GoTiengViet macros: shortcut=expansion, one per line (UTF-8).
+# A user file at ~/.config/gotiengviet/macros.txt replaces this file entirely.
+# Vietnamese typing shortcuts
+vn=Việt Nam
+hn=Hà Nội
+hcm=Hồ Chí Minh
+dc=được
+ko=không
+ntn=như thế nào
+cx=cũng
+cb=chuẩn bị

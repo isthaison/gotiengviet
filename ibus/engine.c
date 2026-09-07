@@ -48,6 +48,9 @@ struct _GoTiengVietEngine {
     guint suggest_timer;
     GHashTable *learned_words;
     gchar *learned_path;
+    GHashTable *learned_fixes;
+    gchar *learned_fixes_path;
+    gboolean pending_bad;
     gboolean candidates_from_ai;
 };
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
@@ -60,24 +63,150 @@ static gchar *word_key(const gchar *word){
     for(const gchar *p=key;*p;p=g_utf8_next_char(p))if(!g_unichar_isalpha(g_utf8_get_char(p))){g_free(key);return NULL;}
     return key;
 }
+static void parse_learned_words(IBusGoTiengVietEngine *e,const gchar *contents){
+    gchar **lines=g_strsplit_set(contents,"\r\n",10001);
+    for(guint i=0;lines[i] && i<10000;i++){
+        gchar *line=g_strstrip(lines[i]);
+        if(!*line || *line=='#')continue;
+        gchar *key=word_key(line);
+        if(key && g_hash_table_size(e->learned_words)<10000)g_hash_table_add(e->learned_words,key);
+        else g_free(key);
+    }
+    g_strfreev(lines);
+}
+/* User vocabulary first; when it does not exist yet, seed from the shipped
+ * data/learned-words.txt so common words are accepted offline from the
+ * first run. The seed is copied into the user file on the first save,
+ * after which the user file is authoritative. */
 static void load_learned_words(IBusGoTiengVietEngine *e){
     if(e->learned_words)return;
     e->learned_words=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
     if(!e->learned_path)e->learned_path=g_build_filename(g_get_user_config_dir(),"gotiengviet","learned-words.txt",NULL);
+    gboolean have_user=g_file_test(e->learned_path,G_FILE_TEST_EXISTS);
     gchar *contents=NULL;
-    if(g_file_get_contents(e->learned_path,&contents,NULL,NULL)){
-        gchar **lines=g_strsplit(contents,"\n",10001);
-        for(guint i=0;lines[i] && i<10000;i++){gchar *key=word_key(lines[i]);if(key)g_hash_table_add(e->learned_words,key);}
-        g_strfreev(lines);g_free(contents);
+    if(have_user && g_file_get_contents(e->learned_path,&contents,NULL,NULL)){
+        parse_learned_words(e,contents);
+        g_free(contents);
+        contents=NULL;
+    }
+    if(!have_user){
+        gchar *seed=gtv_data_path("learned-words.txt");
+        if(g_file_get_contents(seed,&contents,NULL,NULL)){
+            parse_learned_words(e,contents);
+            g_free(contents);
+        }
+        g_free(seed);
     }
 }
+static void parse_fixes(IBusGoTiengVietEngine *e,const gchar *contents){
+    gchar **lines=g_strsplit_set(contents,"\r\n",2001);
+    for(guint i=0;lines[i] && i<2000;i++){
+        gchar *line=g_strstrip(lines[i]);
+        if(!*line || *line=='#')continue;
+        gchar *sep=strchr(line,'=');
+        if(!sep)continue;
+        *sep='\0';
+        gchar *bad=word_key(g_strstrip(line)),*good=word_key(g_strstrip(sep+1));
+        if(bad && good && strcmp(bad,good) && g_hash_table_size(e->learned_fixes)<2000)
+            g_hash_table_replace(e->learned_fixes,bad,good);
+        else{g_free(bad);g_free(good);}
+    }
+    g_strfreev(lines);
+}
+/* Typo map taught by Ollama (bad=good per line in learned-corrections.txt).
+ * User file first; when it does not exist yet, seed from the shipped
+ * data/learned-corrections.txt so classic typos are flagged offline
+ * from the first run. The seed is copied into the user file on the
+ * first save, after which the user file is authoritative. */
+static void load_learned_fixes(IBusGoTiengVietEngine *e){
+    if(e->learned_fixes)return;
+    e->learned_fixes=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
+    if(!e->learned_fixes_path)e->learned_fixes_path=g_build_filename(g_get_user_config_dir(),"gotiengviet","learned-corrections.txt",NULL);
+    gboolean have_user=g_file_test(e->learned_fixes_path,G_FILE_TEST_EXISTS);
+    gchar *contents=NULL;
+    if(have_user && g_file_get_contents(e->learned_fixes_path,&contents,NULL,NULL)){
+        parse_fixes(e,contents);
+        g_free(contents);
+        contents=NULL;
+    }
+    if(!have_user){
+        gchar *seed=gtv_data_path("learned-corrections.txt");
+        if(g_file_get_contents(seed,&contents,NULL,NULL)){
+            parse_fixes(e,contents);
+            g_free(contents);
+        }
+        g_free(seed);
+    }
+}
+static void save_learned_fixes(IBusGoTiengVietEngine *e){
+    GString *contents=g_string_new("");GHashTableIter iter;gpointer k,v;
+    g_hash_table_iter_init(&iter,e->learned_fixes);
+    while(g_hash_table_iter_next(&iter,&k,&v)){g_string_append(contents,k);g_string_append_c(contents,'=');g_string_append(contents,v);g_string_append_c(contents,'\n');}
+    gchar *directory=g_path_get_dirname(e->learned_fixes_path);g_mkdir_with_parents(directory,0700);g_free(directory);
+    if(!g_file_set_contents(e->learned_fixes_path,contents->str,contents->len,NULL))debug_log("[dictionary] save failed\n");
+    g_string_free(contents,TRUE);
+}
+static void learn_fix(IBusGoTiengVietEngine *e,const gchar *typed,const gchar *correction){
+    load_learned_fixes(e);
+    gchar *bad=word_key(typed),*good=word_key(correction);
+    if(!bad || !good || !strcmp(bad,good)){g_free(bad);g_free(good);return;}
+    if(g_hash_table_size(e->learned_fixes)>=2000 || g_hash_table_contains(e->learned_fixes,bad)){g_free(bad);g_free(good);return;}
+    g_hash_table_insert(e->learned_fixes,bad,good);
+    save_learned_fixes(e);
+}
+static gchar *learned_fix_for(IBusGoTiengVietEngine *e,const gchar *word){
+    load_learned_fixes(e);gchar *key=word_key(word);
+    const gchar *found=key ? g_hash_table_lookup(e->learned_fixes,key) : NULL;
+    gchar *out=found ? g_strdup(found) : NULL;g_free(key);return out;
+}
+static gint compare_strings(gconstpointer a,gconstpointer b){
+    return strcmp(*(const gchar *const *)a,*(const gchar *const *)b);
+}
+/* Offline completions from Ollama-taught vocabulary: exact prefix first,
+ * then accent-folded prefix (thong matches thông). Sorted and capped. */
+static void learned_completions(IBusGoTiengVietEngine *e,const gchar *prefix,GPtrArray *out,guint max){
+    if(!prefix || !*prefix || !out || max==0)return;
+    load_learned_words(e);
+    gchar *lower=word_key(prefix);
+    if(!lower)return;
+    gchar *folded_prefix=gtv_fold_accents(lower);
+    GPtrArray *exact=g_ptr_array_new(),*folded=g_ptr_array_new();
+    GHashTableIter iter;gpointer k;
+    g_hash_table_iter_init(&iter,e->learned_words);
+    while(g_hash_table_iter_next(&iter,&k,NULL)){
+        const gchar *w=k;
+        if(!g_strcmp0(w,lower))continue;
+        if(g_str_has_prefix(w,lower))g_ptr_array_add(exact,(gpointer)w);
+        else{
+            gchar *folded_w=gtv_fold_accents(w);
+            gboolean match=folded_w && g_str_has_prefix(folded_w,folded_prefix);
+            g_free(folded_w);
+            if(match)g_ptr_array_add(folded,(gpointer)w);
+        }
+    }
+    g_ptr_array_sort(exact,compare_strings);g_ptr_array_sort(folded,compare_strings);
+    for(guint i=0;i<exact->len && out->len<max;i++)add_candidate_unique(out,exact->pdata[i]);
+    for(guint i=0;i<folded->len && out->len<max;i++)add_candidate_unique(out,folded->pdata[i]);
+    g_ptr_array_unref(exact);g_ptr_array_unref(folded);g_free(folded_prefix);g_free(lower);
+}
 static gboolean word_valid(IBusGoTiengVietEngine *e,const gchar *word){
-    load_learned_words(e);gchar *key=word_key(word);
-    gboolean known=key && g_hash_table_contains(e->learned_words,key);g_free(key);
-    return known || spell_word_valid(word);
+    load_learned_words(e);load_learned_fixes(e);gchar *key=word_key(word);
+    gboolean known=key && g_hash_table_contains(e->learned_words,key);
+    gboolean mistyped=key && g_hash_table_contains(e->learned_fixes,key);g_free(key);
+    /* Explicitly accepted words win over the typo map: accepting a candidate
+     * asserts its validity, while the map only records past corrections. */
+    if(known) return TRUE;
+    if(mistyped) return FALSE;
+    return spell_word_valid(word);
 }
 static void learn_candidate(IBusGoTiengVietEngine *e,const gchar *candidate){
     if(!e->candidates_from_ai)return;
+    /* Remember the Ollama-taught correction so the typo is flagged instantly
+     * next time without network. Only in correction mode (pending_bad) with
+     * single-word candidates, so mere completions are never marked as typos. */
+    if(e->pending_bad && e->pending_query && e->preedit && e->preedit->len &&
+       !strcmp(e->pending_query,e->preedit->str))
+        learn_fix(e,e->pending_query,candidate);
     load_learned_words(e);gboolean changed=FALSE;
     gchar **words=g_strsplit_set(candidate," \t",-1);
     for(guint i=0;words[i] && g_hash_table_size(e->learned_words)<10000;i++){
@@ -129,6 +258,7 @@ static void clear_candidates(IBusGoTiengVietEngine *e){
         g_clear_object(&e->ai_cancellable);
     }
     g_clear_pointer(&e->pending_query, g_free);
+    e->pending_bad=FALSE;
     if(e->candidates){
         for(int i=0;i<e->n_candidates;i++) g_free(e->candidates[i]);
         g_free(e->candidates);
@@ -178,8 +308,23 @@ static void on_ai_suggestions_ready(GObject *source, GAsyncResult *res, gpointer
         return;
     }
     if(sugs && g_task_get_cancellable(G_TASK(res))==e->ai_cancellable && e->pending_query && g_strcmp0(e->preedit->str, e->pending_query) == 0 && e->preedit->len > 0){
-        show_candidates(e, (IBusEngine*)e, sugs);
-        e->candidates_from_ai=TRUE;
+        if(sugs->len > 0){
+            show_candidates(e, (IBusEngine*)e, sugs);
+            e->candidates_from_ai=TRUE;
+        }else{
+            /* Ollama unreachable or empty: reuse Ollama-taught data offline.
+             * Typo mode shows the remembered correction; completion mode
+             * completes from learned vocabulary. Not marked as AI results. */
+            GPtrArray *local=g_ptr_array_new_with_free_func(g_free);
+            if(e->pending_bad){
+                gchar *fix=learned_fix_for(e, e->pending_query);
+                if(fix) g_ptr_array_add(local, fix);
+            }else{
+                learned_completions(e, e->pending_query, local, 5);
+            }
+            show_candidates(e, (IBusEngine*)e, local);
+            g_ptr_array_unref(local);
+        }
     }
     if(sugs) g_ptr_array_unref(sugs);
     g_object_unref(e);
@@ -188,6 +333,7 @@ static void on_ai_suggestions_ready(GObject *source, GAsyncResult *res, gpointer
 static gboolean request_suggestions(gpointer data){
     IBusGoTiengVietEngine *e=data;e->suggest_timer=0;
     gboolean bad=e->spellcheck && !word_valid(e,e->preedit->str);
+    e->pending_bad=bad;
     e->ai_cancellable=g_cancellable_new();
     gtv_suggest_combined_async(&e->config,e->sentence_context->str,e->preedit->str,bad,
         e->ai_cancellable,on_ai_suggestions_ready,g_object_ref(e));
@@ -216,6 +362,7 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
         g_clear_object(&e->ai_cancellable);
     }
     g_clear_pointer(&e->pending_query, g_free);
+    e->pending_bad=FALSE;
 
     if(plen == 0 || !visible){
         hide_suggest(e, engine);
@@ -243,6 +390,7 @@ static void ibus_gotiengviet_engine_reset(IBusGoTiengVietEngine *e){
         g_clear_object(&e->ai_cancellable);
     }
     g_clear_pointer(&e->pending_query, g_free);
+    e->pending_bad=FALSE;
     if(e->preedit) g_string_assign(e->preedit,"");
     ibus_engine_hide_preedit_text((IBusEngine*)e);
 }
@@ -832,6 +980,7 @@ static void ibus_gotiengviet_engine_finalize(GObject *object){
     clear_candidates(e);
     gtv_config_clear(&e->config);
     g_clear_pointer(&e->learned_words,g_hash_table_unref);g_free(e->learned_path);
+    g_clear_pointer(&e->learned_fixes,g_hash_table_unref);g_free(e->learned_fixes_path);
     g_free(e->focus_id);g_free(e->target_id);g_free(e->target_text);g_free(e->replacement);g_free(e->insertion);gtv_text_target_free(e->verified_target);
     g_string_free(e->typed_text,TRUE);
     if(e->preedit) g_string_free(e->preedit,TRUE);

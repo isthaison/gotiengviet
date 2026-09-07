@@ -23,6 +23,14 @@ if [[ -f ibus/gotiengviet.metainfo.xml ]]; then
 fi
 install -Dm644 ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet.svg"
 install -Dm644 ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet.svg"
+install -Dm644 data/macros.txt "$DESTDIR/usr/share/gotiengviet/macros.txt"
+install -Dm644 data/emojis.txt "$DESTDIR/usr/share/gotiengviet/emojis.txt"
+install -Dm644 data/config "$DESTDIR/usr/share/gotiengviet/config"
+install -Dm644 data/ai.conf "$DESTDIR/usr/share/gotiengviet/ai.conf"
+install -Dm644 data/assistant.conf "$DESTDIR/usr/share/gotiengviet/assistant.conf"
+install -Dm644 data/prompts.conf "$DESTDIR/usr/share/gotiengviet/prompts.conf"
+install -Dm644 data/learned-corrections.txt "$DESTDIR/usr/share/gotiengviet/learned-corrections.txt"
+install -Dm644 data/learned-words.txt "$DESTDIR/usr/share/gotiengviet/learned-words.txt"
 install -Dm755 "$BUILD_DIR/gotiengviet-assistant" "$DESTDIR/usr/bin/gotiengviet-assistant"
 for size in 16 22 24 32 48 64 128 256; do
     directory="$DESTDIR/usr/share/icons/hicolor/${size}x${size}/apps"

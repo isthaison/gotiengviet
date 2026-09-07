@@ -1,0 +1,34 @@
+# GoTiengViet seed typo map: wrong=right, one per line (UTF-8).
+# These classic Telex/VNI typos are flagged from the first run, even offline.
+# When you accept an Ollama correction, the pair is appended to your own
+# ~/.config/gotiengviet/learned-corrections.txt (this seed is copied there
+# on first save). Edit that file — never this one — to add or remove pairs.
+# Lines starting with '#' and blank lines are ignored.
+hoăc=hoặc
+hoacw=hoặc
+thuaw=thưa
+bàc=bác
+hòc=học
+vièt=việt
+kông=không
+ngha=nga
+ngho=ngo
+nghu=ngu
+gha=ga
+gho=go
+ghu=gu
+ge=ghe
+gê=ghê
+chàol=chào
+tếst=tét
+đượck=được
+duocw=được
+duocwjd=được
+duocjwd=được
+bieetw=biết
+nghiw=nghĩ
+dduoc=được
+dduowjc=được
+duowjc=dược
+khong=không
+duoc=được

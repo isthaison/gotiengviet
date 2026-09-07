@@ -36,7 +36,7 @@ static gchar *clean_token(const gchar *raw) {
     return res;
 }
 
-static gchar *fold_accents(const gchar *text){
+gchar *gtv_fold_accents(const gchar *text){
     gchar *lower=g_utf8_strdown(text,-1),*decomposed=g_utf8_normalize(lower,-1,G_NORMALIZE_NFD);
     GString *folded=g_string_new("");
     for(const gchar *p=decomposed;*p;p=g_utf8_next_char(p)){
@@ -49,8 +49,12 @@ static GPtrArray *suggest(const GtvConfig *config,const gchar *context,const gch
     GPtrArray *out=g_ptr_array_new_with_free_func(g_free);
     if(!config || !config->ai_enabled || !config->url || !config->model ||
        (prefix && !g_utf8_validate(prefix,-1,NULL)) || (context && !g_utf8_validate(context,-1,NULL)))return out;
-    gchar *prompt=g_strdup_printf("Complete the Vietnamese word being typed. Context: %s\nTyped word: %s\n%sReturn up to 3 short Vietnamese completions, separated by commas. Return only the words, no explanation.",
-        context ? context : "",prefix ? prefix : "",bad ? "Correct spelling if needed. " : "Each completion must start with the typed word. ");
+    gchar *templ=gtv_prompt_get("suggest","prompt",NULL);
+    gchar *hint=gtv_prompt_get("suggest",bad ? "correct_hint" : "complete_hint","");
+    if(!templ){g_free(hint);return out;}
+    const gchar *pargs[]={context ? context : "",prefix ? prefix : "",hint};
+    gchar *prompt=gtv_format_template(templ,pargs,3);
+    g_free(templ);g_free(hint);
     gchar *quoted=gtv_json_quote(prompt),*model=gtv_json_quote(config->model);
     gchar *body=g_strdup_printf("{\"model\":%s,\"prompt\":%s,\"stream\":false,\"keep_alive\":\"5m\",\"options\":{\"num_predict\":40,\"temperature\":0}}",model,quoted);
     gchar *reply=ollama_request(config,"/api/generate",body,cancel),*response=gtv_json_response(reply);
@@ -62,7 +66,7 @@ static GPtrArray *suggest(const GtvConfig *config,const gchar *context,const gch
                 gchar *lower=g_utf8_strdown(word,-1);g_free(word);word=lower;
             }
             if(word && *word && g_utf8_strlen(word,-1)<=48 && !strchr(word,':') && g_strcmp0(word,prefix)){
-                gchar *folded=fold_accents(word),*typed=fold_accents(prefix ? prefix : "");
+                gchar *folded=gtv_fold_accents(word),*typed=gtv_fold_accents(prefix ? prefix : "");
                 if(bad || !*typed || g_str_has_prefix(folded,typed))add_candidate_unique(out,word);
                 g_free(folded);g_free(typed);
             }

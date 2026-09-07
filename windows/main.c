@@ -22,6 +22,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             break;
         }
+        case WM_GTV_AI_RESULT: {
+            gchar *msg = (gchar *)lParam;
+            gtv_tray_balloon("GoTiengViet goi y", msg);
+            g_free(msg);
+            break;
+        }
         case WM_DESTROY:
             PostQuitMessage(0);
             break;

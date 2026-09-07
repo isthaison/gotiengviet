@@ -59,6 +59,8 @@ jobs:
             done
           done
           cp README.md release-pkg/
+          mkdir -p release-pkg/data
+          cp data/macros.txt data/emojis.txt data/config data/ai.conf data/assistant.conf data/prompts.conf data/learned-corrections.txt data/learned-words.txt release-pkg/data/
           cd release-pkg && zip -r ../gotiengviet-windows-x64.zip *
 
       - name: Upload Artifact

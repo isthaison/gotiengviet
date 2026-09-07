@@ -56,7 +56,7 @@ Telex và VNI chỉ khác **bảng ánh xạ phím**. Cả hai đi qua cùng thu
 4. Đặt dạng chữ và dấu thanh độc lập, giữ nguyên chữ hoa/thường. Cặp `uo/uô` là một đích của dấu móc, đổi thành `ươ`.
 5. Gõ lại dấu đang có: **bỏ dấu đó và thêm đúng một phím thô**. Đổi sang dấu khác thay dấu cũ. Dấu thanh được đặt lại đúng vị trí khi cụm nguyên âm thay đổi.
 
-Không có bảng ngoại lệ theo từ và không suy đoán/khôi phục tiếng Anh trong thuật toán gõ. Các bảng từ trong `spell.c` chỉ phục vụ gợi ý chính tả, không quyết định kết quả phím gõ. Macro là chức năng mở rộng riêng khi kết thúc từ.
+Không có bảng ngoại lệ theo từ và không suy đoán/khôi phục tiếng Anh trong thuật toán gõ. `spell.c` chỉ kiểm tra cấu trúc âm tiết (đúng/sai), không quyết định kết quả phím gõ và không chứa danh sách từ cứng. Macro là chức năng mở rộng riêng khi kết thúc từ.
 
 | Thao tác | Telex | VNI |
 |---|---|---|
@@ -170,6 +170,11 @@ Cấu hình nằm tại `$XDG_CONFIG_HOME/gotiengviet/` (mặc định `~/.confi
 - `config`: kiểu gõ, kiểu đặt thanh, chính tả và tùy chọn AI.
 - `ai.conf`: provider `rule` hoặc `ollama`, model, URL và port; **giá trị AI trong file này được ưu tiên** khi đọc.
 - `assistant.conf`: thao tác gần nhất (viết lại/dịch) và ngôn ngữ đích; không lưu nội dung câu.
+- `macros.txt`, `emojis.txt` (tùy chọn): bảng macro/emoji riêng, thay thế file hệ thống.
+- `learned-words.txt`, `learned-corrections.txt`: từ điển học từ gợi ý Ollama đã chọn (tự tạo nếu chưa có, sửa/xóa được). Khi chưa có file riêng, bộ gõ dùng seed đi kèm `data/learned-words.txt` (489 từ phổ thông) và `data/learned-corrections.txt` (lỗi kinh điển); lần lưu đầu tiên sẽ copy seed vào file riêng của bạn.
+- `prompts.conf` (tùy chọn): mẫu prompt Ollama riêng, thay thế file hệ thống.
+
+Khi chưa có file người dùng, bộ gõ dùng giá trị mặc định đi kèm trong `data/` của repo (`config`, `ai.conf`, `assistant.conf`, `prompts.conf`, `macros.txt`, `emojis.txt`), được cài vào `/usr/share/gotiengviet/`. Thứ tự ưu tiên: mặc định đi kèm → file người dùng (riêng `ai.conf` vẫn ưu tiên hơn mục `[ai]` trong `config`). Muốn xem/sửa mặc định, copy file từ `/usr/share/gotiengviet/` về `~/.config/gotiengviet/` rồi sửa.
 
 Ví dụ `config`:
 
@@ -199,9 +204,28 @@ port=55602
 
 Mặc định khi chưa có file: Telex, `modern=true`, `spellcheck=true`, AI tắt (`rule`), model `qwen2:0.5b`, URL `http://localhost:55602`.
 
+### Mẫu prompt Ollama
+
+`prompts.conf` chứa các mẫu prompt với placeholder `%s` điền theo thứ tự:
+
+```ini
+[suggest]             # %s = ngữ cảnh, %s = từ đang gõ, %s = gợi ý sửa lỗi
+prompt=...
+correct_hint=...      # dùng khi từ đang gõ bị đánh dấu sai
+complete_hint=...     # dùng khi hoàn thành từ
+[assistant_rewrite]   # %s = đoạn văn
+instruction=...
+system=...
+[assistant_translate] # %s = ngôn ngữ đích, %s = đoạn văn
+instruction=...
+system=...
+```
+
+Mọi ký tự `%` khác được giữ nguyên (viết `%%` cho dấu phần trăm), `\n` là xuống dòng. Thiếu mẫu nào thì yêu cầu đó trả rỗng/báo lỗi thay vì dùng chữ cứng trong code. Biến `GTV_DATA_DIR` (trỏ tới thư mục data) override mọi nguồn, dùng cho test/dev.
+
 ## Chính tả, macro, emoji và gợi ý
 
-Gạch đỏ báo từ sai dùng kiểm tra ngoại tuyến (`spell_word_valid`: từ điển + quy tắc âm tiết) để không chặn xử lý phím. Gợi ý sửa lỗi và từ tiếp theo do Ollama xử lý (bất đồng bộ, có hủy khi gõ tiếp); khi tắt AI hoặc Ollama không phản hồi thì không có gợi ý:
+Gạch đỏ báo từ sai dùng kiểm tra ngoại tuyến (`spell_word_valid`: thuần quy tắc âm tiết — âm đầu, vần, phụ âm cuối, thanh điệu — cộng từ điển học, không danh sách cứng) để không chặn xử lý phím. Gợi ý sửa lỗi và từ tiếp theo do Ollama xử lý (bất đồng bộ, có hủy khi gõ tiếp); khi tắt AI hoặc Ollama không phản hồi thì không có gợi ý:
 
 ```sh
 build/gotiengviet-demo --suggest kông
@@ -224,6 +248,15 @@ Macro mở rộng khi kết thúc từ (gõ dấu cách/câu):
 
 So khớp không phân biệt hoa/thường.
 
+Macro và emoji không nằm trong mã nguồn mà đọc từ file text (`key=value` mỗi dòng, `#` là chú thích, UTF-8). Thứ tự tìm file: `GTV_DATA_DIR` (nếu đặt, dùng cho test/dev) → `~/.config/gotiengviet/macros.txt` → `/usr/share/gotiengviet/macros.txt` (do `install.sh` cài từ `data/` trong repo) → `./data/macros.txt` (chạy từ cây mã nguồn). File người dùng **thay thế hoàn toàn** file hệ thống. Muốn thêm macro riêng, tạo `~/.config/gotiengviet/macros.txt`:
+
+```ini
+# macro riêng
+cty=Công ty TNHH
+```
+
+Xóa/sửa file rồi khởi động lại bộ gõ để nhận bảng mới.
+
 ### Emoji
 
 Gõ đúng mã rồi kết thúc từ để chốt emoji, ví dụ `:smile:` → 😊:
@@ -231,12 +264,17 @@ Gõ đúng mã rồi kết thúc từ để chốt emoji, ví dụ `:smile:` →
 - Mã kiểu Slack: `:smile:`, `:thumbsup:`, `:+1:`, `:heart:`, `:fire:`, `:coffee:`, `:vn:`, …
 - Mặt cười gõ nhanh: `:)`, `:-)`, `:D`, `:(`, `;)`, `:P`, `<3`, `(y)`, `(n)`, …
 - Gợi ý trong IBus: đang gõ tiền tố `:` (ví dụ `:sm`) sẽ gợi ý tối đa 5 emoji.
+- Tùy biến tương tự macro qua `~/.config/gotiengviet/emojis.txt` (`:ten:=😀` mỗi dòng, giữ thứ tự vì 5 gợi ý đầu khớp tiền tố được hiện).
 
 ### Gợi ý Ollama và từ điển cá nhân
 
 Bật **AI gợi ý** trong Cài đặt. Bộ gõ chờ bạn ngừng gõ 350 ms rồi gửi ngữ cảnh và từ đang gõ tới Ollama. Gõ tiếp sẽ đặt lại bộ đếm, hủy yêu cầu cũ và loại bỏ kết quả cũ. Mỗi lượt chỉ gọi một yêu cầu chạy nền; Telex/VNI không chờ AI. Không còn nguồn gợi ý vector hoặc dự phòng vector khi Ollama không phản hồi. Emoji vẫn dùng danh sách cục bộ.
 
 Từ trong gợi ý Ollama mà bạn chủ động chọn được lưu vào `~/.config/gotiengviet/learned-words.txt`. Bộ gõ nhận diện các từ này khi kiểm tra chính tả, không phân biệt hoa/thường. Chỉ nhận gợi ý chưa làm thay đổi từ điển; từ được lưu sau khi bạn chọn. Có thể sửa/xóa file rồi khởi động lại bộ gõ để bỏ từ đã học. Đây là từ điển cá nhân, không phải huấn luyện lại model Ollama.
+
+Khi bạn nhận một gợi ý **sửa lỗi** (ví dụ Ollama sửa `khoog` thành `không` và bạn chọn nó), cặp `sai=đúng` được nhớ vào `~/.config/gotiengviet/learned-corrections.txt`. Lần sau gõ lại từ sai đó, bộ gõ gạch đỏ ngay mà không cần mạng — đây là cách Ollama dạy bộ kiểm tra thay cho bảng lỗi cứng trong mã nguồn. Chỉ mapping sửa lỗi được nhớ (có cờ sửa lỗi + khớp đúng từ đang gõ); gợi ý hoàn thành từ (như `ch` → `chào`) không bao giờ bị đánh dấu sai. Chữ chưa gõ dấu luôn được cho qua ở vòng sync để không gạch đỏ oan khi đang gõ dở.
+
+Kèm theo app là file seed `data/learned-corrections.txt` (cài vào `/usr/share/gotiengviet/`) với các lỗi Telex/VNI kinh điển (`hoăc=hoặc`, `kông=không`, `duoc=được`, …). Khi bạn chưa có file riêng, bộ gõ dùng seed này nên các lỗi quen thuộc bị gạch đỏ và được gợi ý sửa ngay từ lần đầu, kể cả offline. Lần đầu bạn nhận một sửa lỗi, toàn bộ map (seed + mới học) được lưu vào file riêng của bạn — từ đó file riêng là authoritative, cứ sửa/xóa thoải mái, không bao giờ đụng tới file seed.
 
 ## Ctrl+T: viết lại và dịch với Ollama (Linux)
 
@@ -265,10 +303,16 @@ engine/
   phonology.c       vị trí đặt dấu thanh (modern/truyền thống)
   promotion.c       quy tắc nguyên âm ie/ye/uo
   config.c          đọc/lưu cấu hình dùng chung
-  spell.c           kiểm tra và gợi ý chính tả
-  macro.c           mở rộng macro/emoji
+  spell.c           kiểm tra chính tả ngoại tuyến (quy tắc âm tiết)
+  macro.c           nạp bảng macro/emoji từ file và mở rộng
   ai.c, json.c      provider Ollama và JSON
   text.c            chuyển UTF-8/UCS-4
+data/
+  macros.txt, emojis.txt  bảng macro/emoji đi kèm (cài vào /usr/share/gotiengviet/)
+  learned-corrections.txt  seed typo kinh điển, dùng khi user chưa có file riêng
+  learned-words.txt  seed 489 từ phổ thông, dùng khi user chưa có file riêng
+  config, ai.conf, assistant.conf  cấu hình mặc định (lớp dưới file người dùng)
+  prompts.conf  mẫu prompt Ollama: [suggest], [assistant_rewrite], [assistant_translate]
   telex.c, vni.c    adapter mỏng vào thuật toán chung
 ibus/
   engine.c          vòng đời, phím và giao tiếp IBus
@@ -324,11 +368,16 @@ GoTiengViet hỗ trợ Windows 10/11 native thông qua Win32 Low-Level Keyboard 
 * **Tự động build CI/CD**: Mỗi bản release trên GitHub tự động build và đính kèm gói `gotiengviet-windows-x64.zip` (chạy ngay không cần cài đặt).
 * **Phím tắt chuyển ngôn ngữ**: `Ctrl + Shift` hoặc `Alt + Z` để đổi nhanh giữa chế độ [V] và [E].
 * **Khay hệ thống (System Tray)**: Nhấp chuột trái vào icon [V]/[E] để đổi ngôn ngữ; nhấp chuột phải để mở Bảng điều khiển, chuyển kiểu gõ Telex/VNI hoặc Thoát.
+* **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cộng thêm cụm AI (bật/tắt Ollama, model, URL) — lưu chung vào `%APPDATA%/gotiengviet/` như bản Linux.
+* **Gợi ý sửa lỗi bằng balloon**: khi bật chính tả + AI và vừa gõ xong một từ sai cấu trúc, bộ gõ hỏi Ollama nền và hiện balloon `"sai" có thể bạn muốn gõ "đúng"?` (chống spam 10 giây, không chặn gõ). Cần Ollama chạy và `curl` (Windows 10+ có sẵn).
+* **Macro/emoji/từ điển học**: dùng chung engine và file `data/` đi kèm trong zip (`data/` nằm cạnh `gotiengviet.exe`); file người dùng trong `%APPDATA%/gotiengviet/` vẫn ưu tiên hơn.
 * **Tự khởi động cùng Windows**: Tùy chọn trong bảng điều khiển hoặc menu chuột phải.
 * **Build từ mã nguồn (MSYS2 MinGW-w64)**:
   ```sh
   pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glib2 make
   make -f Makefile.win
   ```
+
+Chưa có trên Windows: bảng gợi ý inline trong ô nhập, cửa sổ trợ lý Ctrl+T viết lại/dịch, và học từ điển từ gợi ý (thiếu UI để nhận gợi ý) — lõi gõ, cấu hình, macro/emoji, kiểm tra âm tiết và gợi ý AI dạng balloon đã ngang Linux.
 
 Giấy phép: [MIT](LICENSE).

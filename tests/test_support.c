@@ -70,12 +70,17 @@ static void test_json(void) {
 }
 static void test_spelling(void) {
     g_assert_true(spell_word_valid("được"));
-    g_assert_false(spell_word_valid("kông"));
-    g_assert_false(spell_word_valid("hoăc"));
-    g_assert_false(spell_word_valid("bàc"));
-    g_assert_false(spell_word_valid("vièt"));
-    g_assert_false(spell_word_valid("ngha"));
-    g_assert_false(spell_word_valid("ge"));
+    g_assert_false(spell_word_valid("kông")); /* k chỉ đi với i/e/y */
+    /* Thuần quy tắc âm tiết, không danh sách cứng: hoăc/ge hợp cấu trúc nên
+     * qua vòng sync; lỗi kiểu này do Ollama sửa và được nhớ vào
+     * learned-corrections.txt để gạch đỏ ngay lần sau (xem test_ibus). */
+    g_assert_true(spell_word_valid("hoăc"));
+    g_assert_false(spell_word_valid("bàc")); /* huyền + phụ âm tắc c */
+    g_assert_false(spell_word_valid("vièt")); /* huyền + phụ âm tắc t */
+    /* Chưa gõ dấu thì sync luôn cho qua (đang gõ dở/chữ thô); ngh+a sai
+     * vẫn do Ollama sửa và được nhớ vào learned-corrections.txt. */
+    g_assert_true(spell_word_valid("ngha"));
+    g_assert_true(spell_word_valid("ge"));
 
     GtvConfig config={.ai_enabled=FALSE};
     g_assert_false(gtv_ai_available(&config));
@@ -105,6 +110,71 @@ static void test_spelling(void) {
     suggestions=gtv_ai_suggest(&config,"được","");
     g_assert_cmpuint(suggestions->len,==,0);
     g_ptr_array_unref(suggestions);
+}
+
+static void test_prompts(void) {
+    gchar *tmp=g_dir_make_tmp("gotiengviet-prompts-XXXXXX",NULL);
+    g_assert_nonnull(tmp);
+    gchar *saved=g_strdup(g_getenv("GTV_DATA_DIR"));
+    g_setenv("GTV_DATA_DIR",tmp,TRUE);
+    gtv_prompts_reload();
+    /* Empty dir: everything falls back. */
+    gchar *p=gtv_prompt_get("suggest","prompt","FB");
+    g_assert_cmpstr(p,==,"FB");g_free(p);
+    g_assert_null(gtv_prompt_get("suggest","prompt",NULL));
+    /* Custom file is honored. */
+    gchar *pc=g_build_filename(tmp,"prompts.conf",NULL);
+    g_assert_true(g_file_set_contents(pc,"[suggest]\nprompt=A:%s:%s:%s\ncorrect_hint=H.\n",-1,NULL));
+    gtv_prompts_reload();
+    p=gtv_prompt_get("suggest","prompt","FB");
+    g_assert_cmpstr(p,==,"A:%s:%s:%s");g_free(p);
+    p=gtv_prompt_get("suggest","complete_hint","FB");
+    g_assert_cmpstr(p,==,"FB");g_free(p);
+    /* Template formatting substitutes %s in order, keeps the rest literally. */
+    const gchar *args[]={"x","y"};
+    gchar *f=gtv_format_template("a %d %s b %% %s c %s",args,2);
+    g_assert_cmpstr(f,==,"a %d x b %% y c %s");g_free(f);
+    f=gtv_format_template(NULL,args,2);
+    g_assert_cmpstr(f,==,"");g_free(f);
+    /* Restore shipped data. */
+    if(saved)g_setenv("GTV_DATA_DIR",saved,TRUE);
+    g_free(saved);
+    gtv_prompts_reload();
+    p=gtv_prompt_get("suggest","correct_hint","FB");
+    g_assert_cmpstr(p,==,"Correct spelling if needed.");g_free(p);
+    g_remove(pc);g_free(pc);
+    g_rmdir(tmp);g_free(tmp);
+}
+static void test_config_defaults(void) {
+    /* Shipped data files drive defaults; user files override them. */
+    gchar *empty=g_dir_make_tmp("gotiengviet-defaults-XXXXXX",NULL);
+    g_assert_nonnull(empty);
+    GtvConfig cfg;
+    gtv_config_load(&cfg,empty);
+    g_assert_cmpint(cfg.mode,==,GTV_TELEX);
+    g_assert_true(cfg.modern);g_assert_true(cfg.spellcheck);
+    g_assert_false(cfg.ai_enabled);
+    g_assert_cmpstr(cfg.model,==,"qwen2:0.5b");
+    g_assert_cmpstr(cfg.url,==,"http://localhost:55602");
+    g_assert_cmpstr(cfg.port,==,"55602");
+    gtv_config_clear(&cfg);
+    gchar *uc=g_build_filename(empty,"config",NULL);
+    g_assert_true(g_file_set_contents(uc,"[input]\nmethod=vni\n",-1,NULL));
+    g_free(uc);
+    gtv_config_load(&cfg,empty);
+    g_assert_cmpint(cfg.mode,==,GTV_VNI);
+    g_assert_cmpstr(cfg.model,==,"qwen2:0.5b");
+    gtv_config_clear(&cfg);
+    gchar *ua=g_build_filename(empty,"ai.conf",NULL);
+    g_assert_true(g_file_set_contents(ua,"[ai]\nprovider=ollama\nmodel=custom-model\n",-1,NULL));
+    g_free(ua);
+    gtv_config_load(&cfg,empty);
+    g_assert_true(cfg.ai_enabled);
+    g_assert_cmpstr(cfg.model,==,"custom-model");
+    gtv_config_clear(&cfg);
+    gchar *rc=g_build_filename(empty,"config",NULL);g_remove(rc);g_free(rc);
+    gchar *ra=g_build_filename(empty,"ai.conf",NULL);g_remove(ra);g_free(ra);
+    g_rmdir(empty);g_free(empty);
 }
 
 /* Every permutation of pending operations must converge to the same syllable. */
@@ -308,6 +378,8 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/suggest-combined",test_suggest_combined);
     g_test_add_func("/support/spelling",test_spelling);
     g_test_add_func("/support/macro-and-emoji",test_macro_and_emoji);
+    g_test_add_func("/support/prompts",test_prompts);
+    g_test_add_func("/support/config-defaults",test_config_defaults);
     g_test_add_func("/algorithm/order-independence",test_order_independence);
     g_test_add_func("/algorithm/random-input",test_random_input);
     return g_test_run();

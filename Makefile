@@ -6,6 +6,8 @@ CFLAGS += -std=gnu11 -Wall -Wextra -Wno-unused-parameter
 CPPFLAGS += -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 BUILD_DIR ?= build
 VERSION ?= 0.3.0-1
+# Macro/emoji tables for tests (and dev runs without install).
+export GTV_DATA_DIR ?= $(abspath data)
 CORE_SRC := $(wildcard engine/*.c)
 CORE_OBJ := $(patsubst engine/%.c,$(BUILD_DIR)/engine/%.o,$(CORE_SRC))
 CORE_LIB := $(BUILD_DIR)/libgotiengviet.a

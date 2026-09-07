@@ -1,5 +1,6 @@
 #include "hook.h"
 #include "tray.h"
+#include "internal.h"
 #include <stdio.h>
 
 static void send_backspaces(int count) {
@@ -36,6 +37,22 @@ static void send_unicode_string(const wchar_t *wstr) {
     }
     SendInput(len * 2, inputs, sizeof(INPUT));
     g_free(inputs);
+}
+
+/* After a word-ending commit (word + delimiter), ask Ollama about likely
+ * typos in the background. Offline-safe: the local syllable check gates. */
+static void maybe_ai_suggest(const gchar *commit) {
+    if (!g_app.config.spellcheck || !g_app.config.ai_enabled) return;
+    if (!commit) return;
+    glong len = g_utf8_strlen(commit, -1);
+    if (len < 3) return;
+    gchar *end = g_utf8_offset_to_pointer(commit, len - 1);
+    gunichar delim = g_utf8_get_char(end);
+    if (!g_unichar_isspace(delim) && !g_unichar_ispunct(delim)) return;
+    gchar *word = g_utf8_substring(commit, 0, len - 1);
+    if (g_utf8_strlen(word, -1) >= 2 && !spell_word_valid(word))
+        gtv_tray_check_spelling_async(word);
+    g_free(word);
 }
 
 void gtv_hook_reset_buffer(void) {
@@ -137,6 +154,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                     send_unicode_string((const wchar_t *)wstr);
                     g_free(wstr);
                 }
+                maybe_ai_suggest(commit);
                 g_free(commit);
                 return 1; /* Suppress original key */
             } else if (backspaces > 0) {

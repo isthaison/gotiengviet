@@ -10,7 +10,7 @@ IDI_APP_ICON    ICON    "icons/gotiengviet.ico"
 IDI_TRAY_V      ICON    "icons/tray_v.ico"
 IDI_TRAY_E      ICON    "icons/tray_e.ico"
 
-IDD_SETUP_DIALOG DIALOGEX 0, 0, 240, 160
+IDD_SETUP_DIALOG DIALOGEX 0, 0, 240, 225
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "GoTiengViet - Cài đặt"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -24,8 +24,15 @@ BEGIN
     AUTOCHECKBOX    "Kiểm tra chính tả & Gợi ý từ thông minh", IDC_CHECK_SPELL, 20, 90, 200, 10
     AUTOCHECKBOX    "Khởi động cùng Windows", IDC_CHECK_STARTUP, 20, 106, 200, 10
 
-    DEFPUSHBUTTON   "Đồng ý", IDC_BTN_OK, 120, 135, 50, 14
-    PUSHBUTTON      "Hủy", IDC_BTN_CANCEL, 175, 135, 50, 14
+    GROUPBOX        "Gợi ý AI (Ollama, tùy chọn)", IDC_STATIC, 10, 130, 220, 60
+    AUTOCHECKBOX    "Bật gợi ý AI (cần Ollama + curl)", IDC_CHECK_AI, 20, 144, 200, 10
+    LTEXT           "Model:", IDC_STATIC, 20, 160, 40, 10
+    EDITTEXT        IDC_EDIT_MODEL, 65, 158, 155, 12
+    LTEXT           "URL:", IDC_STATIC, 20, 174, 40, 10
+    EDITTEXT        IDC_EDIT_URL, 65, 172, 155, 12
+
+    DEFPUSHBUTTON   "Đồng ý", IDC_BTN_OK, 120, 200, 50, 14
+    PUSHBUTTON      "Hủy", IDC_BTN_CANCEL, 175, 200, 50, 14
 END
 
 1 VERSIONINFO

@@ -17,6 +17,9 @@
 #define IDC_CHECK_STARTUP   206
 #define IDC_BTN_OK          207
 #define IDC_BTN_CANCEL      208
+#define IDC_CHECK_AI        209
+#define IDC_EDIT_MODEL      210
+#define IDC_EDIT_URL        211
 
 #define IDM_TRAY_MENU       301
 #define ID_TRAY_SETTINGS    302

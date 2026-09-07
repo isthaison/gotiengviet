@@ -15,9 +15,16 @@ static void preferences(gboolean save){
         g_key_file_set_string(file,"assistant","language",gtk_entry_get_text(GTK_ENTRY(language)));
         if(g_mkdir_with_parents(directory,0700)==0)g_key_file_save_to_file(file,path,NULL);
     }else{
-        gboolean loaded=g_key_file_load_from_file(file,path,G_KEY_FILE_NONE,NULL);
-        gint selected=loaded ? g_key_file_get_integer(file,"assistant","action",NULL) : 0;
-        gchar *target=loaded ? g_key_file_get_string(file,"assistant","language",NULL) : NULL;
+        gchar *defpath=gtv_data_path("assistant.conf");
+        GKeyFile *defs=g_key_file_new();
+        gboolean dloaded=g_key_file_load_from_file(defs,defpath,G_KEY_FILE_NONE,NULL);
+        gint selected=dloaded ? g_key_file_get_integer(defs,"assistant","action",NULL) : 0;
+        gchar *target=dloaded ? g_key_file_get_string(defs,"assistant","language",NULL) : NULL;
+        g_key_file_unref(defs);g_free(defpath);
+        if(g_key_file_load_from_file(file,path,G_KEY_FILE_NONE,NULL)){
+            selected=g_key_file_get_integer(file,"assistant","action",NULL);
+            g_free(target);target=g_key_file_get_string(file,"assistant","language",NULL);
+        }
         gtk_combo_box_set_active(GTK_COMBO_BOX(action),selected==1?1:0);
         gtk_entry_set_text(GTK_ENTRY(language),target && *target ? target : "English");
         g_free(target);
@@ -64,11 +71,19 @@ static void generate(GtkButton *button,gpointer data){
     set_text(result,"");
     GtvConfig config;gchar *dir=g_build_filename(g_get_user_config_dir(),"gotiengviet",NULL);
     gtv_config_load(&config,dir);g_free(dir);
-    gchar *instruction=translate ? g_strdup_printf("Translate this Vietnamese text into %s:\n%s",target,input)
-        : g_strdup_printf("Rewrite this text clearly and naturally in its original language, preserving its meaning:\n%s",input);
-    gchar *system=gtv_json_quote(translate
-        ? "You are a translator. Output only the translated text, without explanations or quotation marks. Do not repeat instructions."
-        : "You are an editor. Output only the rewritten text. Do not repeat instructions or add explanations.");
+    const gchar *pgroup=translate ? "assistant_translate" : "assistant_rewrite";
+    gchar *itempl=gtv_prompt_get(pgroup,"instruction",NULL);
+    gchar *sysraw=gtv_prompt_get(pgroup,"system",NULL);
+    if(!itempl || !sysraw){
+        g_free(itempl);g_free(sysraw);g_free(input);gtv_config_clear(&config);g_free(dir);
+        gtk_label_set_text(GTK_LABEL(status),"Thiếu mẫu prompt (prompts.conf). Hãy cài lại GoTiengViet.");
+        return;
+    }
+    gchar *instruction;
+    if(translate){const gchar *a[]={target,input};instruction=gtv_format_template(itempl,a,2);}
+    else{const gchar *a[]={input};instruction=gtv_format_template(itempl,a,1);}
+    g_free(itempl);
+    gchar *system=gtv_json_quote(sysraw);g_free(sysraw);
     gchar *prompt=gtv_json_quote(instruction),*model=gtv_json_quote(config.model);
     gchar *body=g_strdup_printf("{\"model\":%s,\"system\":%s,\"prompt\":%s,\"stream\":false,\"options\":{\"temperature\":0}}",model,system,prompt);
     gchar *url=g_strconcat(config.url,"/api/generate",NULL);

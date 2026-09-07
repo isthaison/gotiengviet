@@ -248,10 +248,21 @@ static gboolean ollama_serving(int port){
     return (rc == 0);
 }
 
+static gboolean poll_serve_log(gpointer data);
+static void start_log_poll(void){
+    if(log_timer_id==0 && (serve_pid!=0 || install_pid!=0 || serve_wait_left>0))
+        log_timer_id=g_timeout_add(800,poll_serve_log,NULL);
+}
 static gboolean poll_serve_log(gpointer data){
     static long last_off = 0;
     static char last_path[256] = "";
     (void)data;
+    /* Idle steady state: stop tailing instead of waking every 800ms forever.
+     * Each wakeup appends AT-SPI text events that keep screen readers busy. */
+    if(serve_pid==0 && install_pid==0 && serve_wait_left<=0){
+        log_timer_id=0;
+        return FALSE;
+    }
     if(strcmp(last_path, active_log_path) != 0){
         snprintf(last_path, sizeof(last_path), "%s", active_log_path);
         last_off = 0;
@@ -290,13 +301,13 @@ static gboolean check_serve_ready(gpointer data){
         snprintf(msg, sizeof(msg), "Ollama đã chạy ở port %d (pid %d) — sẵn sàng gợi ý.", port, (int)serve_pid);
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
         ai_log(msg);
-        if(log_timer_id == 0) log_timer_id = g_timeout_add(800, poll_serve_log, NULL);
+        serve_wait_left=0;
         return FALSE;
     }
     if(--serve_wait_left <= 0){
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Sau 15s vẫn chưa kết nối được — xem log bên dưới (file /tmp/ollama_serve.log).");
         ai_log("CẢNH BÁO: quá 15s chưa thấy /api/tags. Kiểm tra log, port có bị chiếm không.");
-        if(log_timer_id == 0) log_timer_id = g_timeout_add(800, poll_serve_log, NULL);
+        serve_wait_left=0;
         return FALSE;
     }
     return TRUE;
@@ -309,7 +320,6 @@ static void ensure_ollama_serve(){
         snprintf(msg, sizeof(msg), "Ollama đang chạy ở port %d — sẵn sàng gợi ý.", port);
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
         ai_log(msg);
-        if(log_timer_id == 0) log_timer_id = g_timeout_add(800, poll_serve_log, NULL);
         return;
     }
     if(!g_find_program_in_path("ollama")){
@@ -340,6 +350,7 @@ static void ensure_ollama_serve(){
     g_child_watch_add(pid, on_serve_exit, NULL);
     ai_log("Đã chạy ollama serve, chờ /api/tags (tối đa 15s)...");
     serve_wait_left = 15;
+    start_log_poll();
     g_timeout_add(1000, check_serve_ready, NULL);
 }
 
@@ -373,10 +384,10 @@ static void on_install_clicked(GtkWidget *w, gpointer data){
     FILE *lf = fopen("/tmp/ollama_install.log", "w");
     if(lf){ fprintf(lf, "=== Cài Ollama (GoTiengViet Setup) ===\n"); fclose(lf); }
     snprintf(active_log_path, sizeof(active_log_path), "/tmp/ollama_install.log");
-    if(log_timer_id == 0) log_timer_id = g_timeout_add(800, poll_serve_log, NULL);
+    start_log_poll();
     gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang tải script cài Ollama...");
     ai_log("Tải https://ollama.com/install.sh ...");
-    int rc = run_shell("curl -fsSL https://ollama.com/install.sh -o /tmp/ollama_install.sh >>/tmp/ollama_install.log 2>&1");
+    int rc = run_shell("curl -fsSL -m 60 https://ollama.com/install.sh -o /tmp/ollama_install.sh >>/tmp/ollama_install.log 2>&1");
     if(rc != 0){
         ai_log("LỖI tải script cài đặt (mất mạng?). Thử lại sau.");
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Không tải được script cài Ollama (kiểm tra mạng).");

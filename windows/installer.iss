@@ -43,12 +43,11 @@ SetupIconFile=icons\gotiengviet.ico
 ShowLanguageDialog=no
 
 [Languages]
-Name: "vietnamese"; MessagesFile: "compiler:Languages\Vietnamese.isl"
+; English-only on purpose: Inno's bundled Vietnamese.isl is unofficial and
+; the choco-installed compiler does not ship it. The app UI is Vietnamese.
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
-vietnamese.StartupDesc=Khoi dong cung Windows
-vietnamese.DesktopDesc=Tao bieu tuong ngoai man hinh
 english.StartupDesc=Start with Windows
 english.DesktopDesc=Create a desktop icon
 

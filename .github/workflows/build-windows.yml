@@ -11,6 +11,10 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    # Needed by the Release Asset step (softprops/action-gh-release)
+    # to create the tag release and upload the setup exe.
+    permissions:
+      contents: write
     defaults:
       run:
         shell: msys2 {0}

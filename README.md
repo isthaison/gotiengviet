@@ -2,7 +2,7 @@
 
 Bộ gõ tiếng Việt cho Linux (và Windows), viết hoàn toàn bằng **C** — build và chạy không cần Go hay CGO.
 
-Telex/VNI dùng chung một lõi, IBus adapter, GUI cấu hình GTK 3, indicator, demo terminal, kiểm tra chính tả ngoại tuyến, macro/emoji, gợi ý và sửa lỗi bằng Ollama (tùy chọn), trợ lý viết lại/dịch Ctrl+T.
+Telex/VNI dùng chung một lõi, IBus adapter, GUI cấu hình GTK 3, indicator, demo terminal, kiểm tra chính tả ngoại tuyến, macro/emoji, gợi ý và sửa lỗi bằng Ollama (tùy chọn).
 
 ## Mục lục
 
@@ -15,7 +15,6 @@ Telex/VNI dùng chung một lõi, IBus adapter, GUI cấu hình GTK 3, indicator
 - [Cấu hình](#cấu-hình)
 - [Macro và emoji](#macro-và-emoji)
 - [Chính tả và gợi ý](#chính-tả-và-gợi-ý)
-- [Ctrl+T: viết lại và dịch (Linux)](#ctrlt-viết-lại-và-dịch-linux)
 - [Cấu trúc mã nguồn](#cấu-trúc-mã-nguồn)
 - [API thư viện C](#api-thư-viện-c)
 - [Xử lý sự cố](#xử-lý-sự-cố)
@@ -28,14 +27,13 @@ Telex/VNI dùng chung một lõi, IBus adapter, GUI cấu hình GTK 3, indicator
 - Gợi ý sửa lỗi và hoàn thành từ bằng Ollama (debounce 350 ms, hủy khi gõ tiếp); khi mất mạng vẫn gợi ý từ dữ liệu đã học.
 - Từ điển học: từ và cặp sửa lỗi do bạn chọn từ gợi ý Ollama được nhớ lại, dùng offline từ lần sau.
 - Macro gõ tắt và emoji đọc từ file text, người dùng tự thêm được.
-- Trợ lý Ctrl+T viết lại/dịch văn bản ngay trong ô nhập (Linux).
 - Mọi bảng dữ liệu (macro, emoji, config mẫu, prompt, seed từ điển) đều là file trong `data/`, không hardcode.
 
 ## Bắt đầu nhanh
 
 ```sh
 sudo apt install build-essential pkg-config libibus-1.0-dev libgtk-3-dev \
-  libayatana-appindicator3-dev libatspi2.0-dev librsvg2-bin
+  libayatana-appindicator3-dev librsvg2-bin
 ./build.sh
 sudo ./install.sh
 ```
@@ -86,19 +84,17 @@ Cần đúng bộ dependency ở [Bắt đầu nhanh](#bắt-đầu-nhanh).
 
 ```sh
 ./build.sh                         # = make build test
-make build                         # 4 binary + libgotiengviet.a
+make build                         # 3 binary + libgotiengviet.a
 make test                          # engine + support + thuật toán
 make vet                           # build + test với -Werror
-make test-ibus                     # vòng đời IBus, trợ lý, xóa-xác minh
-make test-assistant                # cửa sổ trợ lý (cần broadwayd nếu headless)
+make test-ibus                     # vòng đời IBus
 make test-ui                       # giao diện setup
-make test-text-target-live         # opt-in: ô nhập thật để kiểm tra AT-SPI
 make help
 ```
 
 `make test` gồm: gõ Telex/VNI, stateful, config, JSON, Ollama (qua curl giả lập, không cần mạng/model), chính tả, macro/emoji, prompts, config mặc định, hoán vị mọi thứ tự thao tác trên cùng âm tiết, và 20.000 chuỗi ngẫu nhiên.
 
-Các binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` để chạy trong IBus), `ibus-setup-gotiengviet` (GUI/`--tray`/`--cli`), `gotiengviet-assistant`, `gotiengviet-demo`, `libgotiengviet.a`.
+Các binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` để chạy trong IBus), `ibus-setup-gotiengviet` (GUI/`--tray`/`--cli`), `gotiengviet-demo`, `libgotiengviet.a`.
 
 ## Cài đặt và đóng gói
 
@@ -124,11 +120,7 @@ build/gotiengviet-demo            # tương tác: mode telex | mode vni | quit
 ibus-setup-gotiengviet            # GUI (tự bật tray nền)
 ibus-setup-gotiengviet --tray     # chỉ indicator (cần DISPLAY/WAYLAND_DISPLAY)
 ibus-setup-gotiengviet --cli      # terminal, Enter giữ giá trị cũ
-
-gotiengviet-assistant [--stdin] [--headless] [--replace]
 ```
-
-`--stdin` đọc từ stdin, `--headless` in kết quả ra stdout thay vì mở cửa sổ, `--replace` cho Enter thay câu gốc khi được IBus gọi.
 
 ## Cấu hình
 
@@ -138,7 +130,6 @@ Thư mục cấu hình: `$XDG_CONFIG_HOME/gotiengviet/` (mặc định `~/.confi
 |---|---|
 | `config` | Kiểu gõ, kiểu đặt dấu, chính tả, tùy chọn AI |
 | `ai.conf` | Provider `rule`/`ollama`, model, URL, port — ưu tiên hơn mục `[ai]` trong `config` |
-| `assistant.conf` | Thao tác gần nhất (viết lại/dịch) + ngôn ngữ đích; không lưu nội dung câu |
 | `macros.txt`, `emojis.txt` | Bảng riêng, thay thế hoàn toàn file hệ thống |
 | `learned-words.txt`, `learned-corrections.txt` | Từ điển học (tự tạo, sửa/xóa được) |
 | `prompts.conf` | Mẫu prompt Ollama riêng |
@@ -154,8 +145,6 @@ Ví dụ `config` / `ai.conf` mặc định: Telex, `modern=true`, `spellcheck=t
 ```ini
 [suggest]             # %s = ngữ cảnh, từ đang gõ, gợi ý sửa lỗi
 prompt=...            # correct_hint: từ bị đánh dấu sai; complete_hint: hoàn thành từ
-[assistant_rewrite]   # %s = đoạn văn
-[assistant_translate] # %s = ngôn ngữ đích, đoạn văn
 ```
 
 Mọi `%` khác giữ nguyên (viết `%%` cho dấu phần trăm), `\n` là xuống dòng. Thiếu mẫu nào, yêu cầu đó trả rỗng/báo lỗi thay vì dùng chữ cứng.
@@ -187,14 +176,6 @@ build/gotiengviet-demo --suggest kông   # cần Ollama, không thì rỗng
 build/gotiengviet-demo --predict "công nghệ" thong
 ```
 
-## Ctrl+T: viết lại và dịch (Linux)
-
-Nhấn **Ctrl+T** khi đang gõ: bộ gõ lấy đoạn đang chọn (hoặc nội dung trước con trỏ + chữ gõ dở), xử lý theo lựa chọn gần nhất, hiện kết quả ngay tại ô nhập. **Enter** thay câu gốc (nhấn lặp/giữ Enter cũng chỉ chạy một lượt — chống chèn đúp và xóa lố), **Esc** hủy, **Tab** đổi viết lại/dịch. Nội dung/con trỏ đổi rồi thì không ghi đè.
-
-Khi Enter, câu gốc bị xóa bằng surrounding text đã xác minh trước, rồi mới tới AT-SPI select và cuối cùng là Backspace đúng số ký tự. Mọi nhánh đều **xác nhận câu gốc đã mất mới chèn** — đọc độc lập 2 kênh (surrounding + AT-SPI), kênh nào mâu thuẫn là dừng; snapshot rỗng chỉ được tin khi con trỏ cũng đứng đúng điểm xóa (terminal báo text rỗng mà không xóa thật sẽ bị bắt). Đoạn cần xóa đổi giữa chừng thì dừng. Terminal thường lờ lệnh xóa nên tự rơi vào nhánh Backspace đã xác minh thay vì chèn thêm. Kẹt hẳn thì báo lỗi, giữ kết quả cho Enter thử lại.
-
-Ô mật khẩu/PIN không kích hoạt. Ctrl+T khi không có chữ nào báo ngay thay vì treo; mỗi lượt chạy giới hạn 150 giây nên Enter không bao giờ kẹt ở "đang xử lý". Một số app giữ Ctrl+T trước IBus (ví dụ mở tab mới) nên không đảm bảo mọi nơi. Mặc định **Viết lại**; chạy `gotiengviet-assistant` để chọn **Dịch** + ngôn ngữ đích (nhớ trong `assistant.conf`). Ollama phải chạy sẵn, model đã tải; mỗi yêu cầu curl tối đa 120 giây. Mở tay `gotiengviet-assistant` khi dùng layout English thì Enter sao chép kết quả.
-
 ## Cấu trúc mã nguồn
 
 ```text
@@ -216,15 +197,13 @@ data/
   macros.txt, emojis.txt            bảng đi kèm (/usr/share/gotiengviet/)
   learned-words.txt                 seed 489 từ phổ thông
   learned-corrections.txt           seed lỗi Telex/VNI kinh điển
-  config, ai.conf, assistant.conf   cấu hình mặc định
-  prompts.conf                      mẫu prompt [suggest]/[assistant_*]
+  config, ai.conf                 cấu hình mặc định
+  prompts.conf                      mẫu prompt [suggest]
 ibus/
-  engine.c          vòng đời, phím, gợi ý, thay thế đã xác minh
-  text_target.c/h   chọn/đọc ô nhập qua AT-SPI
+  engine.c          vòng đời, phím, gợi ý
   gotiengviet.xml   khai báo component IBus
 cmd/setup/main.c    GTK, indicator, CLI  |  cmd/demo/main.c    demo
-cmd/assistant/main.c  cửa sổ viết lại/dịch
-tests/              kiểm thử C (+ fake curl/assistant)
+tests/              kiểm thử C (+ fake curl)
 windows/            hook, tray, setup cho Windows
 ```
 
@@ -259,8 +238,6 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 - **Không thấy GoTiengViet trong Input Sources:** `ibus restart`, đăng xuất/đăng nhập lại, kiểm tra `/usr/share/ibus/component/gotiengviet.xml`.
 - **Gõ không ra dấu:** đang ở engine `gotiengviet` (không phải English US)? Kiểm tra `Super+Space` và `method` trong `~/.config/gotiengviet/config`.
 - **Muốn chữ điều khiển thô** (`test`, `pass`): gõ lặp (`tesst`, `passs`) hoặc tạm chuyển English.
-- **Ctrl+T không phản hồi:** thử ô nhập khác, kiểm tra Ollama/model, xem `~/.cache/gotiengviet/debug.log`.
-- **Ctrl+T trong terminal, Enter chèn thêm:** cập nhật bản mới rồi `ibus restart`. Còn lỗi thì gửi các dòng `[assistant-state]` trong log (cho biết đã đi nhánh AT-SPI, surrounding hay Backspace).
 - **Crash:** xem `~/.cache/gotiengviet/crash.log`, báo kèm phiên bản `.deb` và log liên quan.
 - **Thử cài đặt không chạm hệ thống:** `DESTDIR=/tmp/gotiengviet-staging ./install.sh`.
 
@@ -268,13 +245,15 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 
 Native Windows 10/11 qua Win32 Low-Level Keyboard Hook (`WH_KEYBOARD_LL`) + System Tray:
 
-* **Gói portable**: mỗi release GitHub đính kèm `gotiengviet-windows-x64.zip` (chạy ngay, `data/` nằm cạnh exe).
-* **Đổi ngôn ngữ**: `Ctrl + Shift` / `Alt + Z` (chống lặp khi giữ phím), hoặc click trái icon [V]/[E] (chế độ được nhớ qua restart); chuột phải mở menu: Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu, tự khởi động, Thoát.
+* **Bộ cài theo version**: mỗi release GitHub đính kèm `gotiengviet-<version>-x64-setup.exe` (Inno Setup, cài per-user không cần admin, tự gỡ sạch qua Add/Remove Programs, nâng cấp giữ nguyên cấu hình `%APPDATA%/gotiengviet/`).
+* **Tự cập nhật**: app kiểm tra release mới nhất trên GitHub mỗi ngày (menu tray **Kiểm tra cập nhật...** để kiểm tra tay). Có bản mới thì hiện balloon — **click vào balloon** để tải và chạy bộ cài silent (`/SILENT`), app tự thoát để thay file. So sánh version theo semver (`v0.4.0` > `0.3.0`, prerelease `<` release cùng số); chỉ cài khi tìm đúng asset `gotiengviet-<version>-x64-setup.exe`, không thì báo lỗi chứ không cài mù.
+* **Đổi ngôn ngữ**: `Ctrl + Shift` / `Alt + Z` (chống lặp khi giữ phím), hoặc click trái icon [V]/[E] (chế độ được nhớ qua restart); chuột phải mở menu: Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu, tự khởi động, Kiểm tra cập nhật, Thoát.
 * **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (bật/tắt Ollama, model, URL) — lưu ở `%APPDATA%/gotiengviet/` như bản Linux.
 * **Gợi ý AI dạng balloon**: từ sai cấu trúc sau khi gõ xong được hỏi Ollama nền, hiện `"sai" co the ban muon go "dung"?` (không dấu cho mọi locale, chống spam 10 giây). Cần Ollama + `curl` (Windows 10+ có sẵn). **Click vào balloon** để nhận gợi ý: văn bản còn nguyên thì tự xóa từ sai và gõ chữ đúng, gõ tiếp rồi thì copy chữ đúng vào clipboard; cả hai đều học mapping vào `learned-corrections.txt`, nên Ollama rớt vẫn gợi ý từ dữ liệu đã học. Từ điển học dùng chung định dạng và seed với bản Linux (module `engine/learn.c`).
 * **Macro/emoji/prompts/config**: chung engine và file `data/`; file người dùng vẫn ưu tiên. Typo đã học/seed (`hoăc`, `kông`, …) vẫn balloon ngay cả khi Ollama rớt, click để nhận + học tiếp.
-* **Build (MSYS2 MinGW-w64)**: `pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glib2 make`, rồi `make -f Makefile.win`.
+* **Build (MSYS2 MinGW-w64)**: `pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glib2 make`, rồi `make -f Makefile.win`. Đóng bộ cài (cần Inno Setup): `make -f Makefile.win setup VERSION=0.4.0` (version phải là `X.Y.Z`, khớp `windows/version.h`).
+* **Cắt release**: bump `windows/version.h` + `windows/resource.rc` + `ibus/gotiengviet.xml` cùng số, commit, push tag `vX.Y.Z` — CI build `gotiengviet-X.Y.Z-x64-setup.exe` và đính kèm release để app tự cập nhật.
 
-Chưa có: gợi ý inline trong ô nhập, cửa sổ Ctrl+T. Lõi gõ, cấu hình, macro/emoji, kiểm tra âm tiết, gợi ý AI (kèm nhận + học + offline) đã ngang Linux.
+Chưa có: gợi ý inline trong ô nhập. Lõi gõ, cấu hình, macro/emoji, kiểm tra âm tiết, gợi ý AI (kèm nhận + học + offline) đã ngang Linux.
 
 Giấy phép: [MIT](LICENSE).

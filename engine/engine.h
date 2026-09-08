@@ -31,4 +31,17 @@ void gtv_config_clear(GtvConfig *config);
 gboolean gtv_ai_available(const GtvConfig *config);
 GPtrArray *gtv_ai_suggest(const GtvConfig *config, const gchar *word, const gchar *context);
 GPtrArray *gtv_predict_next(const GtvConfig *config, const gchar *context, const gchar *prefix);
+/* Self-update against GitHub releases. Check/download need curl and network;
+ * parse/compare/throttle are offline. Out strings belong to the caller. */
+typedef enum { GTV_UPDATE_AVAILABLE, GTV_UPDATE_CURRENT, GTV_UPDATE_ERROR } GtvUpdateStatus;
+#define GTV_GITHUB_REPO "isthaison/gotiengviet"
+gint gtv_version_compare(const gchar *a, const gchar *b);
+gchar *gtv_update_asset_name(const gchar *version);
+GtvUpdateStatus gtv_update_parse_release(const gchar *json, const gchar *current_version,
+                                         gchar **out_tag, gchar **out_asset_url);
+GtvUpdateStatus gtv_update_check(const gchar *repo, const gchar *current_version,
+                                 gchar **out_tag, gchar **out_asset_url);
+gboolean gtv_update_download(const gchar *url, const gchar *dest_path);
+gboolean gtv_update_should_autocheck(void);
+void gtv_update_mark_checked(void);
 #endif

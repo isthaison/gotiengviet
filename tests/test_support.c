@@ -57,6 +57,68 @@ static void test_config(void) {
     path=g_build_filename(directory,"config",NULL);g_remove(path);g_free(path);
     g_rmdir(directory);g_free(directory);
 }
+static void test_update(void) {
+    /* Version ordering: numeric parts, missing parts are zero, leading v
+     * ignored, release beats prerelease with the same numbers. */
+    const struct { const gchar *a, *b; gint sign; } order[] = {
+        {"0.3.0", "0.3.0", 0}, {"v0.3.0", "0.3.0", 0}, {"0.3", "0.3.0", 0},
+        {"0.3.0", "0.3.1", -1}, {"0.3.1", "0.3.0", 1}, {"0.10.0", "0.9.9", 1},
+        {"1.0.0", "0.99.99", 1}, {"0.3.0-rc1", "0.3.0", -1}, {"0.3.0", "0.3.0-rc1", 1},
+        {"0.3.0-rc1", "0.3.0-rc2", -1}, {"0.4.0", "0.3.0", 1}, {"0.3.0.0", "0.3.0", 0},
+        {"0.3.0.1", "0.3.0", 1}, {"10.0", "9.9.9", 1},
+    };
+    for (guint i = 0; i < G_N_ELEMENTS(order); i++) {
+        gint got = gtv_version_compare(order[i].a, order[i].b);
+        gint want = order[i].sign;
+        if (want == 0) g_assert_cmpint(got, ==, 0);
+        else g_assert_cmpint((got > 0) - (got < 0), ==, want);
+        gint rev = gtv_version_compare(order[i].b, order[i].a);
+        g_assert_cmpint((rev > 0) - (rev < 0), ==, -want);
+    }
+    gchar *asset = gtv_update_asset_name("v0.4.0");
+    g_assert_cmpstr(asset, ==, "gotiengviet-0.4.0-x64-setup.exe");
+    g_free(asset);
+    /* Release payload parsing: newer tag + matching asset. */
+    const gchar *payload =
+        "{\"tag_name\":\"v0.4.0\",\"prerelease\":false,"
+        "\"assets\":["
+        "{\"name\":\"gotiengviet-0.4.0-x64-setup.exe\","
+        " \"browser_download_url\":\"https://github.com/x/y/releases/download/v0.4.0/gotiengviet-0.4.0-x64-setup.exe\","
+        " \"uploader\":{\"login\":\"x\"}},"
+        "{\"name\":\"SHA256SUMS\",\"browser_download_url\":\"https://example.com/sums\"}]}";
+    gchar *tag = NULL, *url = NULL;
+    g_assert_cmpint(gtv_update_parse_release(payload, "0.3.0", &tag, &url), ==, GTV_UPDATE_AVAILABLE);
+    g_assert_cmpstr(tag, ==, "v0.4.0");
+    g_assert_true(g_str_has_suffix(url, "gotiengviet-0.4.0-x64-setup.exe"));
+    g_free(tag); g_free(url);
+    /* Same or newer current version: no update, no out strings. */
+    g_assert_cmpint(gtv_update_parse_release(payload, "0.4.0", &tag, &url), ==, GTV_UPDATE_CURRENT);
+    g_assert_null(tag); g_assert_null(url);
+    g_assert_cmpint(gtv_update_parse_release(payload, "1.0.0", &tag, &url), ==, GTV_UPDATE_CURRENT);
+    /* Newer tag but no matching asset: error, never a blind update. */
+    const gchar *noasset = "{\"tag_name\":\"v0.5.0\",\"assets\":[{\"name\":\"notes.txt\",\"browser_download_url\":\"https://example.com/n\"}]}";
+    g_assert_cmpint(gtv_update_parse_release(noasset, "0.3.0", &tag, &url), ==, GTV_UPDATE_ERROR);
+    g_assert_null(tag); g_assert_null(url);
+    /* Malformed payloads. */
+    const gchar *bad[] = {"", "{", "{\"tag_name\":123}", "{\"tag_name\":\"\"}", "{\"assets\":[]}", NULL};
+    for (guint i = 0; bad[i]; i++)
+        g_assert_cmpint(gtv_update_parse_release(bad[i], "0.3.0", &tag, &url), ==, GTV_UPDATE_ERROR);
+    g_assert_cmpint(gtv_update_parse_release(NULL, "0.3.0", NULL, NULL), ==, GTV_UPDATE_ERROR);
+    g_assert_cmpint(gtv_update_parse_release(payload, NULL, NULL, NULL), ==, GTV_UPDATE_ERROR);
+    /* 24h autocheck throttle honours XDG_CONFIG_HOME. */
+    gchar *cfgdir = g_dir_make_tmp("gotiengviet-update-XXXXXX", NULL);
+    g_assert_nonnull(cfgdir);
+    g_setenv("XDG_CONFIG_HOME", cfgdir, TRUE);
+    g_assert_true(gtv_update_should_autocheck());
+    gtv_update_mark_checked();
+    g_assert_false(gtv_update_should_autocheck());
+    gchar *stamp = g_build_filename(cfgdir, "gotiengviet", "update-check", NULL);
+    gchar *old = g_strdup_printf("%" G_GINT64_FORMAT, g_get_real_time() / 1000000 - 25 * 3600);
+    g_assert_true(g_file_set_contents(stamp, old, -1, NULL));
+    g_assert_true(gtv_update_should_autocheck());
+    g_free(old); g_free(stamp);
+    g_free(cfgdir);
+}
 static void test_json(void) {
     const gchar *valid[]={"{\"response\":\"được\"}","{\"x\":[1, true, null, {\"response\":\"ignore\"}],\"response\":\"\\u0111\\u01b0\\u1ee3c\"}","{\"response\":\"\\ud83d\\ude0a\"}",NULL};
     const gchar *expected[]={"được","được","😊"};
@@ -417,6 +479,7 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/stateful",test_stateful);
     g_test_add_func("/support/config",test_config);
     g_test_add_func("/support/json",test_json);
+    g_test_add_func("/support/update",test_update);
     g_test_add_func("/support/ollama",test_ollama);
     g_test_add_func("/support/suggest-combined",test_suggest_combined);
     g_test_add_func("/support/spelling",test_spelling);

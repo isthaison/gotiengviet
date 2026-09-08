@@ -40,39 +40,46 @@ jobs:
         run: |
           make -f Makefile.win
 
-      - name: Bundle Portable Package with Runtime DLLs
+      - name: Compute version
         run: |
-          mkdir -p release-pkg
-          cp build/win/gotiengviet.exe release-pkg/
-          # Bundle the full MinGW dependency closure, including GIO/GObject.
-          changed=1
-          while [ "$changed" = 1 ]; do
-            changed=0
-            for binary in release-pkg/*.exe release-pkg/*.dll; do
-              [ -f "$binary" ] || continue
-              while IFS= read -r dll; do
-                if [ -f "/mingw64/bin/$dll" ] && [ ! -f "release-pkg/$dll" ]; then
-                  cp "/mingw64/bin/$dll" release-pkg/
-                  changed=1
-                fi
-              done < <(objdump -p "$binary" | awk '/DLL Name:/ {print $3}')
-            done
-          done
-          cp README.md release-pkg/
-          mkdir -p release-pkg/data
-          cp data/macros.txt data/emojis.txt data/config data/ai.conf data/assistant.conf data/prompts.conf data/learned-corrections.txt data/learned-words.txt release-pkg/data/
-          cd release-pkg && zip -r ../gotiengviet-windows-x64.zip *
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            VER="$(sed -n 's/^#define GTV_VERSION "\(.*\)"/\1/p' windows/version.h)"
+            [ -n "$VER" ] || VER="0.3.0"
+          fi
+          VERNUM="$(echo "$VER" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/').0"
+          case "$VERNUM" in
+            [0-9]*.[0-9]*.[0-9]*.[0-9]*) ;;
+            *) VERNUM="0.0.0.0" ;;
+          esac
+          echo "APP_VERSION=$VER" >> "$GITHUB_ENV"
+          echo "APP_VERNUM=$VERNUM" >> "$GITHUB_ENV"
+          echo "version: $VER ($VERNUM)"
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup -y
+
+      - name: Stage installer tree
+        run: |
+          make -f Makefile.win staging
+
+      - name: Build versioned installer
+        run: |
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /Q "/DAppVersion=$APP_VERSION" "/DAppVerNum=$APP_VERNUM" "/DSourceDir=..\\release-pkg" windows/installer.iss
+          ls -la gotiengviet-*-x64-setup.exe
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gotiengviet-windows-x64
-          path: gotiengviet-windows-x64.zip
+          name: gotiengviet-windows-setup
+          path: gotiengviet-*-x64-setup.exe
 
       - name: Release Asset (on Tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: gotiengviet-windows-x64.zip
+          files: gotiengviet-*-x64-setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

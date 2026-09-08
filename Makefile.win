@@ -8,10 +8,17 @@ LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell3
 ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
               engine/engine.c engine/json.c engine/learn.c engine/macro.c \
               engine/phonology.c engine/promotion.c engine/spell.c \
-              engine/telex.c engine/text.c engine/vni.c
+              engine/telex.c engine/text.c engine/update.c engine/vni.c
 
-WIN_SRCS = windows/main.c windows/hook.c windows/tray.c windows/setup.c
+WIN_SRCS = windows/main.c windows/hook.c windows/tray.c windows/setup.c windows/update.c
 RC_SRC = windows/resource.rc
+
+# Release version: installer filename, Add/Remove Programs entry and the
+# in-app updater compare against this. Bump windows/version.h,
+# windows/resource.rc and ibus/gotiengviet.xml together on release.
+VERSION ?= 0.3.0
+# Inno needs a 4-part numeric version; keep VERSION as X.Y.Z for that.
+VERSION_NUM ?= $(VERSION).0
 
 ENGINE_OBJS = $(ENGINE_SRCS:%.c=build/win/%.o)
 WIN_OBJS = $(WIN_SRCS:%.c=build/win/%.o)
@@ -60,7 +67,34 @@ test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(FAKE_CURL)
 	GTV_DATA_DIR="$(CURDIR)/data" ./$(TEST_ENGINE)
 	GTV_DATA_DIR="$(CURDIR)/data" GTV_TEST_CURL_DIR="$(CURDIR)/build/win/fixtures" ./$(TEST_SUPPORT)
 
+# Staging dir consumed by windows/installer.iss (SourceDir=release-pkg).
+STAGE = release-pkg
+staging: $(TARGET)
+	mkdir -p $(STAGE) $(STAGE)/data
+	cp $(TARGET) $(STAGE)/
+	changed=1; \
+	while [ "$$changed" = 1 ]; do \
+	  changed=0; \
+	  for binary in $(STAGE)/*.exe $(STAGE)/*.dll; do \
+	    [ -f "$$binary" ] || continue; \
+	    while IFS= read -r dll; do \
+	      if [ -f "/mingw64/bin/$$dll" ] && [ ! -f "$(STAGE)/$$dll" ]; then \
+	        cp "/mingw64/bin/$$dll" $(STAGE)/; \
+	        changed=1; \
+	      fi; \
+	    done < <(objdump -p "$$binary" | awk '/DLL Name:/ {print $$3}'); \
+	  done; \
+	done
+	cp README.md LICENSE $(STAGE)/
+	cp data/macros.txt data/emojis.txt data/config data/ai.conf data/prompts.conf data/learned-corrections.txt data/learned-words.txt $(STAGE)/data/
+
+# Versioned installer (Windows-only: needs Inno Setup's iscc.exe).
+# SourceDir is relative to windows/installer.iss (script dir), not to make.
+setup: staging
+	iscc.exe /Q "/DAppVersion=$(VERSION)" "/DAppVerNum=$(VERSION_NUM)" "/DSourceDir=..\$(STAGE)" windows/installer.iss
+
 clean:
 	rm -rf build/win
+	rm -rf $(STAGE)
 
 .PHONY: all clean test

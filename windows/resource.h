@@ -29,5 +29,6 @@
 #define ID_TRAY_STARTUP     306
 #define ID_TRAY_EXIT        307
 #define ID_TRAY_MODERN      308
+#define ID_TRAY_UPDATE      309
 
 #endif /* RESOURCE_H */

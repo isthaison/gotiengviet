@@ -8,7 +8,7 @@ if [[ -z "$DESTDIR" && "$EUID" -ne 0 ]]; then
     echo 'Cần sudo: sudo ./install.sh' >&2
     exit 1
 fi
-for binary in gotiengviet-assistant ibus-engine-gotiengviet ibus-setup-gotiengviet gotiengviet-demo; do
+for binary in ibus-engine-gotiengviet ibus-setup-gotiengviet gotiengviet-demo; do
     if [[ ! -x "$BUILD_DIR/$binary" ]]; then
         echo "Thiếu $BUILD_DIR/$binary. Chạy ./build.sh trước." >&2
         exit 1
@@ -78,11 +78,9 @@ install -Dm644 data/macros.txt "$DESTDIR/usr/share/gotiengviet/macros.txt"
 install -Dm644 data/emojis.txt "$DESTDIR/usr/share/gotiengviet/emojis.txt"
 install -Dm644 data/config "$DESTDIR/usr/share/gotiengviet/config"
 install -Dm644 data/ai.conf "$DESTDIR/usr/share/gotiengviet/ai.conf"
-install -Dm644 data/assistant.conf "$DESTDIR/usr/share/gotiengviet/assistant.conf"
 install -Dm644 data/prompts.conf "$DESTDIR/usr/share/gotiengviet/prompts.conf"
 install -Dm644 data/learned-corrections.txt "$DESTDIR/usr/share/gotiengviet/learned-corrections.txt"
 install -Dm644 data/learned-words.txt "$DESTDIR/usr/share/gotiengviet/learned-words.txt"
-install -Dm755 "$BUILD_DIR/gotiengviet-assistant" "$DESTDIR/usr/bin/gotiengviet-assistant"
 for size in 16 22 24 32 48 64 128 256; do
     directory="$DESTDIR/usr/share/icons/hicolor/${size}x${size}/apps"
     mkdir -p "$directory"

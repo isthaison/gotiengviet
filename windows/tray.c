@@ -1,6 +1,7 @@
 #include "tray.h"
 #include "hook.h"
 #include "setup.h"
+#include "update.h"
 #include "resource.h"
 #include "internal.h"
 
@@ -117,6 +118,8 @@ void gtv_tray_show_menu(HWND hwnd) {
     UINT start_flag = get_startup_enabled() ? MF_CHECKED : MF_UNCHECKED;
     InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | start_flag, ID_TRAY_STARTUP, "Khởi động cùng Windows");
 
+    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING, ID_TRAY_UPDATE, "Kiểm tra cập nhật...");
+
     InsertMenu(hmenu, -1, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
     InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING, ID_TRAY_EXIT, "Thoát");
 
@@ -151,6 +154,9 @@ void gtv_tray_show_menu(HWND hwnd) {
             break;
         case ID_TRAY_STARTUP:
             gtv_tray_set_startup(!get_startup_enabled());
+            break;
+        case ID_TRAY_UPDATE:
+            gtv_update_check_async(hwnd, TRUE);
             break;
         case ID_TRAY_EXIT:
             PostQuitMessage(0);
@@ -209,6 +215,7 @@ static DWORD pending_tick = 0;
 static DWORD pending_input_tick = 0;
 
 void gtv_tray_suggest_balloon(const gchar *typed, const gchar *correction){
+    gtv_update_disown_balloon();
     g_free(pending_typed); g_free(pending_fix);
     pending_typed = pending_fix = NULL;
     if(!typed || !*typed || !correction || !*correction) return;

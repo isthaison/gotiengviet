@@ -1,6 +1,7 @@
 #include "hook.h"
 #include "tray.h"
 #include "setup.h"
+#include "update.h"
 #include "resource.h"
 #include <windows.h>
 #include <glib.h>
@@ -20,7 +21,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             } else if (lParam == WM_LBUTTONDBLCLK) {
                 gtv_setup_show(hwnd);
             } else if (lParam == NIN_BALLOONUSERCLICK) {
-                gtv_tray_apply_pending();
+                if (!gtv_update_balloon_clicked())
+                    gtv_tray_apply_pending();
             }
             break;
         }
@@ -30,6 +32,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 gtv_tray_suggest_balloon(res->typed, res->fix);
                 g_free(res->typed); g_free(res->fix); g_free(res);
             }
+            break;
+        }
+        case WM_GTV_UPDATE_RESULT: {
+            GtvUpdateResult *res = (GtvUpdateResult *)lParam;
+            gtv_update_on_result(res, (gboolean)wParam);
+            break;
+        }
+        case WM_GTV_UPDATE_DOWNLOADED: {
+            gtv_update_on_downloaded((gchar *)lParam);
             break;
         }
         case WM_DESTROY:
@@ -86,6 +97,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     gtv_tray_init(g_app.hwnd_main);
+
+    /* Daily self-update check against GitHub releases (throttled). */
+    gtv_update_check_async(g_app.hwnd_main, FALSE);
 
     /* 5. Main Message Loop */
     MSG msg;

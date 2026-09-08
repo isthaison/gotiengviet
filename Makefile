@@ -12,7 +12,7 @@ CORE_SRC := $(wildcard engine/*.c)
 CORE_OBJ := $(patsubst engine/%.c,$(BUILD_DIR)/engine/%.o,$(CORE_SRC))
 CORE_LIB := $(BUILD_DIR)/libgotiengviet.a
 CORE_LIBS := $(shell $(PKG_CONFIG) --libs gio-2.0) -lm
-BINS := $(BUILD_DIR)/gotiengviet-assistant $(BUILD_DIR)/ibus-engine-gotiengviet $(BUILD_DIR)/ibus-setup-gotiengviet $(BUILD_DIR)/gotiengviet-demo
+BINS := $(BUILD_DIR)/ibus-engine-gotiengviet $(BUILD_DIR)/ibus-setup-gotiengviet $(BUILD_DIR)/gotiengviet-demo
 
 .PHONY: all build test vet install clean package help
 all: build
@@ -22,8 +22,8 @@ $(BUILD_DIR)/engine/%.o: engine/%.c engine/engine.h engine/internal.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 $(CORE_LIB): $(CORE_OBJ)
 	$(AR) rcs $@ $^
-$(BUILD_DIR)/ibus-engine-gotiengviet: ibus/engine.c ibus/text_target.c ibus/text_target.h $(CORE_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< ibus/text_target.c $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0 atspi-2) $(CORE_LIBS) -o $@
+$(BUILD_DIR)/ibus-engine-gotiengviet: ibus/engine.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0) $(CORE_LIBS) -o $@
 $(BUILD_DIR)/ibus-setup-gotiengviet: cmd/setup/main.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0 ayatana-appindicator3-0.1) $(CORE_LIBS) -o $@
 $(BUILD_DIR)/gotiengviet-demo: cmd/demo/main.c $(CORE_LIB)
@@ -56,38 +56,8 @@ $(BUILD_DIR)/test-setup: tests/test_setup.c cmd/setup/main.c $(CORE_LIB)
 test-ui: $(BUILD_DIR)/test-setup
 	$(BUILD_DIR)/test-setup
 
-$(BUILD_DIR)/test-ibus: tests/test_ibus.c ibus/engine.c ibus/text_target.c ibus/text_target.h $(CORE_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< ibus/text_target.c $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0 atspi-2) $(CORE_LIBS) -o $@
+$(BUILD_DIR)/test-ibus: tests/test_ibus.c ibus/engine.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0) $(CORE_LIBS) -o $@
 .PHONY: test-ibus
-test-ibus: $(BUILD_DIR)/test-ibus $(BUILD_DIR)/fixtures/gotiengviet-assistant
+test-ibus: $(BUILD_DIR)/test-ibus $(BUILD_DIR)/fixtures/curl
 	GTV_TEST_CURL_DIR="$(abspath $(BUILD_DIR))/fixtures" $(BUILD_DIR)/test-ibus
-
-$(BUILD_DIR)/gotiengviet-assistant: cmd/assistant/main.c $(CORE_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0) $(CORE_LIBS) -o $@
-
-$(BUILD_DIR)/test-assistant: tests/test_assistant.c cmd/assistant/main.c $(CORE_LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0) $(CORE_LIBS) -o $@
-.PHONY: test-assistant
-test-assistant: $(BUILD_DIR)/test-assistant $(BUILD_DIR)/fixtures/curl
-	GTV_TEST_CURL_DIR="$(abspath $(BUILD_DIR))/fixtures" $(BUILD_DIR)/test-assistant
-
-$(BUILD_DIR)/fixtures/gotiengviet-assistant: tests/fake_assistant.c
-	@mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(CORE_LIBS) -o $@
-
-$(BUILD_DIR)/text-target-fixture: tests/text_target_fixture.c
-	$(CC) $(CFLAGS) $< $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0) -o $@
-$(BUILD_DIR)/test-text-target-live: tests/test_text_target_live.c ibus/text_target.c ibus/text_target.h
-	$(CC) $(CFLAGS) -Iibus $< ibus/text_target.c $(shell $(PKG_CONFIG) --cflags --libs atspi-2 gio-2.0) -o $@
-.PHONY: test-text-target-live
-# Explicit opt-in: briefly opens an isolated text field on the current desktop.
-test-text-target-live: $(BUILD_DIR)/test-text-target-live $(BUILD_DIR)/text-target-fixture
-	GTV_TEST_TEXT_FIXTURE="$(abspath $(BUILD_DIR))/text-target-fixture" $(BUILD_DIR)/test-text-target-live
-
-$(BUILD_DIR)/test-assistant-live: tests/test_assistant_live.c
-	$(CC) $(CFLAGS) $< $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0 ibus-1.0) -o $@
-.PHONY: test-assistant-live
-# Opt-in desktop check: requires the installed engine and configured local Ollama.
-test-assistant-live: $(BUILD_DIR)/test-assistant-live
-	$(BUILD_DIR)/test-assistant-live
-	$(BUILD_DIR)/test-assistant-live --uppercase

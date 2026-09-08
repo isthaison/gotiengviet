@@ -66,6 +66,10 @@ jobs:
           make -f Makefile.win staging
 
       - name: Build versioned installer
+        # Native ISCC must receive /Q /D... literally: exclude all args
+        # from msys2's automatic POSIX->Windows path conversion.
+        env:
+          MSYS2_ARG_CONV_EXCL: "*"
         run: |
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /Q "/DAppVersion=$APP_VERSION" "/DAppVerNum=$APP_VERNUM" "/DSourceDir=..\\release-pkg" windows/installer.iss
           ls -la gotiengviet-*-x64-setup.exe

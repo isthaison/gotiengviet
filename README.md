@@ -100,7 +100,7 @@ Các binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` để chạy tro
 
 ```sh
 sudo ./install.sh
-make package VERSION=0.3.0-1
+make package VERSION=0.4.0-1
 ```
 
 - Dùng binary đã build trong `build/`; giữ nguyên cấu hình người dùng.

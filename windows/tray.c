@@ -25,6 +25,10 @@ static gboolean get_startup_enabled(void) {
  * the UI thread (hook callbacks run there too). */
 static CRITICAL_SECTION config_lock;
 static gboolean config_lock_ready = FALSE;
+/* Learned store shared with the AI worker thread (CRITICAL_SECTION guards
+ * it; initialized in gtv_tray_init before any worker can exist). Declared
+ * up here because gtv_tray_init/cleanup run before its definition site. */
+static CRITICAL_SECTION learned_lock;
 void gtv_config_strings_lock(void) {
     if (!config_lock_ready) {
         InitializeCriticalSection(&config_lock);
@@ -187,11 +191,9 @@ typedef struct { gchar *word; gchar *model; gchar *url; } AiJob;
 
 static volatile LONG ai_in_flight = 0;
 
-/* Learned store shared with the AI worker thread (CRITICAL_SECTION guards
- * it; initialized in gtv_tray_init before any worker can exist). */
+/* Learned store shared with the AI worker thread (lock declared above). */
 static GHashTable *w_learned_words = NULL;
 static GHashTable *w_learned_fixes = NULL;
-static CRITICAL_SECTION learned_lock;
 static void w_learned_ensure(void){
     if(!w_learned_words){
         w_learned_words = gtv_words_table_new();

@@ -17,27 +17,30 @@ IDI_TRAY_E      ICON    "icons/tray_e.ico"
 
 IDD_SETUP_DIALOG DIALOGEX 0, 0, 240, 225
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "GoTiengViet - Cài đặt"
+CAPTION "GoTiengViet - Setup"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "Kiểu gõ", IDC_STATIC, 10, 10, 220, 45
-    AUTORADIOBUTTON "Telex (gõ lặp: aa -> â, s/f/r/x/j)", IDC_RADIO_TELEX, 20, 24, 190, 10, WS_GROUP
-    AUTORADIOBUTTON "VNI (số: 1->sắc, 2->huyền, 6->mũ...)", IDC_RADIO_VNI, 20, 38, 190, 10
+    /* ASCII placeholders only: the real (Vietnamese) strings are set at
+     * runtime in UTF-16, so no resource compiler codepage can mojibake
+     * this dialog on any build machine or system locale. */
+    GROUPBOX        "Input method", IDC_GROUP_TYPE, 10, 10, 220, 45
+    AUTORADIOBUTTON "Telex", IDC_RADIO_TELEX, 20, 24, 190, 10, WS_GROUP
+    AUTORADIOBUTTON "VNI", IDC_RADIO_VNI, 20, 38, 190, 10
 
-    GROUPBOX        "Tùy chọn", IDC_STATIC, 10, 60, 220, 65
-    AUTOCHECKBOX    "Đặt dấu theo chuẩn mới (oà, uỳ thay vì òa, ùy)", IDC_CHECK_MODERN, 20, 74, 200, 10
-    AUTOCHECKBOX    "Kiểm tra chính tả & Gợi ý từ thông minh", IDC_CHECK_SPELL, 20, 90, 200, 10
-    AUTOCHECKBOX    "Khởi động cùng Windows", IDC_CHECK_STARTUP, 20, 106, 200, 10
+    GROUPBOX        "Options", IDC_GROUP_OPTS, 10, 60, 220, 65
+    AUTOCHECKBOX    "New tone-mark placement", IDC_CHECK_MODERN, 20, 74, 200, 10
+    AUTOCHECKBOX    "Spellcheck and smart suggestions", IDC_CHECK_SPELL, 20, 90, 200, 10
+    AUTOCHECKBOX    "Start with Windows", IDC_CHECK_STARTUP, 20, 106, 200, 10
 
-    GROUPBOX        "Gợi ý AI (Ollama, tùy chọn)", IDC_STATIC, 10, 130, 220, 60
-    AUTOCHECKBOX    "Bật gợi ý AI (cần Ollama + curl)", IDC_CHECK_AI, 20, 144, 200, 10
-    LTEXT           "Model:", IDC_STATIC, 20, 160, 40, 10
+    GROUPBOX        "AI suggestions (Ollama, optional)", IDC_GROUP_AI, 10, 130, 220, 60
+    AUTOCHECKBOX    "Enable AI suggestions", IDC_CHECK_AI, 20, 144, 200, 10
+    LTEXT           "Model:", IDC_LBL_MODEL, 20, 160, 40, 10
     EDITTEXT        IDC_EDIT_MODEL, 65, 158, 155, 12
-    LTEXT           "URL:", IDC_STATIC, 20, 174, 40, 10
+    LTEXT           "URL:", IDC_LBL_URL, 20, 174, 40, 10
     EDITTEXT        IDC_EDIT_URL, 65, 172, 155, 12
 
-    DEFPUSHBUTTON   "Đồng ý", IDC_BTN_OK, 120, 200, 50, 14
-    PUSHBUTTON      "Hủy", IDC_BTN_CANCEL, 175, 200, 50, 14
+    DEFPUSHBUTTON   "OK", IDC_BTN_OK, 120, 200, 50, 14
+    PUSHBUTTON      "Cancel", IDC_BTN_CANCEL, 175, 200, 50, 14
 END
 
 1 VERSIONINFO
@@ -54,7 +57,7 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "GoTiengViet Open Source Project\0"
-            VALUE "FileDescription", "GoTiengViet - Bộ gõ tiếng Việt Native\0"
+            VALUE "FileDescription", "GoTiengViet - Vietnamese Input (Native)\0"
             VALUE "FileVersion", "0.5.2.0\0"
             VALUE "InternalName", "gotiengviet\0"
             VALUE "LegalCopyright", "Copyright (C) 2026\0"

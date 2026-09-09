@@ -20,6 +20,14 @@
 #define IDC_CHECK_AI        209
 #define IDC_EDIT_MODEL      210
 #define IDC_EDIT_URL        211
+/* Labels need individual IDs: every visible string is set at runtime
+ * (UTF-8 -> UTF-16) so the dialog never depends on how windres decodes
+ * non-ASCII resource text. */
+#define IDC_GROUP_TYPE      212
+#define IDC_GROUP_OPTS      213
+#define IDC_GROUP_AI        214
+#define IDC_LBL_MODEL       215
+#define IDC_LBL_URL         216
 
 #define IDM_TRAY_MENU       301
 #define ID_TRAY_SETTINGS    302

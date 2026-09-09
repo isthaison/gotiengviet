@@ -19,6 +19,39 @@ static gboolean get_startup_enabled_local(void) {
 static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG: {
+            /* Every visible string is set here in UTF-16 converted from
+             * UTF-8: the .rc file carries ASCII placeholders only, so the
+             * dialog renders Vietnamese correctly no matter which codepage
+             * the resource compiler assumed. */
+            struct { int id; const char *text; } labels[] = {
+                { IDC_GROUP_TYPE, "Kiểu gõ" },
+                { IDC_RADIO_TELEX, "Telex (gõ lặp: aa -> â, s/f/r/x/j)" },
+                { IDC_RADIO_VNI, "VNI (số: 1->sắc, 2->huyền, 6->mũ...)" },
+                { IDC_GROUP_OPTS, "Tùy chọn" },
+                { IDC_CHECK_MODERN, "Đặt dấu theo chuẩn mới (oà, uỳ thay vì òa, ùy)" },
+                { IDC_CHECK_SPELL, "Kiểm tra chính tả && Gợi ý từ thông minh" },
+                { IDC_CHECK_STARTUP, "Khởi động cùng Windows" },
+                { IDC_GROUP_AI, "Gợi ý AI (Ollama, tùy chọn)" },
+                { IDC_CHECK_AI, "Bật gợi ý AI (cần Ollama + curl)" },
+                { IDC_LBL_MODEL, "Model:" },
+                { IDC_LBL_URL, "URL:" },
+                { IDC_BTN_OK, "Đồng ý" },
+                { IDC_BTN_CANCEL, "Hủy" },
+            };
+            {
+                gunichar2 *wcap = g_utf8_to_utf16("GoTiengViet - Cài đặt", -1, NULL, NULL, NULL);
+                if (wcap) {
+                    SetWindowTextW(hwnd, (LPCWSTR)wcap);
+                    g_free(wcap);
+                }
+            }
+            for (guint i = 0; i < G_N_ELEMENTS(labels); i++) {
+                gunichar2 *w = g_utf8_to_utf16(labels[i].text, -1, NULL, NULL, NULL);
+                if (w) {
+                    SetDlgItemTextW(hwnd, labels[i].id, (LPCWSTR)w);
+                    g_free(w);
+                }
+            }
             if (g_app.config.mode == GTV_VNI) {
                 CheckRadioButton(hwnd, IDC_RADIO_TELEX, IDC_RADIO_VNI, IDC_RADIO_VNI);
             } else {

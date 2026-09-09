@@ -119,6 +119,142 @@ static void test_update(void) {
     g_free(old); g_free(stamp);
     g_free(cfgdir);
 }
+/* Faithful simulation of the Windows hook key path (real composer +
+ * mirror decisions, screen as a plain string): commits must never
+ * duplicate what is already shown. */
+static void hook_press(GtvMirror *m, GtvEngine *eng, GString *screen, gunichar ch) {
+    if (ch == '\b') {
+        gtv_engine_process(eng, '\b', NULL);
+        if (screen->len) {
+            gchar *prev = g_utf8_prev_char(screen->str + screen->len);
+            g_string_truncate(screen, prev - screen->str);
+        }
+        gtv_mirror_backspaced(m);
+        return;
+    }
+    guint bs = 0;
+    gchar *commit = gtv_engine_process(eng, ch, &bs);
+    (void)bs;
+    gchar *buffer = gtv_engine_buffer(eng);
+    gchar raw[7] = {0};
+    g_unichar_to_utf8(ch, raw);
+    GtvMirrorAction act = gtv_mirror_decide(m, buffer, raw, commit);
+    if (act == GTV_MIRROR_COMMIT) {
+        for (guint i = 0; i < gtv_mirror_erase_count(m) && screen->len; i++) {
+            gchar *prev = g_utf8_prev_char(screen->str + screen->len);
+            g_string_truncate(screen, prev - screen->str);
+        }
+        g_string_append(screen, commit ? commit : "");
+        gtv_mirror_committed(m);
+    } else if (act == GTV_MIRROR_RESEND) {
+        for (guint i = 0; i < gtv_mirror_erase_count(m) && screen->len; i++) {
+            gchar *prev = g_utf8_prev_char(screen->str + screen->len);
+            g_string_truncate(screen, prev - screen->str);
+        }
+        g_string_append(screen, buffer);
+        gtv_mirror_resent(m, buffer);
+    } else {
+        g_string_append(screen, raw);
+        gtv_mirror_passthrough(m, ch);
+    }
+    g_free(commit);
+    g_free(buffer);
+}
+static void hook_type(GtvMirror *m, GtvEngine *eng, GString *screen, const gchar *keys) {
+    for (const gchar *p = keys; *p; p = g_utf8_next_char(p))
+        hook_press(m, eng, screen, g_utf8_get_char(p));
+}
+static void test_mirror_flow(void) {
+    GtvConfig config = {.mode = GTV_TELEX, .modern = TRUE, .spellcheck = FALSE};
+    GtvEngine *eng = gtv_engine_new(&config);
+    GtvMirror *m = gtv_mirror_new();
+    GString *screen = g_string_new("");
+    hook_type(m, eng, screen, "xin ");
+    g_assert_cmpstr(screen->str, ==, "xin ");
+    hook_type(m, eng, screen, "duocjwd ");
+    g_assert_cmpstr(screen->str, ==, "xin được ");
+    hook_type(m, eng, screen, "vn ");
+    g_assert_cmpstr(screen->str, ==, "xin được Việt Nam ");
+    /* Mid-word backspace then tone change stays exact. */
+    g_string_truncate(screen, 0);
+    gtv_mirror_clear(m);
+    gtv_engine_reset(eng);
+    hook_type(m, eng, screen, "duoc");
+    hook_press(m, eng, screen, '\b');
+    g_assert_cmpstr(screen->str, ==, "duo");
+    hook_type(m, eng, screen, "cj ");
+    /* One word + space, never duplicated, whatever the tone rule yields. */
+    g_assert_cmpuint(g_utf8_strlen(screen->str, -1), ==, 5);
+    g_assert_true(g_str_has_suffix(screen->str, "c "));
+    /* Window switch / click abandons: fresh state, no cross-erasure. */
+    g_string_truncate(screen, 0);
+    gtv_mirror_clear(m);
+    gtv_engine_reset(eng);
+    hook_type(m, eng, screen, "duo");
+    gtv_mirror_clear(m);
+    gtv_engine_reset(eng);
+    hook_type(m, eng, screen, "c ");
+    g_assert_cmpstr(screen->str, ==, "duoc ");
+    g_string_free(screen, TRUE);
+    gtv_mirror_free(m);
+    gtv_engine_free(eng);
+}
+static void test_mirror(void) {
+    /* Screen mirror for pass-through clients: plain keys pass through,
+     * compositions resend, commits erase exactly what is shown. */
+    GtvMirror *m = gtv_mirror_new();
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 0);
+    /* Plain word "xin": every key is a simple append. */
+    const gchar *bufs[] = {"x", "xi", "xin"};
+    const gchar *raws[] = {"x", "i", "n"};
+    for (guint i = 0; i < 3; i++) {
+        g_assert_cmpint(gtv_mirror_decide(m, bufs[i], raws[i], NULL), ==, GTV_MIRROR_PASS);
+        gtv_mirror_passthrough(m, g_utf8_get_char(raws[i]));
+    }
+    /* Space commits: erase the 3 shown chars, then forget. */
+    g_assert_cmpint(gtv_mirror_decide(m, "", " ", "xin "), ==, GTV_MIRROR_COMMIT);
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 3);
+    gtv_mirror_committed(m);
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 0);
+    /* Diacritic mid-word: buffer diverges, resend erases the raw word. */
+    for (guint i = 0; i < 4; i++) {
+        const gchar *b[] = {"d", "du", "duo", "duoc"};
+        const gchar *r[] = {"d", "u", "o", "c"};
+        g_assert_cmpint(gtv_mirror_decide(m, b[i], r[i], NULL), ==, GTV_MIRROR_PASS);
+        gtv_mirror_passthrough(m, g_utf8_get_char(r[i]));
+    }
+    g_assert_cmpint(gtv_mirror_decide(m, "duọc", "j", NULL), ==, GTV_MIRROR_RESEND);
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 4);
+    gtv_mirror_resent(m, "duọc");
+    /* Committing the composed word erases exactly those 4 chars. */
+    g_assert_cmpint(gtv_mirror_decide(m, "", " ", "duọc "), ==, GTV_MIRROR_COMMIT);
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 4);
+    gtv_mirror_committed(m);
+    /* Macro word: 2 shown chars erased, long text committed. */
+    g_assert_cmpint(gtv_mirror_decide(m, "v", "v", NULL), ==, GTV_MIRROR_PASS);
+    gtv_mirror_passthrough(m, 'v');
+    g_assert_cmpint(gtv_mirror_decide(m, "vn", "n", NULL), ==, GTV_MIRROR_PASS);
+    gtv_mirror_passthrough(m, 'n');
+    g_assert_cmpint(gtv_mirror_decide(m, "", " ", "Việt Nam "), ==, GTV_MIRROR_COMMIT);
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 2);
+    gtv_mirror_committed(m);
+    /* '[' shortcut desync: raw '[' shown, buffer holds "ươ" -> resend. */
+    g_assert_cmpint(gtv_mirror_decide(m, "ươ", "[", NULL), ==, GTV_MIRROR_RESEND);
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 0);
+    gtv_mirror_resent(m, "ươ");
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 2);
+    /* Backspace bookkeeping follows the screen, multibyte-safe. */
+    gtv_mirror_backspaced(m);
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 1);
+    gtv_mirror_backspaced(m);
+    gtv_mirror_backspaced(m); /* clamped at empty */
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 0);
+    g_assert_cmpint(gtv_mirror_decide(m, "a", "a", NULL), ==, GTV_MIRROR_PASS);
+    gtv_mirror_clear(m);
+    g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 0);
+    gtv_mirror_free(m);
+    gtv_mirror_free(NULL);
+}
 static void test_json(void) {
     const gchar *valid[]={"{\"response\":\"được\"}","{\"x\":[1, true, null, {\"response\":\"ignore\"}],\"response\":\"\\u0111\\u01b0\\u1ee3c\"}","{\"response\":\"\\ud83d\\ude0a\"}",NULL};
     const gchar *expected[]={"được","được","😊"};
@@ -480,6 +616,8 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/config",test_config);
     g_test_add_func("/support/json",test_json);
     g_test_add_func("/support/update",test_update);
+    g_test_add_func("/support/mirror",test_mirror);
+    g_test_add_func("/support/mirror-flow",test_mirror_flow);
     g_test_add_func("/support/ollama",test_ollama);
     g_test_add_func("/support/suggest-combined",test_suggest_combined);
     g_test_add_func("/support/spelling",test_spelling);

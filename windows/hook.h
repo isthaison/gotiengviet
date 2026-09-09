@@ -12,6 +12,7 @@ typedef struct {
     GtvConfig config;
     GtvEngine *engine;
     HHOOK keyboard_hook;
+    HHOOK mouse_hook;
     HWND hwnd_main;
     DWORD last_input_tick;  /* GetTickCount at the last real keydown */
 } GtvWindowsApp;

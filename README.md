@@ -78,6 +78,8 @@ Không có ngoại lệ theo từ, không đoán/khôi phục tiếng Anh trong 
 
 Kiểu đặt dấu `modern`: `true` (mặc định) đặt dấu ở nguyên âm thứ hai của `oa/oe/uy` (`hòa`); `false` đặt ở nguyên âm đầu (`hoà`).
 
+Click chuột sang chỗ khác khi đang gõ dở (chưa Space/Enter) không commit bừa: phần gõ dở được giữ lại, quay về đúng ô nhập thì gõ tiếp; sang ô nhập khác thì bỏ.
+
 ## Build và kiểm thử
 
 Cần đúng bộ dependency ở [Bắt đầu nhanh](#bắt-đầu-nhanh).
@@ -250,6 +252,7 @@ Native Windows 10/11 qua Win32 Low-Level Keyboard Hook (`WH_KEYBOARD_LL`) + Syst
 * **Đổi ngôn ngữ**: `Ctrl + Shift` / `Alt + Z` (chống lặp khi giữ phím), hoặc click trái icon [V]/[E] (chế độ được nhớ qua restart); chuột phải mở menu: Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu, tự khởi động, Kiểm tra cập nhật, Thoát.
 * **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (bật/tắt Ollama, model, URL) — lưu ở `%APPDATA%/gotiengviet/` như bản Linux.
 * **Gợi ý AI dạng balloon**: từ sai cấu trúc sau khi gõ xong được hỏi Ollama nền, hiện `"sai" co the ban muon go "dung"?` (không dấu cho mọi locale, chống spam 10 giây). Cần Ollama + `curl` (Windows 10+ có sẵn). **Click vào balloon** để nhận gợi ý: văn bản còn nguyên thì tự xóa từ sai và gõ chữ đúng, gõ tiếp rồi thì copy chữ đúng vào clipboard; cả hai đều học mapping vào `learned-corrections.txt`, nên Ollama rớt vẫn gợi ý từ dữ liệu đã học. Từ điển học dùng chung định dạng và seed với bản Linux (module `engine/learn.c`).
+* **Gõ/commit**: Space commit đúng một lần (xóa đúng phần đang hiện rồi mới chèn); click chuột hoặc chuyển cửa sổ khi đang gõ dở sẽ bỏ phần dở để không xóa nhầm chữ nơi khác.
 * **Macro/emoji/prompts/config**: chung engine và file `data/`; file người dùng vẫn ưu tiên. Typo đã học/seed (`hoăc`, `kông`, …) vẫn balloon ngay cả khi Ollama rớt, click để nhận + học tiếp.
 * **Build (MSYS2 MinGW-w64)**: `pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glib2 make`, rồi `make -f Makefile.win`. Đóng bộ cài (cần Inno Setup): `make -f Makefile.win setup VERSION=0.4.0` (version phải là `X.Y.Z`, khớp `windows/version.h`).
 * **Cắt release**: bump `windows/version.h` + `windows/resource.rc` + `ibus/gotiengviet.xml` cùng số, commit, push tag `vX.Y.Z` — CI build `gotiengviet-X.Y.Z-x64-setup.exe` và đính kèm release để app tự cập nhật.

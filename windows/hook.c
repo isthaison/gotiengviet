@@ -4,6 +4,15 @@
 #include <glib/gstdio.h>
 #include <stdio.h>
 
+/* Mirror of the current word on screen: pass-through clients show raw
+ * keys immediately, so commits and resends must erase exactly this
+ * before writing. Initialized with the keyboard hook (same thread). */
+static GtvMirror s_mirror;
+static gboolean s_mirror_ready = FALSE;
+/* Last foreground window seen: a change abandons the composition, so a
+ * commit can never erase text in the wrong window. */
+static HWND s_last_fg = NULL;
+
 void gtv_hook_send_backspaces(int count) {
     if (count <= 0) return;
     INPUT *inputs = g_new0(INPUT, count * 2);
@@ -70,6 +79,9 @@ void gtv_hook_reset_buffer(void) {
     if (g_app.engine) {
         gtv_engine_reset(g_app.engine);
     }
+    if (s_mirror_ready) {
+        gtv_mirror_clear(&s_mirror);
+    }
 }
 
 static gchar *windows_config_path(void) {
@@ -124,6 +136,16 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         return CallNextHookEx(NULL, nCode, wParam, lParam);
     }
 
+    /* Window switch abandons the composition: the screen word tracked
+     * below belongs to the old window and must never be erased over. */
+    {
+        HWND fg = GetForegroundWindow();
+        if (fg != s_last_fg) {
+            s_last_fg = fg;
+            gtv_hook_reset_buffer();
+        }
+    }
+
     /* Hotkey detection: Ctrl + Shift or Alt + Z toggles mode */
     if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
         g_app.last_input_tick = GetTickCount();
@@ -166,10 +188,14 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             return CallNextHookEx(NULL, nCode, wParam, lParam);
         }
 
-        /* Backspace handling */
+        /* Backspace handling: engine pops one unit in parallel with the
+         * app erasing one screen char; mirror follows the screen. */
         if (kbd->vkCode == VK_BACK) {
             guint backspaces = 0;
             gtv_engine_process(g_app.engine, '\b', &backspaces);
+            if (s_mirror_ready) {
+                gtv_mirror_backspaced(&s_mirror);
+            }
             return CallNextHookEx(NULL, nCode, wParam, lParam);
         }
 
@@ -188,50 +214,92 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         int count = ToUnicodeEx(kbd->vkCode, kbd->scanCode, key_state, wchars, 4, 0, layout);
 
         if (count == 1 && wchars[0] >= 0x20) {
-            gunichar ch = (gunichar)wchars[0];
+            /* Mirror decides: plain appends pass through untouched (real
+             * scancodes reach the app), while compositions and commits
+             * first erase exactly what is on screen. This fixes both the
+             * space duplication (commit re-typed the visible word) and
+             * the mid-word desync (e.g. '['). */
+            gchar *raw_utf8 = g_utf16_to_utf8(wchars, 1, NULL, NULL, NULL);
+            gunichar ch = raw_utf8 ? g_utf8_get_char_validated(raw_utf8, -1) : (gunichar)-1;
+            if (!raw_utf8 || ch == (gunichar)-1 || ch == (gunichar)-2) {
+                g_free(raw_utf8);
+                gtv_hook_reset_buffer();
+                return CallNextHookEx(NULL, nCode, wParam, lParam);
+            }
             guint backspaces = 0;
             gchar *commit = gtv_engine_process(g_app.engine, ch, &backspaces);
-
-            if (commit) {
-                if (backspaces > 0) {
-                    gtv_hook_send_backspaces((int)backspaces);
+            (void)backspaces; /* erasure is driven by the mirror, not this */
+            gchar *buffer = gtv_engine_buffer(g_app.engine);
+            GtvMirrorAction act = s_mirror_ready
+                ? gtv_mirror_decide(&s_mirror, buffer, raw_utf8, commit)
+                : (commit ? GTV_MIRROR_COMMIT : GTV_MIRROR_PASS);
+            if (act == GTV_MIRROR_COMMIT) {
+                gtv_hook_send_backspaces((int)gtv_mirror_erase_count(&s_mirror));
+                gtv_hook_send_text(commit ? commit : "");
+                gtv_mirror_committed(&s_mirror);
+                if (commit) {
+                    maybe_ai_suggest(commit);
                 }
-                glong wlen = 0;
-                guint16 *wstr = g_utf8_to_utf16(commit, -1, NULL, &wlen, NULL);
-                if (wstr) {
-                    send_unicode_string((const wchar_t *)wstr);
-                    g_free(wstr);
-                }
-                maybe_ai_suggest(commit);
                 g_free(commit);
-                return 1; /* Suppress original key */
-            } else if (backspaces > 0) {
-                /* Buffer modified in place (e.g. aa -> â, as -> á) */
-                gchar *current = gtv_engine_buffer(g_app.engine);
-                gtv_hook_send_backspaces((int)backspaces);
-                glong wlen = 0;
-                guint16 *wstr = g_utf8_to_utf16(current, -1, NULL, &wlen, NULL);
-                if (wstr) {
-                    send_unicode_string((const wchar_t *)wstr);
-                    g_free(wstr);
-                }
-                g_free(current);
+                g_free(buffer);
+                g_free(raw_utf8);
                 return 1; /* Suppress original key */
             }
+            if (act == GTV_MIRROR_RESEND) {
+                gtv_hook_send_backspaces((int)gtv_mirror_erase_count(&s_mirror));
+                gtv_hook_send_text(buffer);
+                gtv_mirror_resent(&s_mirror, buffer);
+                g_free(commit);
+                g_free(buffer);
+                g_free(raw_utf8);
+                return 1; /* Suppress original key */
+            }
+            if (s_mirror_ready) {
+                gtv_mirror_passthrough(&s_mirror, ch);
+            }
+            g_free(commit);
+            g_free(buffer);
+            g_free(raw_utf8);
+            /* Fall through: the raw key goes to the app. */
         }
     }
 
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
+/* A click may move the caret: abandon the composition (buffer and
+ * screen mirror) so later commits can never erase text elsewhere. */
+static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        MSLLHOOKSTRUCT *ms = (MSLLHOOKSTRUCT *)lParam;
+        if (ms->dwExtraInfo != GTV_HOOK_MAGIC &&
+            (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
+             wParam == WM_MBUTTONDOWN || wParam == WM_XBUTTONDOWN)) {
+            gtv_hook_reset_buffer();
+        }
+    }
+    return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
 gboolean gtv_hook_install(void) {
     if (g_app.keyboard_hook) return TRUE;
+    if (!s_mirror_ready) {
+        gtv_mirror_init(&s_mirror);
+        s_mirror_ready = TRUE;
+    }
     HINSTANCE hinst = GetModuleHandle(NULL);
     g_app.keyboard_hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hinst, 0);
+    if (g_app.keyboard_hook) {
+        g_app.mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, hinst, 0);
+    }
     return g_app.keyboard_hook != NULL;
 }
 
 void gtv_hook_uninstall(void) {
+    if (g_app.mouse_hook) {
+        UnhookWindowsHookEx(g_app.mouse_hook);
+        g_app.mouse_hook = NULL;
+    }
     if (g_app.keyboard_hook) {
         UnhookWindowsHookEx(g_app.keyboard_hook);
         g_app.keyboard_hook = NULL;

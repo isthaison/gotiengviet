@@ -26,6 +26,8 @@ void gtv_hook_set_mode(gboolean enabled);
 void gtv_hook_reset_buffer(void);
 void gtv_hook_send_backspaces(int count);
 void gtv_hook_send_text(const gchar *utf8);
+/* Erase erase_count screen chars (browser-aware) then send text. */
+void gtv_hook_replace_text(int erase_count, const gchar *utf8);
 /* Persist/restore the V/E mode in [input]/enabled of the user config file.
  * Unknown keys are ignored by the shared engine, so Linux is unaffected. */
 void gtv_hook_save_enabled(void);

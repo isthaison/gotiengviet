@@ -312,8 +312,7 @@ void gtv_tray_apply_pending(void){
         && g_app.last_input_tick == pending_input_tick;
     if(fresh && g_utf8_validate(typed, -1, NULL) && g_utf8_validate(fix, -1, NULL)
        && g_utf8_strlen(typed, -1) >= 2 && g_utf8_strlen(typed, -1) <= 64){
-        gtv_hook_send_backspaces((int)g_utf8_strlen(typed, -1));
-        gtv_hook_send_text(fix);
+        gtv_hook_replace_text((int)g_utf8_strlen(typed, -1), fix);
     }else{
         copy_to_clipboard(fix);
     }

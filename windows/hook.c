@@ -1,7 +1,9 @@
 #include "hook.h"
 #include "tray.h"
+#include "update.h"
 #include "internal.h"
 #include <glib/gstdio.h>
+#include <stdarg.h>
 #include <stdio.h>
 
 /* Mirror of the current word on screen: pass-through clients show raw
@@ -10,8 +12,91 @@
 static GtvMirror s_mirror;
 static gboolean s_mirror_ready = FALSE;
 /* Last foreground window seen: a change abandons the composition, so a
- * commit can never erase text in the wrong window. */
+ * commit can never erase text in the wrong window. The browser flag is
+ * refreshed on the same change (see below). */
 static HWND s_last_fg = NULL;
+static gboolean s_browser_field = FALSE;
+
+/* Per-keystroke diagnostics share update.log (bounded, timestamped), so a
+ * duplication report can be diagnosed from %APPDATA%/gotiengviet/update.log
+ * without guessing: every commit/resend records buffer, mirror erasure
+ * and sent text. Same privacy level as the Linux debug.log. */
+static void hook_debug(const gchar *fmt, ...) {
+    gchar *line;
+    va_list args;
+    va_start(args, fmt);
+    line = g_strdup_vprintf(fmt, args);
+    va_end(args);
+    gtv_update_log("[hook] %s", line);
+    g_free(line);
+}
+
+/* Browsers with autocomplete-driven fields (Chrome omnibox et al) swallow
+ * the first Backspace to dismiss the suggestion instead of deleting, so
+ * erasure there selects the suffix with Shift+Left and lets the new text
+ * overwrite it. Correct with or without a suggestion showing, because it
+ * mimics exactly what manual selection-typing would do. */
+static const WCHAR *const s_browser_exes[] = {
+    L"chrome.exe", L"msedge.exe", L"coccoc.exe",
+    L"firefox.exe", L"brave.exe", L"opera.exe", NULL
+};
+static gboolean fg_is_browser(HWND fg) {
+    if (!fg) return FALSE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    if (!pid) return FALSE;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h) return FALSE;
+    WCHAR path[MAX_PATH];
+    DWORD len = MAX_PATH;
+    BOOL ok = QueryFullProcessImageNameW(h, 0, path, &len);
+    CloseHandle(h);
+    if (!ok || !len) return FALSE;
+    const WCHAR *base = path;
+    for (const WCHAR *p = path; *p; p++) {
+        if (*p == L'\\') base = p + 1;
+    }
+    for (int i = 0; s_browser_exes[i]; i++) {
+        if (!lstrcmpiW(base, s_browser_exes[i])) return TRUE;
+    }
+    return FALSE;
+}
+static void send_shift_left(guint n) {
+    /* Shift+Left x n, tagged so our own hook ignores every event. */
+    guint total = 2 + n * 2;
+    INPUT *inputs = g_new0(INPUT, total);
+    guint k = 0;
+    inputs[k].type = INPUT_KEYBOARD;
+    inputs[k].ki.wVk = VK_SHIFT;
+    inputs[k].ki.dwExtraInfo = GTV_HOOK_MAGIC;
+    k++;
+    for (guint i = 0; i < n; i++) {
+        inputs[k].type = INPUT_KEYBOARD;
+        inputs[k].ki.wVk = VK_LEFT;
+        inputs[k].ki.dwExtraInfo = GTV_HOOK_MAGIC;
+        k++;
+        inputs[k].type = INPUT_KEYBOARD;
+        inputs[k].ki.wVk = VK_LEFT;
+        inputs[k].ki.dwFlags = KEYEVENTF_KEYUP;
+        inputs[k].ki.dwExtraInfo = GTV_HOOK_MAGIC;
+        k++;
+    }
+    inputs[k].type = INPUT_KEYBOARD;
+    inputs[k].ki.wVk = VK_SHIFT;
+    inputs[k].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[k].ki.dwExtraInfo = GTV_HOOK_MAGIC;
+    SendInput(total, inputs, sizeof(INPUT));
+    g_free(inputs);
+}
+static void send_erase(guint n) {
+    if (n == 0) return;
+    if (s_browser_field) send_shift_left(n);
+    else gtv_hook_send_backspaces((int)n);
+}
+void gtv_hook_replace_text(int erase_count, const gchar *utf8) {
+    if (erase_count > 0) send_erase((guint)erase_count);
+    gtv_hook_send_text(utf8);
+}
 
 void gtv_hook_send_backspaces(int count) {
     if (count <= 0) return;
@@ -142,6 +227,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         HWND fg = GetForegroundWindow();
         if (fg != s_last_fg) {
             s_last_fg = fg;
+            s_browser_field = fg_is_browser(fg);
             gtv_hook_reset_buffer();
         }
     }
@@ -234,14 +320,16 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 ? gtv_mirror_decide(&s_mirror, buffer, raw_utf8, commit)
                 : (commit ? GTV_MIRROR_COMMIT : GTV_MIRROR_PASS);
             if (act == GTV_MIRROR_COMMIT) {
-                /* Minimal edit: an unchanged word needs zero Backspaces,
+                /* Minimal edit: an unchanged word needs zero erasure,
                  * which also keeps autocomplete-driven fields (Chrome
                  * omnibox swallows the first Backspace to dismiss its
                  * suggestion) exact. */
                 guint erase = 0;
                 const gchar *send_from = commit ? commit : "";
                 gtv_mirror_diff(&s_mirror, send_from, &erase, &send_from);
-                gtv_hook_send_backspaces((int)erase);
+                hook_debug("commit buffer='%s' shown-erase=%u send='%s' browser=%d",
+                           buffer, erase, send_from, s_browser_field);
+                send_erase(erase);
                 gtv_hook_send_text(send_from);
                 gtv_mirror_committed(&s_mirror);
                 if (commit) {
@@ -256,7 +344,9 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 guint erase = 0;
                 const gchar *send_from = buffer;
                 gtv_mirror_diff(&s_mirror, buffer, &erase, &send_from);
-                gtv_hook_send_backspaces((int)erase);
+                hook_debug("resend buffer='%s' shown-erase=%u send='%s' browser=%d",
+                           buffer, erase, send_from, s_browser_field);
+                send_erase(erase);
                 gtv_hook_send_text(send_from);
                 gtv_mirror_resent(&s_mirror, buffer);
                 g_free(commit);

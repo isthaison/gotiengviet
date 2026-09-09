@@ -20,6 +20,11 @@
   </provides>
   <url type="homepage">https://github.com/isthaison/gotiengviet</url>
   <releases>
+    <release version="0.5.2" date="2026-09-09">
+      <description>
+        <p>Commit/resend tối thiểu trên Windows: hết nhân đôi ở thanh địa chỉ Chrome, bớt nháy xóa-gõ lại.</p>
+      </description>
+    </release>
     <release version="0.5.1" date="2026-09-09">
       <description>
         <p>Sửa cập nhật Windows bị câm (balloon riêng, nhật ký update.log) và menu/dialog Unicode.</p>

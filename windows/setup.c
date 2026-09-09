@@ -29,8 +29,15 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             CheckDlgButton(hwnd, IDC_CHECK_SPELL, g_app.config.spellcheck ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, IDC_CHECK_STARTUP, get_startup_enabled_local() ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, IDC_CHECK_AI, g_app.config.ai_enabled ? BST_CHECKED : BST_UNCHECKED);
-            SetDlgItemText(hwnd, IDC_EDIT_MODEL, g_app.config.model ? g_app.config.model : "");
-            SetDlgItemText(hwnd, IDC_EDIT_URL, g_app.config.url ? g_app.config.url : "");
+            {
+                /* Edit boxes are Unicode: convert, like every other UI string. */
+                gunichar2 *wmodel = g_utf8_to_utf16(g_app.config.model ? g_app.config.model : "", -1, NULL, NULL, NULL);
+                gunichar2 *wurl = g_utf8_to_utf16(g_app.config.url ? g_app.config.url : "", -1, NULL, NULL, NULL);
+                SetDlgItemTextW(hwnd, IDC_EDIT_MODEL, (LPCWSTR)wmodel);
+                SetDlgItemTextW(hwnd, IDC_EDIT_URL, (LPCWSTR)wurl);
+                g_free(wmodel);
+                g_free(wurl);
+            }
 
             /* Center dialog on screen */
             RECT rc, rcOwner;
@@ -56,18 +63,20 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 g_app.config.ai_enabled = (IsDlgButtonChecked(hwnd, IDC_CHECK_AI) == BST_CHECKED);
 
                 /* String swap under lock: the AI worker may be copying them. */
-                char buf[512];
+                WCHAR wbuf[512];
                 gtv_config_strings_lock();
-                GetDlgItemText(hwnd, IDC_EDIT_MODEL, buf, sizeof(buf));
-                if (*g_strstrip(buf)) {
+                GetDlgItemTextW(hwnd, IDC_EDIT_MODEL, wbuf, 512);
+                gchar *model = g_utf16_to_utf8(wbuf, -1, NULL, NULL, NULL);
+                if (model && *g_strstrip(model)) {
                     g_free(g_app.config.model);
-                    g_app.config.model = g_strdup(buf);
-                }
-                GetDlgItemText(hwnd, IDC_EDIT_URL, buf, sizeof(buf));
-                if (*g_strstrip(buf)) {
+                    g_app.config.model = model;
+                } else g_free(model);
+                GetDlgItemTextW(hwnd, IDC_EDIT_URL, wbuf, 512);
+                gchar *url = g_utf16_to_utf8(wbuf, -1, NULL, NULL, NULL);
+                if (url && *g_strstrip(url)) {
                     g_free(g_app.config.url);
-                    g_app.config.url = g_strdup(buf);
-                }
+                    g_app.config.url = url;
+                } else g_free(url);
                 gtv_config_strings_unlock();
 
                 gboolean want_startup = (IsDlgButtonChecked(hwnd, IDC_CHECK_STARTUP) == BST_CHECKED);

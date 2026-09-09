@@ -92,7 +92,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     /* 4. Install Hook and Tray icon */
     if (!gtv_hook_install()) {
-        MessageBoxA(NULL, "Không thể cài đặt Hook bàn phím!", "GoTiengViet Lỗi", MB_ICONERROR | MB_OK);
+        gunichar2 *wmsg = g_utf8_to_utf16("Không thể cài đặt Hook bàn phím!", -1, NULL, NULL, NULL);
+        gunichar2 *wtitle = g_utf8_to_utf16("GoTiengViet Lỗi", -1, NULL, NULL, NULL);
+        MessageBoxW(NULL, (LPCWSTR)wmsg, (LPCWSTR)wtitle, MB_ICONERROR | MB_OK);
+        g_free(wmsg);
+        g_free(wtitle);
         return 1;
     }
 

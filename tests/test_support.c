@@ -140,18 +140,24 @@ static void hook_press(GtvMirror *m, GtvEngine *eng, GString *screen, gunichar c
     g_unichar_to_utf8(ch, raw);
     GtvMirrorAction act = gtv_mirror_decide(m, buffer, raw, commit);
     if (act == GTV_MIRROR_COMMIT) {
-        for (guint i = 0; i < gtv_mirror_erase_count(m) && screen->len; i++) {
+        guint erase = 0;
+        const gchar *send_from = commit ? commit : "";
+        gtv_mirror_diff(m, send_from, &erase, &send_from);
+        for (guint i = 0; i < erase && screen->len; i++) {
             gchar *prev = g_utf8_prev_char(screen->str + screen->len);
             g_string_truncate(screen, prev - screen->str);
         }
-        g_string_append(screen, commit ? commit : "");
+        g_string_append(screen, send_from);
         gtv_mirror_committed(m);
     } else if (act == GTV_MIRROR_RESEND) {
-        for (guint i = 0; i < gtv_mirror_erase_count(m) && screen->len; i++) {
+        guint erase = 0;
+        const gchar *send_from = buffer;
+        gtv_mirror_diff(m, buffer, &erase, &send_from);
+        for (guint i = 0; i < erase && screen->len; i++) {
             gchar *prev = g_utf8_prev_char(screen->str + screen->len);
             g_string_truncate(screen, prev - screen->str);
         }
-        g_string_append(screen, buffer);
+        g_string_append(screen, send_from);
         gtv_mirror_resent(m, buffer);
     } else {
         g_string_append(screen, raw);
@@ -250,6 +256,26 @@ static void test_mirror(void) {
     gtv_mirror_backspaced(m); /* clamped at empty */
     g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 0);
     g_assert_cmpint(gtv_mirror_decide(m, "a", "a", NULL), ==, GTV_MIRROR_PASS);
+    /* Minimal-edit split: common prefix kept, only the rest erased/sent. */
+    {
+        guint erase = 0;
+        const gchar *send_from = NULL;
+        gtv_mirror_resent(m, "chào");
+        gtv_mirror_diff(m, "chào ", &erase, &send_from);
+        g_assert_cmpuint(erase, ==, 0);
+        g_assert_cmpstr(send_from, ==, " ");
+        gtv_mirror_resent(m, "cha");
+        gtv_mirror_diff(m, "chà", &erase, &send_from);
+        g_assert_cmpuint(erase, ==, 1);
+        g_assert_cmpstr(send_from, ==, "à");
+        gtv_mirror_resent(m, "vn");
+        gtv_mirror_diff(m, "Việt Nam ", &erase, &send_from);
+        g_assert_cmpuint(erase, ==, 2);
+        g_assert_cmpstr(send_from, ==, "Việt Nam ");
+        gtv_mirror_diff(m, NULL, &erase, &send_from);
+        g_assert_cmpuint(erase, ==, 2);
+        g_assert_cmpstr(send_from, ==, "");
+    }
     gtv_mirror_clear(m);
     g_assert_cmpuint(gtv_mirror_erase_count(m), ==, 0);
     gtv_mirror_free(m);

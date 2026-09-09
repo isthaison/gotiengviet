@@ -57,6 +57,7 @@ void gtv_mirror_passthrough(GtvMirror *m, gunichar raw);
 void gtv_mirror_backspaced(GtvMirror *m);
 GtvMirrorAction gtv_mirror_decide(GtvMirror *m, const gchar *buffer, const gchar *raw_utf8, const gchar *commit);
 guint gtv_mirror_erase_count(GtvMirror *m);
+void gtv_mirror_diff(GtvMirror *m, const gchar *new_text, guint *erase_chars, const gchar **send_from);
 void gtv_mirror_resent(GtvMirror *m, const gchar *buffer);
 void gtv_mirror_committed(GtvMirror *m);
 #endif

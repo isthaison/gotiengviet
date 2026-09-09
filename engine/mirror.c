@@ -41,6 +41,23 @@ GtvMirrorAction gtv_mirror_decide(GtvMirror *m, const gchar *buffer, const gchar
 guint gtv_mirror_erase_count(GtvMirror *m) {
     return (guint)g_utf8_strlen(m->shown->str, -1);
 }
+/* Minimal edit turning the shown word into new_text: common prefix is
+ * kept, erase_chars (in chars) must be deleted, then send_from (a suffix
+ * of new_text) typed. This matters where Backspace presses have side
+ * effects beyond deleting (e.g. Chrome omnibox inline autocomplete
+ * swallows the first one to dismiss the suggestion): fewer presses,
+ * less exposure, and commits over an unchanged word need none at all. */
+void gtv_mirror_diff(GtvMirror *m, const gchar *new_text, guint *erase_chars, const gchar **send_from) {
+    if (!new_text) new_text = "";
+    const gchar *a = m->shown->str, *b = new_text;
+    while (*a && *b) {
+        if (g_utf8_get_char(a) != g_utf8_get_char(b)) break;
+        a = g_utf8_next_char(a);
+        b = g_utf8_next_char(b);
+    }
+    if (erase_chars) *erase_chars = (guint)g_utf8_strlen(a, -1);
+    if (send_from) *send_from = b;
+}
 void gtv_mirror_resent(GtvMirror *m, const gchar *buffer) {
     g_string_assign(m->shown, buffer ? buffer : "");
 }

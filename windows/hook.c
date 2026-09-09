@@ -234,8 +234,15 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 ? gtv_mirror_decide(&s_mirror, buffer, raw_utf8, commit)
                 : (commit ? GTV_MIRROR_COMMIT : GTV_MIRROR_PASS);
             if (act == GTV_MIRROR_COMMIT) {
-                gtv_hook_send_backspaces((int)gtv_mirror_erase_count(&s_mirror));
-                gtv_hook_send_text(commit ? commit : "");
+                /* Minimal edit: an unchanged word needs zero Backspaces,
+                 * which also keeps autocomplete-driven fields (Chrome
+                 * omnibox swallows the first Backspace to dismiss its
+                 * suggestion) exact. */
+                guint erase = 0;
+                const gchar *send_from = commit ? commit : "";
+                gtv_mirror_diff(&s_mirror, send_from, &erase, &send_from);
+                gtv_hook_send_backspaces((int)erase);
+                gtv_hook_send_text(send_from);
                 gtv_mirror_committed(&s_mirror);
                 if (commit) {
                     maybe_ai_suggest(commit);
@@ -246,8 +253,11 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                 return 1; /* Suppress original key */
             }
             if (act == GTV_MIRROR_RESEND) {
-                gtv_hook_send_backspaces((int)gtv_mirror_erase_count(&s_mirror));
-                gtv_hook_send_text(buffer);
+                guint erase = 0;
+                const gchar *send_from = buffer;
+                gtv_mirror_diff(&s_mirror, buffer, &erase, &send_from);
+                gtv_hook_send_backspaces((int)erase);
+                gtv_hook_send_text(send_from);
                 gtv_mirror_resent(&s_mirror, buffer);
                 g_free(commit);
                 g_free(buffer);

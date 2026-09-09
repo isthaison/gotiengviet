@@ -20,6 +20,11 @@
   </provides>
   <url type="homepage">https://github.com/isthaison/gotiengviet</url>
   <releases>
+    <release version="0.5.0" date="2026-09-09">
+      <description>
+        <p>Sửa nhân bản chữ khi click/Space (Linux) và Space commit đúng một lần (Windows); Windows tự cập nhật theo release.</p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-09-08">
       <description>
         <p>Bỏ trợ lý Ctrl+T; thêm tự cập nhật Windows theo release GitHub và bộ cài versioned.</p>

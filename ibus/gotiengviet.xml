@@ -3,7 +3,7 @@
   <name>org.freedesktop.IBus.GoTiengViet</name>
   <description>GoTiengViet - Gõ Telex/VNI thuần hệ thống (không lib ngoài)</description>
   <exec>/usr/libexec/ibus-engine-gotiengviet --ibus</exec>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
   <author>GoTiengViet Project</author>
   <license>GPL</license>
   <homepage>https://github.com/isthaison/gotiengviet</homepage>

@@ -3,6 +3,28 @@
 #undef main
 #include <glib/gstdio.h>
 
+static guint commit_count;
+static gchar *last_commit;
+static void commit_counter(GDBusConnection *connection,const gchar *sender,const gchar *path,
+                           const gchar *interface,const gchar *name,GVariant *parameters,gpointer data){
+    (void)connection;(void)sender;(void)path;(void)interface;(void)data;
+    if(strcmp(name,"CommitText"))return;
+    GVariant *serialized=NULL;g_variant_get(parameters,"(v)",&serialized);
+    IBusText *text=IBUS_TEXT(ibus_serializable_deserialize(serialized));
+    g_object_ref_sink(text);
+    commit_count++;
+    g_free(last_commit);last_commit=g_strdup(text->text);
+    g_object_unref(text);g_variant_unref(serialized);
+}
+static void pump(void){
+    /* Signal delivery round-trips through the test bus daemon, so each
+     * drain is followed by a short sleep (same pattern as the AI waits). */
+    for(int i=0;i<100;i++){ while(g_main_context_iteration(NULL,FALSE)); g_usleep(5000); }
+}
+static void pump_until(guint want){
+    for(int i=0;i<200 && commit_count<want;i++){ while(g_main_context_iteration(NULL,FALSE)); g_usleep(10000); }
+}
+
 int main(int argc,char **argv) {
     gchar *test_path=g_strconcat(g_getenv("GTV_TEST_CURL_DIR"),G_SEARCHPATH_SEPARATOR_S,g_getenv("PATH"),NULL);
     g_setenv("PATH",test_path,TRUE);g_free(test_path);
@@ -23,6 +45,8 @@ int main(int argc,char **argv) {
         "object-path","/org/freedesktop/IBus/Engine/Test","connection",connection,"has-focus-id",TRUE,NULL);
     g_object_ref_sink(engine);
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    guint commit_sub=g_dbus_connection_signal_subscribe(connection,NULL,IBUS_INTERFACE_ENGINE,NULL,
+        "/org/freedesktop/IBus/Engine/Test",NULL,G_DBUS_SIGNAL_FLAGS_NONE,commit_counter,NULL,NULL);
     ibus_gotiengviet_engine_focus_in(engine);
     const struct {const gchar *input,*want;gboolean telex;} cases[]={
         {"bawst","bắt",TRUE},{"duocjwd","được",TRUE},{"DUOCJWD","ĐƯỢC",TRUE},
@@ -160,6 +184,48 @@ int main(int argc,char **argv) {
         g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_a,0,0));
         g_assert_cmpstr(e->preedit->str,==,"a");
     }
+    /* Mouse click must never multiply commits: interruptions (focus
+     * change, client reset storms) keep the composition instead of
+     * committing it; only explicit typing keys commit, exactly once. */
+    ibus_gotiengviet_engine_reset(e);
+    e->mode_telex=TRUE;
+    pump(); /* drain commits emitted by earlier cases: D-Bus delivery is async */
+    guint base=commit_count;
+    focus_in_id(engine,"app-a",NULL);
+    for(const gchar *p="xin";*p;p++)
+        g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,(guint)*p,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"xin");
+    /* Click away and back, with client resets in between: no commit,
+     * composition intact, typing continues. */
+    focus_out_id(engine,"app-a");
+    g_assert_cmpstr(e->preedit->str,==,"xin");
+    ibus_gotiengviet_engine_reset_cb(engine);
+    ibus_gotiengviet_engine_reset_cb(engine);
+    g_assert_cmpstr(e->preedit->str,==,"xin");
+    focus_in_id(engine,"app-a",NULL);
+    g_assert_cmpstr(e->preedit->str,==,"xin");
+    g_assert_cmpstr(e->sentence_context->str,==,"");
+    pump();
+    g_assert_cmpuint(commit_count,==,base);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_j,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"xịn");
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_space,0,0));
+    pump_until(base+1);
+    g_assert_cmpuint(commit_count,==,base+1);
+    g_assert_cmpstr(last_commit,==,"xịn ");
+    /* Another input abandons the stash without committing it. */
+    focus_in_id(engine,"app-a",NULL);
+    for(const gchar *p="xin";*p;p++)
+        g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,(guint)*p,0,0));
+    focus_out_id(engine,"app-a");
+    focus_in_id(engine,"app-b",NULL);
+    g_assert_cmpstr(e->preedit->str,==,"");
+    pump();
+    g_assert_cmpuint(commit_count,==,base+1);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_a,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"a");
+    g_free(last_commit);
+    g_dbus_connection_signal_unsubscribe(connection,commit_sub);
     /* Ctrl+T is unbound: Ctrl+T must not be swallowed, it falls through. */
     ibus_gotiengviet_engine_reset(e);
     g_assert_false(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_CONTROL_MASK));

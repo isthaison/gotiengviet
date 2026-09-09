@@ -34,6 +34,11 @@ struct _GoTiengVietEngine {
     gboolean modern;
     gboolean spellcheck;
     guint purpose;
+    gchar *focus_id;
+    /* Unfinished composition kept across a mouse click away from the
+     * input, with the focus it belongs to. focus_in restores it only
+     * for the same input; a different input abandons it. */
+    gchar *preedit_focus_id;
     gchar **candidates;
     int n_candidates;
     int cand_cursor;
@@ -113,6 +118,7 @@ static void learn_candidate(IBusGoTiengVietEngine *e,const gchar *candidate){
 }
 
 static void commit_and_remember(IBusEngine *engine,IBusText *text){
+    debug_log("[commit] '%s'\n", text->text);
     ibus_engine_commit_text(engine,text);
 }
 static void update_context(IBusGoTiengVietEngine *e, const char *committed){
@@ -500,53 +506,84 @@ static void ibus_gotiengviet_engine_enable(IBusEngine *engine){
 static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     ibus_engine_get_surrounding_text(engine,NULL,NULL,NULL);
-    debug_log("[focus_in] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
+    debug_log("[focus_in] engine=%p id='%s' preedit='%s'\n", engine,
+              e->focus_id ? e->focus_id : "", e->preedit ? e->preedit->str : "");
     reload_engine_config(e);
     e->purpose=IBUS_INPUT_PURPOSE_FREE_FORM;
-    // Đảm bảo focus vào input mới thì xóa sạch buffer preedit cũ
-    if(e->preedit && e->preedit->len>0){
-        ibus_gotiengviet_engine_reset(e);
-        IBusText *empty=ibus_text_new_from_string("");
-        ibus_engine_update_preedit_text(engine,empty,0,FALSE);
-    }
+    /* A stashed composition stays in the buffer and re-renders on the
+     * next keystroke; nothing is redrawn here, so a client that already
+     * consumed the text can never see a ghost duplicate. */
+    clear_candidates(e);
     // Một engine duy nhất "gotiengviet": chuyển Telex/VNI trên indicator của app GoTiengViet
     // Đồng bộ cache mtime để reload_config_if_changed không load lại ngay
     gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
     struct stat st;
     if(stat(path, &st) == 0) cfg_mtime_cache = st.st_mtime;
     g_free(path);
-    hide_suggest(e, engine);
+}
+/* Hide the lookup table only when one is actually shown: reset/focus
+ * storms must not ping-pong D-Bus hide/show signals with the client. */
+static void clear_lookup_quietly(IBusGoTiengVietEngine *e, IBusEngine *engine){
+    if(e->n_candidates>0) hide_suggest(e, engine);
+    else clear_candidates(e);
+}
+/* Keep an unfinished composition across an interruption (mouse click,
+ * client reset storm) instead of committing it. Only explicit typing
+ * keys ever commit, exactly once per keystroke. The stash re-renders
+ * on the next keystroke in the same input; moving to another input
+ * abandons it. */
+static void stash_composition(IBusGoTiengVietEngine *e, IBusEngine *engine, const gchar *id){
+    g_free(e->preedit_focus_id);
+    e->preedit_focus_id=g_strdup(id ? id : e->focus_id);
+    if(e->preedit && e->preedit->len>0)
+        ibus_engine_hide_preedit_text(engine);
+    clear_lookup_quietly(e, engine);
+}
+static void focus_out_id(IBusEngine *engine, const gchar *id){
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    debug_log("[focus_out] engine=%p id='%s' preedit='%s'\n", engine,
+              id ? id : "", e->preedit ? e->preedit->str : "");
+    if(e->sentence_context) g_string_assign(e->sentence_context, "");
+    stash_composition(e, engine, id);
 }
 static void ibus_gotiengviet_engine_focus_out(IBusEngine *engine){
+    focus_out_id(engine, NULL);
+}
+static void focus_in_id(IBusEngine *engine, const gchar *id, const gchar *client){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
-    debug_log("[focus_out] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
-    if(e->sentence_context) g_string_assign(e->sentence_context, "");
-    if(e->preedit && e->preedit->len>0){
-        gchar *word=expand_word(e->preedit->str);
-        IBusText *t=ibus_text_new_from_string(word);
-        g_free(word);
-        commit_and_remember(engine,t);
+    (void)client;
+    debug_log("[focus_in_id] engine=%p id='%s'\n", engine, id ? id : "");
+    g_free(e->focus_id);
+    e->focus_id=g_strdup(id);
+    if(e->preedit && e->preedit->len>0 && e->focus_id && *e->focus_id
+       && e->preedit_focus_id && *e->preedit_focus_id
+       && g_strcmp0(e->focus_id, e->preedit_focus_id)!=0){
+        /* Definitely another input (both ids known and different):
+         * abandon what was left behind. Anything less certain keeps
+         * the buffer so a double-fired bare focus_in can never wipe
+         * live typing. */
         ibus_gotiengviet_engine_reset(e);
+        g_clear_pointer(&e->preedit_focus_id, g_free);
         IBusText *empty=ibus_text_new_from_string("");
         ibus_engine_update_preedit_text(engine,empty,0,FALSE);
+        ibus_engine_hide_preedit_text(engine);
     }
-    hide_suggest(e, engine);
+    ibus_gotiengviet_engine_focus_in(engine);
 }
 static void ibus_gotiengviet_engine_reset_cb(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
     debug_log("[reset_cb] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
     if(e->sentence_context) g_string_assign(e->sentence_context, "");
-    if(e->preedit && e->preedit->len>0){
-        gchar *word=expand_word(e->preedit->str);
-        IBusText *t=ibus_text_new_from_string(word);
-        g_free(word);
-        commit_and_remember(engine,t);
-        ibus_gotiengviet_engine_reset(e);
-        IBusText *empty=ibus_text_new_from_string("");
-        ibus_engine_update_preedit_text(engine,empty,0,FALSE);
-        ibus_engine_hide_preedit_text(engine);
+    if(!e->preedit || !e->preedit->len){
+        /* Nothing stashed: stay silent so storms of empty resets can
+         * never amplify into D-Bus hide/show ping-pong. */
+        clear_lookup_quietly(e, engine);
+        return;
     }
-    hide_suggest(e, engine);
+    /* A client reset is just another interruption (click, widget churn):
+     * stash, never commit. Committing here both duplicates text on click
+     * and shreds words when resets land mid-composition. */
+    stash_composition(e, engine, e->focus_id);
 }
 static void ibus_gotiengviet_engine_disable(IBusEngine *engine){
     ibus_gotiengviet_engine_focus_out(engine);
@@ -583,6 +620,7 @@ static void ibus_gotiengviet_engine_finalize(GObject *object){
     gtv_config_clear(&e->config);
     g_clear_pointer(&e->learned_words,g_hash_table_unref);g_free(e->learned_path);
     g_clear_pointer(&e->learned_fixes,g_hash_table_unref);g_free(e->learned_fixes_path);
+    g_free(e->focus_id);g_free(e->preedit_focus_id);
     if(e->preedit) g_string_free(e->preedit,TRUE);
     if(e->sentence_context) g_string_free(e->sentence_context,TRUE);
     G_OBJECT_CLASS(ibus_gotiengviet_engine_parent_class)->finalize(object);
@@ -591,6 +629,8 @@ static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass
     G_OBJECT_CLASS(klass)->finalize=ibus_gotiengviet_engine_finalize;
     IBusEngineClass *ec=IBUS_ENGINE_CLASS(klass);
     ec->process_key_event=ibus_gotiengviet_engine_process_key_event;
+    ec->focus_in_id=focus_in_id;
+    ec->focus_out_id=focus_out_id;
     ec->focus_in=ibus_gotiengviet_engine_focus_in;
     ec->focus_out=ibus_gotiengviet_engine_focus_out;
     ec->reset=ibus_gotiengviet_engine_reset_cb;

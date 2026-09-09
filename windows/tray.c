@@ -5,9 +5,32 @@
 #include "resource.h"
 #include "internal.h"
 
-static NOTIFYICONDATA nid = {0};
+static NOTIFYICONDATAW nid = {0};
 static HICON icon_v = NULL;
 static HICON icon_e = NULL;
+
+/* All UI strings in this codebase are UTF-8; the tray/menu/registry APIs
+ * below are the explicit W variants so Vietnamese renders correctly on
+ * any system locale (ANSI A-APIs would decode UTF-8 as mojibake). */
+static void wstr_copy(WCHAR *dst, guint dst_chars, const gunichar2 *src) {
+    guint i = 0;
+    if (src) while (i + 1 < dst_chars && src[i]) { dst[i] = (WCHAR)src[i]; i++; }
+    dst[i] = 0;
+}
+static void set_field(const gchar *utf8, WCHAR *dst, guint dst_chars) {
+    gunichar2 *w = utf8 ? g_utf8_to_utf16(utf8, -1, NULL, NULL, NULL) : NULL;
+    wstr_copy(dst, dst_chars, w);
+    g_free(w);
+}
+static void menu_add(HMENU hmenu, const gchar *utf8, UINT flags, UINT_PTR id) {
+    if (flags & MF_SEPARATOR) {
+        InsertMenuW(hmenu, -1, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
+        return;
+    }
+    gunichar2 *w = g_utf8_to_utf16(utf8 ? utf8 : "", -1, NULL, NULL, NULL);
+    InsertMenuW(hmenu, -1, MF_BYPOSITION | MF_STRING | flags, id, (LPCWSTR)w);
+    g_free(w);
+}
 
 static gboolean get_startup_enabled(void) {
     HKEY hkey;
@@ -52,11 +75,12 @@ void gtv_tray_set_startup(gboolean enable) {
     if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hkey) != ERROR_SUCCESS)
         return;
     if (enable) {
-        char path[MAX_PATH];
-        GetModuleFileName(NULL, path, MAX_PATH);
-        RegSetValueEx(hkey, "GoTiengViet", 0, REG_SZ, (const BYTE *)path, (DWORD)strlen(path) + 1);
+        WCHAR path[MAX_PATH];
+        GetModuleFileNameW(NULL, path, MAX_PATH);
+        RegSetValueExW(hkey, L"GoTiengViet", 0, REG_SZ, (const BYTE *)path,
+                       (DWORD)(lstrlenW(path) + 1) * sizeof(WCHAR));
     } else {
-        RegDeleteValue(hkey, "GoTiengViet");
+        RegDeleteValueW(hkey, L"GoTiengViet");
     }
     RegCloseKey(hkey);
 }
@@ -67,15 +91,15 @@ gboolean gtv_tray_init(HWND hwnd) {
     icon_v = LoadIcon(hinst, MAKEINTRESOURCE(IDI_TRAY_V));
     icon_e = LoadIcon(hinst, MAKEINTRESOURCE(IDI_TRAY_E));
 
-    nid.cbSize = sizeof(NOTIFYICONDATA);
+    nid.cbSize = sizeof(NOTIFYICONDATAW);
     nid.hWnd = hwnd;
     nid.uID = 1;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
     nid.hIcon = g_app.enabled ? icon_v : icon_e;
-    strcpy(nid.szTip, "GoTiengViet - Bộ gõ tiếng Việt");
+    set_field("GoTiengViet - Bộ gõ tiếng Việt", nid.szTip, G_N_ELEMENTS(nid.szTip));
 
-    return Shell_NotifyIcon(NIM_ADD, &nid);
+    return Shell_NotifyIconW(NIM_ADD, &nid);
 }
 
 void gtv_tray_cleanup(void) {
@@ -84,7 +108,7 @@ void gtv_tray_cleanup(void) {
         DeleteCriticalSection(&config_lock);
         config_lock_ready = FALSE;
     }
-    Shell_NotifyIcon(NIM_DELETE, &nid);
+    Shell_NotifyIconW(NIM_DELETE, &nid);
     if (icon_v) DestroyIcon(icon_v);
     if (icon_e) DestroyIcon(icon_e);
 }
@@ -93,11 +117,11 @@ void gtv_tray_update_icon(gboolean enabled) {
     nid.uFlags &= (UINT)~NIF_INFO; /* drop stale balloon text on icon updates */
     nid.hIcon = enabled ? icon_v : icon_e;
     if (enabled) {
-        strcpy(nid.szTip, "GoTiengViet [Tiếng Việt]");
+        set_field("GoTiengViet [Tiếng Việt]", nid.szTip, G_N_ELEMENTS(nid.szTip));
     } else {
-        strcpy(nid.szTip, "GoTiengViet [English]");
+        set_field("GoTiengViet [English]", nid.szTip, G_N_ELEMENTS(nid.szTip));
     }
-    Shell_NotifyIcon(NIM_MODIFY, &nid);
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
 void gtv_tray_show_menu(HWND hwnd) {
@@ -105,27 +129,27 @@ void gtv_tray_show_menu(HWND hwnd) {
     GetCursorPos(&pt);
 
     HMENU hmenu = CreatePopupMenu();
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING, ID_TRAY_SETTINGS, "Bảng điều khiển...");
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
+    menu_add(hmenu, "Bảng điều khiển...", 0, ID_TRAY_SETTINGS);
+    menu_add(hmenu, NULL, MF_SEPARATOR, 0);
 
     UINT telex_flag = (g_app.config.mode == GTV_TELEX) ? MF_CHECKED : MF_UNCHECKED;
     UINT vni_flag = (g_app.config.mode == GTV_VNI) ? MF_CHECKED : MF_UNCHECKED;
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | telex_flag, ID_TRAY_MODE_TELEX, "Kiểu gõ Telex");
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | vni_flag, ID_TRAY_MODE_VNI, "Kiểu gõ VNI");
+    menu_add(hmenu, "Kiểu gõ Telex", telex_flag, ID_TRAY_MODE_TELEX);
+    menu_add(hmenu, "Kiểu gõ VNI", vni_flag, ID_TRAY_MODE_VNI);
 
     UINT spell_flag = g_app.config.spellcheck ? MF_CHECKED : MF_UNCHECKED;
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | spell_flag, ID_TRAY_SPELLCHECK, "Kiểm tra chính tả");
+    menu_add(hmenu, "Kiểm tra chính tả", spell_flag, ID_TRAY_SPELLCHECK);
 
     UINT modern_flag = g_app.config.modern ? MF_CHECKED : MF_UNCHECKED;
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | modern_flag, ID_TRAY_MODERN, "Đặt dấu chuẩn mới");
+    menu_add(hmenu, "Đặt dấu chuẩn mới", modern_flag, ID_TRAY_MODERN);
 
     UINT start_flag = get_startup_enabled() ? MF_CHECKED : MF_UNCHECKED;
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING | start_flag, ID_TRAY_STARTUP, "Khởi động cùng Windows");
+    menu_add(hmenu, "Khởi động cùng Windows", start_flag, ID_TRAY_STARTUP);
 
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING, ID_TRAY_UPDATE, "Kiểm tra cập nhật...");
+    menu_add(hmenu, "Kiểm tra cập nhật...", 0, ID_TRAY_UPDATE);
 
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
-    InsertMenu(hmenu, -1, MF_BYPOSITION | MF_STRING, ID_TRAY_EXIT, "Thoát");
+    menu_add(hmenu, NULL, MF_SEPARATOR, 0);
+    menu_add(hmenu, "Thoát", 0, ID_TRAY_EXIT);
 
     SetForegroundWindow(hwnd);
     int cmd = TrackPopupMenu(hmenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, NULL);
@@ -168,23 +192,30 @@ void gtv_tray_show_menu(HWND hwnd) {
     }
 }
 
-/* Tray balloon, throttled so a burst of typos does not spam. The tray API
- * here is ANSI, so UTF-8 text is converted to Windows-1258 (raw UTF-8 bytes
- * would render as mojibake); conversion failure falls back to raw text. */
+/* Tray balloon over the Unicode NOTIFYICONDATAW: UTF-8 goes straight to
+ * UTF-16, correct on every system locale (the old ANSI version needed a
+ * lossy Windows-1258 conversion). */
+static void balloon_show(const gchar *title, const gchar *msg) {
+    nid.uFlags |= NIF_INFO;
+    nid.dwInfoFlags = NIIF_INFO;
+    set_field(title ? title : "GoTiengViet", nid.szInfoTitle, G_N_ELEMENTS(nid.szInfoTitle));
+    set_field(msg ? msg : "", nid.szInfo, G_N_ELEMENTS(nid.szInfo));
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
+
 void gtv_tray_balloon(const gchar *title, const gchar *msg) {
     static DWORD last_tick = 0;
     DWORD now = GetTickCount();
+    /* One shared slot: a burst of typos must not spam. Update flows
+     * use gtv_tray_balloon_force instead so a manual check is never
+     * silently swallowed right after an AI balloon. */
     if (last_tick && (now - last_tick) < 10000) return;
     last_tick = now;
-    nid.uFlags |= NIF_INFO;
-    nid.dwInfoFlags = NIIF_INFO;
-    gchar *ansi_title = title ? g_convert(title, -1, "WINDOWS-1258", "UTF-8", NULL, NULL, NULL) : NULL;
-    gchar *ansi_msg = msg ? g_convert(msg, -1, "WINDOWS-1258", "UTF-8", NULL, NULL, NULL) : NULL;
-    g_strlcpy(nid.szInfoTitle, ansi_title ? ansi_title : (title ? title : "GoTiengViet"), sizeof(nid.szInfoTitle));
-    g_strlcpy(nid.szInfo, ansi_msg ? ansi_msg : (msg ? msg : ""), sizeof(nid.szInfo));
-    g_free(ansi_title);
-    g_free(ansi_msg);
-    Shell_NotifyIcon(NIM_MODIFY, &nid);
+    balloon_show(title, msg);
+}
+
+void gtv_tray_balloon_force(const gchar *title, const gchar *msg) {
+    balloon_show(title, msg);
 }
 
 typedef struct { gchar *word; gchar *model; gchar *url; } AiJob;

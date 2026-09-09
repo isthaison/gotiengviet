@@ -9,6 +9,39 @@
 typedef struct { HWND notify; gboolean manual; } CheckJob;
 
 static volatile LONG update_in_flight = 0;
+static volatile DWORD update_flight_tick = 0;
+
+/* Append-only diagnostic log next to the config, so a silent updater can
+ * be diagnosed from %APPDATA%/gotiengviet/update.log. Bounded size. */
+static void update_log(const gchar *fmt, ...) {
+    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    g_mkdir_with_parents(dir, 0755);
+    gchar *path = g_build_filename(dir, "update.log", NULL);
+    g_free(dir);
+    FILE *probe = g_fopen(path, "r");
+    if (probe) {
+        fseek(probe, 0, SEEK_END);
+        if (ftell(probe) > 65536) {
+            fclose(probe);
+            g_remove(path);
+            probe = NULL;
+        } else fclose(probe);
+    }
+    FILE *f = g_fopen(path, "a");
+    g_free(path);
+    if (!f) return;
+    GDateTime *now = g_date_time_new_now_local();
+    gchar *ts = now ? g_date_time_format(now, "%Y-%m-%d %H:%M:%S") : g_strdup("?");
+    fprintf(f, "[%s] ", ts);
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(f, fmt, args);
+    va_end(args);
+    fputc('\n', f);
+    fclose(f);
+    g_free(ts);
+    if (now) g_date_time_unref(now);
+}
 
 /* Latest balloon ownership: the AI typo balloon and the update balloon
  * share one tray slot, so clicks are routed to whoever showed last. */

@@ -2,6 +2,11 @@
 #include <commctrl.h>
 #include "resource.h"
 
+/* The dialog strings below are UTF-8: tell windres (and rc.exe) to read
+ * this file as UTF-8, otherwise Vietnamese text becomes mojibake when
+ * the build machine uses another system codepage. */
+#pragma code_page(65001)
+
 #ifndef IDC_STATIC
 #define IDC_STATIC (-1)
 #endif

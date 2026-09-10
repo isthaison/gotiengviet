@@ -5,7 +5,7 @@ CFLAGS ?= -O2 -g
 CFLAGS += -std=gnu11 -Wall -Wextra -Wno-unused-parameter
 CPPFLAGS += -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 BUILD_DIR ?= build
-VERSION ?= 0.6.0-1
+VERSION ?= 0.6.1-1
 # Macro/emoji tables for tests (and dev runs without install).
 export GTV_DATA_DIR ?= $(abspath data)
 CORE_SRC := $(wildcard engine/*.c)

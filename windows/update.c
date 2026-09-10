@@ -131,12 +131,21 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
 static gpointer download_worker(gpointer data) {
     gchar *url = data;
     gchar *name = g_path_get_basename(url);
-    gchar tdir[MAX_PATH];
-    DWORD n = GetTempPathA(sizeof(tdir), tdir);
-    gchar *dest = g_strdup_printf("%s%s", n > 0 ? tdir : "C:\\Windows\\Temp\\", name);
+    /* Temp dir and username may contain non-ASCII: stay in UTF-16 until
+     * the last step, convert only for curl's argv (UTF-8). */
+    WCHAR tdir[MAX_PATH];
+    gchar *dest = NULL;
+    if (GetTempPathW(MAX_PATH, tdir)) {
+        gunichar2 *wname = g_utf8_to_utf16(name ? name : "setup.exe", -1, NULL, NULL, NULL);
+        WCHAR *wfull = g_new(WCHAR, MAX_PATH + 256);
+        swprintf(wfull, MAX_PATH + 256, L"%ls%ls", tdir, (WCHAR*)wname);
+        g_free(wname);
+        dest = g_utf16_to_utf8(wfull, -1, NULL, NULL, NULL);
+        g_free(wfull);
+    }
     g_free(name);
     gtv_update_log("downloading %s", url);
-    gboolean ok = gtv_update_download(url, dest);
+    gboolean ok = dest && gtv_update_download(url, dest);
     g_free(url);
     if (ok && g_app.hwnd_main)
         PostMessage(g_app.hwnd_main, WM_GTV_UPDATE_DOWNLOADED, 0, (LPARAM)dest);
@@ -184,9 +193,12 @@ void gtv_update_on_downloaded(gchar *installer_path) {
     }
     /* Run the versioned Inno installer silently, then quit so locked
      * files (exe/dlls) can be replaced. /CLOSEAPPLICATIONS is a safety
-     * net in case a second copy is still running. */
+     * net in case a second copy is still running. Unicode path: %TEMP%
+     * and usernames are often non-ASCII. */
+    gunichar2 *winstaller = g_utf8_to_utf16(installer_path, -1, NULL, NULL, NULL);
     gtv_update_log("installer launched %s", installer_path);
-    ShellExecuteA(NULL, "open", installer_path, "/SILENT /CLOSEAPPLICATIONS", NULL, SW_SHOWNORMAL);
+    ShellExecuteW(NULL, L"open", (LPCWSTR)winstaller, L"/SILENT /CLOSEAPPLICATIONS", NULL, SW_SHOWNORMAL);
+    g_free(winstaller);
     g_free(installer_path);
     PostQuitMessage(0);
 }

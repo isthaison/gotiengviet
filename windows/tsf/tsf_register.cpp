@@ -147,22 +147,8 @@ STDAPI DllRegisterServer(void)
 
     if (SUCCEEDED(hr) && pProfiles) {
         hr = pProfiles->Register(CLSID_GtvTextService);
-        // Profiles stay DISABLED until the user opts into TSF mode in our
-        // own UI (which enables them programmatically). Auto-enabling here
-        // would double-process every keystroke together with the default
-        // low-level hook engine. Register under English (US) so it appears
-        // in Win+Space on standard Windows once enabled.
-        pProfiles->AddLanguageProfile(CLSID_GtvTextService,
-            GTV_LANG_ENGLISH,
-            GUID_GtvProfile,
-            GTV_TSF_DESC,
-            (ULONG)wcslen(GTV_TSF_DESC),
-            szModule,
-            (ULONG)wcslen(szModule),
-            0);
-        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, TRUE);
 
-        // Also register under Vietnamese
+        // Register under Vietnamese (0x042A) with description "GoTV"
         pProfiles->AddLanguageProfile(CLSID_GtvTextService,
             GTV_LANG_VIETNAMESE,
             GUID_GtvProfile,
@@ -172,6 +158,9 @@ STDAPI DllRegisterServer(void)
             (ULONG)wcslen(szModule),
             0);
         pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile, TRUE);
+
+        // Disable English profile so it doesn't show a duplicate entry in Win+Space
+        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, FALSE);
         pProfiles->Release();
     }
 

@@ -5,18 +5,18 @@
 #include <msctf.h>
 #include <initguid.h>
 
-/* GoTiengViet TSF Text Service CLSID (random v4, generated 2026-09-10):
- * {B6696545-9A29-4229-97AC-BC59B3191CC1} */
+/* GoTiengViet TSF Text Service CLSID:
+ * {E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B} */
 DEFINE_GUID(CLSID_GtvTextService,
-    0xb6696545, 0x9a29, 0x4229, 0x97, 0xac, 0xbc, 0x59, 0xb3, 0x19, 0x1c, 0xc1);
+    0xe3b0c442, 0x98fc, 0x4f2e, 0x9c, 0x8f, 0x7b, 0x2a, 0x3e, 0x1d, 0x4c, 0x5b);
 
-/* GoTiengViet Language Profile GUID (random v4, generated 2026-09-10):
- * {2BE303C6-B2D8-4C83-9826-F2CBC61D5251} */
+/* GoTiengViet Language Profile GUID:
+ * {D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D} */
 DEFINE_GUID(GUID_GtvProfile,
-    0x2be303c6, 0xb2d8, 0x4c83, 0x98, 0x26, 0xf2, 0xcb, 0xc6, 0x1d, 0x52, 0x51);
+    0xd4c5b6a7, 0x1e2f, 0x4a3b, 0x8c, 0x9d, 0x0e, 0x1f, 0x2a, 0x3b, 0x4c, 0x5d);
 
-#define GTV_TSF_MODEL_NAME L"GoTiengViet Text Service"
-#define GTV_TSF_DESC       L"GoTiengViet Vietnamese IME (TSF)"
+#define GTV_TSF_MODEL_NAME L"GoTV"
+#define GTV_TSF_DESC       L"GoTV"
 
 /* Vietnamese Language ID: 0x042A */
 #define GTV_LANG_VIETNAMESE MAKELANGID(LANG_VIETNAMESE, SUBLANG_DEFAULT)

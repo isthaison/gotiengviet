@@ -10,8 +10,8 @@ CGtvTextService::CGtvTextService() :
     m_pComposition(NULL),
     m_pContext(NULL),
     m_pEngine(NULL),
-    m_pLangBarItem(NULL),
-    m_enabled(TRUE)
+    m_enabled(TRUE),
+    m_pLangBarItem(NULL)
 {
     /* Same user config as the hook engine (%APPDATA%/gotiengviet), so
      * Telex/VNI, tone placement and spellcheck follow the control panel.
@@ -36,7 +36,6 @@ CGtvTextService::~CGtvTextService()
         m_pContext->Release();
         m_pContext = NULL;
     }
-}
     DllRelease();
 }
 

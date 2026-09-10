@@ -711,7 +711,7 @@ static void bus_connected_cb(IBusBus *b, gpointer user_data){
         c = ibus_component_new_from_file("/usr/share/ibus/component/gotiengviet.xml");
     }
     if(!c){
-        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.6.1","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
+        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.7.0","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
         IBusEngineDesc *d = ibus_engine_desc_new_varargs(
             "name", "gotiengviet",
             "longname", "GoTiengViet",

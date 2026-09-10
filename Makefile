@@ -5,7 +5,7 @@ CFLAGS ?= -O2 -g
 CFLAGS += -std=gnu11 -Wall -Wextra -Wno-unused-parameter
 CPPFLAGS += -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 BUILD_DIR ?= build
-VERSION ?= 0.6.1-1
+VERSION ?= 0.7.0-1
 # Macro/emoji tables for tests (and dev runs without install).
 export GTV_DATA_DIR ?= $(abspath data)
 CORE_SRC := $(wildcard engine/*.c)
@@ -48,6 +48,10 @@ clean:
 	./clean.sh
 help:
 	@echo 'make build | test | vet | install | package VERSION=... | clean'
+	@echo 'make bump V=X.Y.Z [NOTES="..."]  - bump version everywhere via ./bump-version.sh'
+.PHONY: bump
+bump:
+	./bump-version.sh "$(V)" "$(NOTES)"
 -include $(CORE_OBJ:.o=.d)
 
 $(BUILD_DIR)/test-setup: tests/test_setup.c cmd/setup/main.c $(CORE_LIB)

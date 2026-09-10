@@ -21,7 +21,7 @@ RC_SRC = windows/resource.rc
 # Release version: installer filename, Add/Remove Programs entry and the
 # in-app updater compare against this. Bump windows/version.h,
 # windows/resource.rc and ibus/gotiengviet.xml together on release.
-VERSION ?= 0.6.1
+VERSION ?= 0.7.0
 # Inno needs a 4-part numeric version; keep VERSION as X.Y.Z for that.
 VERSION_NUM ?= $(VERSION).0
 

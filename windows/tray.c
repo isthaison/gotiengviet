@@ -118,6 +118,14 @@ void gtv_tray_cleanup(void) {
 
 void gtv_tray_update_icon(gboolean enabled) {
     nid.uFlags &= (UINT)~NIF_INFO; /* drop stale balloon text on icon updates */
+    if (g_app.tsf_mode) {
+        /* TSF owns typing: the hook [V]/[E] state is meaningless, the
+         * language-bar button shows it instead. */
+        nid.hIcon = icon_v;
+        set_field("GoTiengViet [TSF]", nid.szTip, G_N_ELEMENTS(nid.szTip));
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+        return;
+    }
     nid.hIcon = enabled ? icon_v : icon_e;
     if (enabled) {
         set_field("GoTiengViet [Tiếng Việt]", nid.szTip, G_N_ELEMENTS(nid.szTip));
@@ -204,6 +212,7 @@ void gtv_tray_show_menu(HWND hwnd) {
             g_app.tsf_mode = want;
             gtv_hook_save_tsf_mode();
             gtv_hook_reset_buffer();
+            gtv_tray_update_icon(g_app.enabled);
             if (want)
                 gtv_tray_balloon("GoTiengViet", "Đã bật TSF thử nghiệm. Đăng xuất/đăng nhập lại rồi chọn GoTiengViet bằng Win+Space.");
             break;

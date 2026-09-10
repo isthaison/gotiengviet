@@ -77,7 +77,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     g_app.engine = gtv_engine_new(&g_app.config);
     g_app.enabled = gtv_hook_load_enabled(TRUE); /* Restore V/E mode, default [V] */
-    g_app.tsf_mode = gtv_hook_load_tsf_mode(FALSE); /* Hook owns keys by default */
+    g_app.tsf_mode = gtv_hook_load_tsf_mode(TRUE); /* TSF owns keys unless user fell back to hook */
 
     /* 3. Register message window class */
     WNDCLASSEXA wc = {0};
@@ -102,6 +102,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     gtv_tray_init(g_app.hwnd_main);
+    gtv_tray_update_icon(g_app.enabled);
 
     /* Daily self-update check against GitHub releases (throttled). */
     gtv_update_check_async(g_app.hwnd_main, FALSE);

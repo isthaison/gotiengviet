@@ -8,8 +8,10 @@ CGtvTextService::CGtvTextService() :
     m_dwThreadMgrEventSinkCookie(TF_INVALID_COOKIE),
     m_dwKeyEventSinkCookie(TF_INVALID_COOKIE),
     m_pComposition(NULL),
+    m_pContext(NULL),
     m_pEngine(NULL),
-    m_pLangBarItem(NULL)
+    m_pLangBarItem(NULL),
+    m_enabled(TRUE)
 {
     /* Same user config as the hook engine (%APPDATA%/gotiengviet), so
      * Telex/VNI, tone placement and spellcheck follow the control panel.
@@ -30,6 +32,11 @@ CGtvTextService::~CGtvTextService()
         gtv_engine_free(m_pEngine);
         m_pEngine = NULL;
     }
+    if (m_pContext) {
+        m_pContext->Release();
+        m_pContext = NULL;
+    }
+}
     DllRelease();
 }
 
@@ -96,13 +103,12 @@ STDMETHODIMP CGtvTextService::Activate(ITfThreadMgr *ptim, TfClientId tid)
 
 STDMETHODIMP CGtvTextService::Deactivate(void)
 {
-    if (m_pComposition) {
-        m_pComposition->EndComposition(0);
-        m_pComposition->Release();
-        m_pComposition = NULL;
+    EndCompositionNow();
+    if (m_pContext) {
+        m_pContext->Release();
+        m_pContext = NULL;
     }
 
-    UninitLangBarItem();
     UninitKeyEventSink();
     UninitThreadMgrEventSink();
 
@@ -124,11 +130,7 @@ STDMETHODIMP CGtvTextService::OnInitDocumentMgr(ITfDocumentMgr *pdim) { return S
 STDMETHODIMP CGtvTextService::OnUninitDocumentMgr(ITfDocumentMgr *pdim) { return S_OK; }
 STDMETHODIMP CGtvTextService::OnSetFocus(ITfDocumentMgr *pdimFocus, ITfDocumentMgr *pdimPrevFocus)
 {
-    if (m_pComposition) {
-        m_pComposition->EndComposition(0);
-        m_pComposition->Release();
-        m_pComposition = NULL;
-    }
+    EndCompositionNow();
     if (m_pEngine) {
         gtv_engine_reset(m_pEngine);
     }
@@ -148,6 +150,17 @@ STDMETHODIMP CGtvTextService::OnCompositionTerminated(TfEditCookie ecWrite, ITfC
         gtv_engine_reset(m_pEngine);
     }
     return S_OK;
+}
+
+void CGtvTextService::SetEnabled(BOOL on)
+{
+    if (m_enabled == on) return;
+    m_enabled = on;
+    /* Switching mid-word commits rather than vaporizing typed text. */
+    EndCompositionNow();
+    if (m_pEngine) {
+        gtv_engine_reset(m_pEngine);
+    }
 }
 
 // Event Sink registrations

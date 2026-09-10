@@ -3,7 +3,7 @@
 Native Windows 10/11 (x64). Hai chế độ gõ, **không bao giờ chạy cùng lúc**:
 
 - **Hook** (mặc định): `WH_KEYBOARD_LL` + khay hệ thống. Ổn định, đầy đủ tính năng.
-- **TSF Text Service** (thử nghiệm): `gtv_tsf.dll`, gõ bằng composition chuẩn Windows — đúng trong ô autocomplete/khó tính mà hook giả lập phím không xử lý nổi. Bật trong menu tray **TSF Text Service (thử nghiệm)**, rồi đăng xuất/đăng nhập lại và chọn GoTiengViet bằng `Win+Space`.
+- **TSF Text Service** (thử nghiệm): `gtv_tsf.dll`, gõ bằng composition chuẩn Windows — đúng trong ô autocomplete/khó tính mà hook giả lập phím không xử lý nổi. Bật trong menu tray **TSF Text Service (thử nghiệm)** (app tự bật language profile), rồi đăng xuất/đăng nhập lại và chọn GoTiengViet bằng `Win+Space`. Nút `GoTV` trên language bar click để chuyển Việt/Anh (đỏ `V` / xám `E`). Hai chế độ không bao giờ chạy cùng lúc: bật TSF thì hook đứng yên hoàn toàn.
 
 ## Cài đặt và cập nhật
 

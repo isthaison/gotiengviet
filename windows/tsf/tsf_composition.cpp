@@ -1,4 +1,5 @@
 #include "tsf_service.h"
+#include <new>
 
 enum EditAction {
     EDIT_START_COMPOSITION,
@@ -172,7 +173,10 @@ private:
 HRESULT CGtvTextService::StartComposition(ITfContext *pic)
 {
     if (m_pComposition != NULL) return S_OK;
-    CEditSession *pSession = new CEditSession(this, pic, EDIT_START_COMPOSITION);
+    if (m_pContext) m_pContext->Release();
+    m_pContext = pic;
+    if (m_pContext) m_pContext->AddRef();
+    CEditSession *pSession = new (std::nothrow) CEditSession(this, pic, EDIT_START_COMPOSITION);
     HRESULT hrSession = E_FAIL;
     HRESULT hr = pic->RequestEditSession(m_tfClientId, pSession, TF_ES_SYNC | TF_ES_READWRITE, &hrSession);
     pSession->Release();
@@ -182,16 +186,23 @@ HRESULT CGtvTextService::StartComposition(ITfContext *pic)
 HRESULT CGtvTextService::UpdateCompositionText(ITfContext *pic, const wchar_t *text, int len)
 {
     if (!pic) return E_INVALIDARG;
+    if (m_pContext != pic) {
+        if (m_pContext) m_pContext->Release();
+        m_pContext = pic;
+        if (m_pContext) m_pContext->AddRef();
+    }
     if (m_pComposition == NULL) {
         // Start composition with initial text
-        CEditSession *pSession = new CEditSession(this, pic, EDIT_START_COMPOSITION, text, len);
+        CEditSession *pSession = new (std::nothrow) CEditSession(this, pic, EDIT_START_COMPOSITION, text, len);
+        if (!pSession) return E_OUTOFMEMORY;
         HRESULT hrSession = E_FAIL;
         HRESULT hr = pic->RequestEditSession(m_tfClientId, pSession, TF_ES_SYNC | TF_ES_READWRITE, &hrSession);
         pSession->Release();
         return SUCCEEDED(hr) ? hrSession : hr;
     }
 
-    CEditSession *pSession = new CEditSession(this, pic, EDIT_UPDATE_TEXT, text, len);
+    CEditSession *pSession = new (std::nothrow) CEditSession(this, pic, EDIT_UPDATE_TEXT, text, len);
+    if (!pSession) return E_OUTOFMEMORY;
     HRESULT hrSession = E_FAIL;
     HRESULT hr = pic->RequestEditSession(m_tfClientId, pSession, TF_ES_SYNC | TF_ES_READWRITE, &hrSession);
     pSession->Release();
@@ -201,9 +212,29 @@ HRESULT CGtvTextService::UpdateCompositionText(ITfContext *pic, const wchar_t *t
 HRESULT CGtvTextService::EndComposition(ITfContext *pic, BOOL commit)
 {
     if (!pic || !m_pComposition) return S_OK;
-    CEditSession *pSession = new CEditSession(this, pic, commit ? EDIT_END_COMPOSITION : EDIT_CANCEL_COMPOSITION);
+    CEditSession *pSession = new (std::nothrow) CEditSession(this, pic, commit ? EDIT_END_COMPOSITION : EDIT_CANCEL_COMPOSITION);
+    if (!pSession) return E_OUTOFMEMORY;
     HRESULT hrSession = E_FAIL;
     HRESULT hr = pic->RequestEditSession(m_tfClientId, pSession, TF_ES_SYNC | TF_ES_READWRITE, &hrSession);
+    pSession->Release();
+    return SUCCEEDED(hr) ? hrSession : hr;
+}
+
+/* Ends through the saved context when there is one (Deactivate, focus
+ * loss, V/E toggle). Without a context there is nothing TSF-side to end:
+ * drop our ref and let a later OnCompositionTerminated no-op. */
+HRESULT CGtvTextService::EndCompositionNow(void)
+{
+    if (!m_pComposition) return S_OK;
+    if (!m_pContext) {
+        m_pComposition->Release();
+        m_pComposition = NULL;
+        return S_OK;
+    }
+    CEditSession *pSession = new (std::nothrow) CEditSession(this, m_pContext, EDIT_END_COMPOSITION);
+    if (!pSession) return E_OUTOFMEMORY;
+    HRESULT hrSession = E_FAIL;
+    HRESULT hr = m_pContext->RequestEditSession(m_tfClientId, pSession, TF_ES_SYNC | TF_ES_READWRITE, &hrSession);
     pSession->Release();
     return SUCCEEDED(hr) ? hrSession : hr;
 }

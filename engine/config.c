@@ -4,6 +4,36 @@
 #include <windows.h>
 #endif
 
+#ifdef G_OS_WIN32
+/* This DLL's own CLSID key (matches windows/tsf/tsf_defs.h). */
+#define GTV_TSF_CLSID_KEY L"Software\\Classes\\CLSID\\{B6696545-9A29-4229-97AC-BC59B3191CC1}\\InprocServer32"
+
+/* Module/registry paths may contain non-ASCII (usernames!): stay in
+ * UTF-16, convert once to UTF-8 for glib. */
+static gchar *module_dir(HMODULE mod) {
+    WCHAR wpath[MAX_PATH];
+    if (!GetModuleFileNameW(mod, wpath, MAX_PATH)) return NULL;
+    gchar *u8 = g_utf16_to_utf8(wpath, -1, NULL, NULL, NULL);
+    if (!u8) return NULL;
+    gchar *dir = g_path_get_dirname(u8);
+    g_free(u8);
+    return dir;
+}
+/* data/<name> next to dir, else one/two levels up (dev layouts). */
+static gchar *bundled_below(const gchar *dir, const gchar *name) {
+    gchar *bundled = g_build_filename(dir, "data", name, NULL);
+    if (g_file_test(bundled, G_FILE_TEST_EXISTS)) return bundled;
+    g_free(bundled);
+    bundled = g_build_filename(dir, "..", "data", name, NULL);
+    if (g_file_test(bundled, G_FILE_TEST_EXISTS)) return bundled;
+    g_free(bundled);
+    bundled = g_build_filename(dir, "..", "..", "data", name, NULL);
+    if (g_file_test(bundled, G_FILE_TEST_EXISTS)) return bundled;
+    g_free(bundled);
+    return NULL;
+}
+#endif
+
 /* Shared data-file resolution: $GTV_DATA_DIR (tests/dev override) →
  * user config dir → /usr/share/gotiengviet (installed) → ./data. */
 gchar *gtv_data_path(const gchar *name){
@@ -16,63 +46,47 @@ gchar *gtv_data_path(const gchar *name){
     /* Check next to the running module (gtv_tsf.dll or gotiengviet.exe) */
     {
         HMODULE hDll = NULL;
-        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                (LPCSTR)gtv_data_path, &hDll) || !hDll) {
-            hDll = GetModuleHandleA("gtv_tsf.dll");
+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                (LPCWSTR)gtv_data_path, &hDll) || !hDll) {
+            hDll = GetModuleHandleW(L"gtv_tsf.dll");
         }
         if (hDll) {
-            char dllpath[MAX_PATH];
-            if (GetModuleFileNameA(hDll, dllpath, sizeof(dllpath))) {
-                gchar *dlldir = g_path_get_dirname(dllpath);
-                gchar *bundled = g_build_filename(dlldir, "data", name, NULL);
-                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(dlldir); return bundled; }
-                g_free(bundled);
-                bundled = g_build_filename(dlldir, "..", "data", name, NULL);
-                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(dlldir); return bundled; }
-                g_free(bundled);
-                bundled = g_build_filename(dlldir, "..", "..", "data", name, NULL);
-                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(dlldir); return bundled; }
-                g_free(bundled);
+            gchar *dlldir = module_dir(hDll);
+            if (dlldir) {
+                gchar *bundled = bundled_below(dlldir, name);
                 g_free(dlldir);
+                if (bundled) return bundled;
             }
         }
     }
     /* Portable install: data/ next to the .exe (when running gotiengviet.exe) */
     {
-        char exepath[MAX_PATH];
-        if(GetModuleFileNameA(NULL, exepath, sizeof(exepath))){
-            gchar *exedir = g_path_get_dirname(exepath);
-            gchar *bundled = g_build_filename(exedir, "data", name, NULL);
-            if(g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(exedir); return bundled; }
-            g_free(bundled);
-            bundled = g_build_filename(exedir, "..", "data", name, NULL);
-            if(g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(exedir); return bundled; }
-            g_free(bundled);
-            bundled = g_build_filename(exedir, "..", "..", "data", name, NULL);
-            if(g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(exedir); return bundled; }
-            g_free(bundled);
+        gchar *exedir = module_dir(NULL);
+        if (exedir) {
+            gchar *bundled = bundled_below(exedir, name);
             g_free(exedir);
+            if (bundled) return bundled;
         }
     }
     /* Registry lookup for registered InprocServer32 directory */
     {
-        HKEY hKey;
-        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32", 0, KEY_READ, &hKey) == ERROR_SUCCESS ||
-            RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-            char regpath[MAX_PATH] = {0};
-            DWORD size = sizeof(regpath);
-            if (RegQueryValueExA(hKey, NULL, NULL, NULL, (LPBYTE)regpath, &size) == ERROR_SUCCESS && *regpath) {
-                gchar *regdir = g_path_get_dirname(regpath);
-                gchar *bundled = g_build_filename(regdir, "data", name, NULL);
-                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { RegCloseKey(hKey); g_free(regdir); return bundled; }
-                g_free(bundled);
-                bundled = g_build_filename(regdir, "..", "data", name, NULL);
-                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { RegCloseKey(hKey); g_free(regdir); return bundled; }
-                g_free(bundled);
-                bundled = g_build_filename(regdir, "..", "..", "data", name, NULL);
-                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { RegCloseKey(hKey); g_free(regdir); return bundled; }
-                g_free(bundled);
-                g_free(regdir);
+        HKEY hKey = NULL;
+        LONG rc = RegOpenKeyExW(HKEY_CURRENT_USER, GTV_TSF_CLSID_KEY, 0, KEY_READ, &hKey);
+        if (rc != ERROR_SUCCESS)
+            rc = RegOpenKeyExW(HKEY_LOCAL_MACHINE, GTV_TSF_CLSID_KEY, 0, KEY_READ, &hKey);
+        if (rc == ERROR_SUCCESS) {
+            WCHAR wreg[MAX_PATH] = {0};
+            DWORD size = sizeof(wreg);
+            if (RegQueryValueExW(hKey, NULL, NULL, NULL, (LPBYTE)wreg, &size) == ERROR_SUCCESS && *wreg) {
+                gchar *ureg = g_utf16_to_utf8(wreg, -1, NULL, NULL, NULL);
+                if (ureg) {
+                    gchar *regdir = g_path_get_dirname(ureg);
+                    g_free(ureg);
+                    gchar *bundled = bundled_below(regdir, name);
+                    g_free(regdir);
+                    RegCloseKey(hKey);
+                    if (bundled) return bundled;
+                }
             }
             RegCloseKey(hKey);
         }

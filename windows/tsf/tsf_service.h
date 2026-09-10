@@ -56,7 +56,14 @@ public:
     HRESULT StartComposition(ITfContext *pic);
     HRESULT UpdateCompositionText(ITfContext *pic, const wchar_t *text, int len);
     HRESULT EndComposition(ITfContext *pic, BOOL commit);
+    // Ends via the saved context if there is one; always safe to call.
+    HRESULT EndCompositionNow(void);
     BOOL IsComposing() const { return m_pComposition != NULL; }
+
+    // Vietnamese on/off (langbar button mirrors the tray [V]/[E]).
+    // Disabled = pure passthrough, like English mode in the hook engine.
+    void SetEnabled(BOOL on);
+    BOOL IsEnabled() const { return m_enabled; }
 
 private:
     LONG m_cRef;
@@ -65,7 +72,9 @@ private:
     DWORD m_dwThreadMgrEventSinkCookie;
     DWORD m_dwKeyEventSinkCookie;
     ITfComposition *m_pComposition;
+    ITfContext *m_pContext;
     GtvEngine *m_pEngine;
+    BOOL m_enabled;
     class CGtvLangBarItem *m_pLangBarItem;
 
     BOOL InitKeyEventSink();

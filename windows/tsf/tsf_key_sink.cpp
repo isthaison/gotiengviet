@@ -28,6 +28,9 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
+    /* Disabled (English) mode: pure passthrough, like the hook engine. */
+    if (!m_enabled) return S_OK;
+
     // Check modifiers
     if ((GetKeyState(VK_CONTROL) & 0x8000) ||
         (GetKeyState(VK_MENU) & 0x8000) ||
@@ -69,6 +72,7 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
+    if (!m_enabled) return S_OK;
     if (!pic || !m_pEngine) return S_OK;
 
     // Modifiers reset composition

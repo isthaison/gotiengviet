@@ -181,6 +181,16 @@ static void test_mirror_flow(void) {
     g_assert_cmpstr(screen->str, ==, "xin được ");
     hook_type(m, eng, screen, "vn ");
     g_assert_cmpstr(screen->str, ==, "xin được Việt Nam ");
+    /* Reported Edge case: "chafo" must converge to "chào", never "chàoa".
+     * Tone before the final vowel resends one char, the final vowel then
+     * passes through on top of the composed screen. */
+    g_string_truncate(screen, 0);
+    gtv_mirror_clear(m);
+    gtv_engine_reset(eng);
+    hook_type(m, eng, screen, "chafo");
+    g_assert_cmpstr(screen->str, ==, "chào");
+    hook_type(m, eng, screen, ",");
+    g_assert_cmpstr(screen->str, ==, "chào,");
     /* Mid-word backspace then tone change stays exact. */
     g_string_truncate(screen, 0);
     gtv_mirror_clear(m);

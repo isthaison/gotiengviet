@@ -16,6 +16,31 @@ static gboolean get_startup_enabled_local(void) {
     return res == ERROR_SUCCESS;
 }
 
+static BOOL CALLBACK SetChildFont(HWND child, LPARAM param) {
+    SendMessageW(child, WM_SETFONT, (WPARAM)param, MAKELPARAM(TRUE, 0));
+    return TRUE;
+}
+
+/* Pin a Vietnamese-capable dialog font at runtime. The template facename
+ * depends on the resource compiler, and with DEFAULT_CHARSET the mapper
+ * may fall back to a Latin-1-only face (U+0100+ renders as ?/tofu). Forcing
+ * Segoe UI + VIETNAMESE_CHARSET keeps template size/weight and guarantees
+ * ể/ặ/ố/... render on any system locale. Handle is freed on WM_DESTROY. */
+static void pin_dialog_font(HWND hwnd) {
+    HFONT current = (HFONT)SendMessageW(hwnd, WM_GETFONT, 0, 0);
+    LOGFONTW lf;
+    if (!current || !GetObjectW(current, sizeof(lf), &lf))
+        return;
+    lstrcpynW(lf.lfFaceName, L"Segoe UI", LF_FACESIZE);
+    lf.lfCharSet = VIETNAMESE_CHARSET;
+    HFONT fixed = CreateFontIndirectW(&lf);
+    if (!fixed)
+        return;
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)fixed);
+    SendMessageW(hwnd, WM_SETFONT, (WPARAM)fixed, MAKELPARAM(TRUE, 0));
+    EnumChildWindows(hwnd, SetChildFont, (LPARAM)fixed);
+}
+
 static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG: {
@@ -52,6 +77,7 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     g_free(w);
                 }
             }
+            pin_dialog_font(hwnd);
             if (g_app.config.mode == GTV_VNI) {
                 CheckRadioButton(hwnd, IDC_RADIO_TELEX, IDC_RADIO_VNI, IDC_RADIO_VNI);
             } else {
@@ -137,11 +163,18 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_CLOSE:
             EndDialog(hwnd, IDCANCEL);
             return TRUE;
+
+        case WM_DESTROY: {
+            HFONT fixed = (HFONT)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+            if (fixed)
+                DeleteObject(fixed);
+            break;
+        }
     }
     return FALSE;
 }
 
 void gtv_setup_show(HWND parent) {
     HINSTANCE hinst = GetModuleHandle(NULL);
-    DialogBox(hinst, MAKEINTRESOURCE(IDD_SETUP_DIALOG), parent, SetupDlgProc);
+    DialogBoxW(hinst, MAKEINTRESOURCEW(IDD_SETUP_DIALOG), parent, SetupDlgProc);
 }

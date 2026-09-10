@@ -1,4 +1,4 @@
-; GoTiengViet versioned installer (Inno Setup 6).
+﻿; GoTiengViet versioned installer (Inno Setup 6).
 ; Built by CI: make -f Makefile.win setup VERSION=<x.y.z>
 ;   iscc.exe /Q "/DAppVersion=<x.y.z>" "/DAppVerNum=<x.y.z.0>" /DSourceDir=..\release-pkg windows/installer.iss
 ; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
@@ -64,8 +64,8 @@ Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{userprograms}\GoTiengViet\GoTiengViet"; Filename: "{app}\gotiengviet.exe"
-Name: "{userprograms}\GoTiengViet\Bang dieu khien"; Filename: "{app}\gotiengviet.exe"; Comment: "Mo bang dieu khien GoTiengViet"
-Name: "{userprograms}\GoTiengViet\Go bo cai dat"; Filename: "{uninstallexe}"
+Name: "{userprograms}\GoTiengViet\Gõ Tiếng Việt"; Filename: "{app}\gotiengviet.exe"; Comment: "Mở GoTiengViet"
+Name: "{userprograms}\GoTiengViet\Gỡ bỏ cài đặt"; Filename: "{uninstallexe}"
 Name: "{userdesktop}\GoTiengViet"; Filename: "{app}\gotiengviet.exe"; Tasks: desktopicon
 
 [Registry]

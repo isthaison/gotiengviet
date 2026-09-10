@@ -100,6 +100,7 @@ staging: $(TARGET) $(TSF_TARGET)
 	    done < <(objdump -p "$$binary" | awk '/DLL Name:/ {print $$3}'); \
 	  done; \
 	done
+	cp -f /mingw64/bin/gspawn-win64-helper*.exe $(STAGE)/ 2>/dev/null || true
 	cp README.md LICENSE $(STAGE)/
 	cp data/macros.txt data/emojis.txt data/config data/ai.conf data/prompts.conf data/learned-corrections.txt data/learned-words.txt $(STAGE)/data/
 

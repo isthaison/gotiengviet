@@ -38,6 +38,15 @@ STDMETHODIMP CGtvTextService::OnKeyUp(ITfContext *pic, WPARAM wParam, LPARAM lPa
     return S_OK;
 }
 
+static inline gboolean is_emoji_starter(gunichar ch) {
+    return (ch == ':' || ch == ';' || ch == '<' || ch == '(');
+}
+
+static inline gboolean is_telex_shortcut(GtvEngine *engine, gunichar ch) {
+    return (engine && engine->mode == GTV_TELEX &&
+            (ch == '[' || ch == ']' || ch == '{' || ch == '}'));
+}
+
 STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPARAM lParam, BOOL *pfEaten)
 {
     if (!pfEaten) return E_INVALIDARG;
@@ -63,15 +72,22 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
         return S_OK;
     }
 
-    // Convert key to Unicode to support letters, numbers, and punctuation (: ; < > for emojis)
+    // Convert key to Unicode
     BYTE key_state[256];
     GetKeyboardState(key_state);
     WCHAR wchars[4] = {0};
     HKL layout = GetKeyboardLayout(0);
     int count = ToUnicodeEx((UINT)wParam, (UINT)((lParam >> 16) & 0xFF), key_state, wchars, 4, 0, layout);
     if (count == 1 && wchars[0] >= 0x20) {
-        *pfEaten = TRUE;
-        return S_OK;
+        gunichar ch = (gunichar)wchars[0];
+        if (IsComposing()) {
+            *pfEaten = TRUE;
+            return S_OK;
+        }
+        if (g_unichar_isalnum(ch) || is_emoji_starter(ch) || is_telex_shortcut(m_pEngine, ch)) {
+            *pfEaten = TRUE;
+            return S_OK;
+        }
     }
 
     return S_OK;
@@ -157,45 +173,17 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
 
     gunichar ch = (gunichar)wchars[0];
 
-    // Space or delimiter handling
-    if (g_unichar_isspace(ch) || g_unichar_ispunct(ch)) {
-        if (IsComposing()) {
-            guint bs = 0;
-            gchar *commit = gtv_engine_process(m_pEngine, ch, &bs);
-            if (commit) {
-                glong wlen = 0;
-                wchar_t *wcommit = (wchar_t*)g_utf8_to_utf16(commit, -1, NULL, &wlen, NULL);
-                if (wcommit) {
-                    UpdateCompositionText(pic, wcommit, (int)wlen);
-                    g_free(wcommit);
-                }
-                EndComposition(pic, TRUE);
-                /* AI check on the word without its trailing delimiter. */
-                const gchar *end = commit + strlen(commit);
-                const gchar *prev = g_utf8_prev_char(end);
-                if (prev > commit) {
-                    gchar *wordonly = g_strndup(commit, prev - commit);
-                    NotifyTrayWord(wordonly);
-                    g_free(wordonly);
-                }
-                g_free(commit);
-            } else {
-                EndComposition(pic, TRUE);
-            }
-            gtv_engine_reset(m_pEngine);
-            /* The delimiter is already inside the committed composition
-             * text above: eat the key or it inserts a second one. */
-            *pfEaten = TRUE;
-            return S_OK;
+    // If not composing, only start composition on alphanumeric, emoji starter, or Telex shortcut
+    if (!IsComposing()) {
+        if (!g_unichar_isalnum(ch) && !is_emoji_starter(ch) && !is_telex_shortcut(m_pEngine, ch)) {
+            return S_OK; // Pass through to target application
         }
-        return S_OK;
     }
 
-    // Normal character handling
+    // Process character through engine
     guint bs = 0;
     gchar *commit = gtv_engine_process(m_pEngine, ch, &bs);
     if (commit) {
-        // Word committed, start fresh
         glong wlen = 0;
         wchar_t *wcommit = (wchar_t*)g_utf8_to_utf16(commit, -1, NULL, &wlen, NULL);
         if (wcommit) {
@@ -203,8 +191,18 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
             g_free(wcommit);
         }
         EndComposition(pic, TRUE);
+
+        /* AI check on the word without its trailing delimiter */
+        const gchar *end = commit + strlen(commit);
+        const gchar *prev = g_utf8_prev_char(end);
+        if (prev > commit) {
+            gchar *wordonly = g_strndup(commit, prev - commit);
+            NotifyTrayWord(wordonly);
+            g_free(wordonly);
+        }
         g_free(commit);
 
+        // If engine kept leftover buffer, start fresh composition
         gchar *buf = gtv_engine_buffer(m_pEngine);
         if (buf && *buf) {
             wlen = 0;
@@ -225,6 +223,8 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
                 UpdateCompositionText(pic, wbuf, (int)wlen);
                 g_free(wbuf);
             }
+        } else {
+            EndComposition(pic, FALSE);
         }
         g_free(buf);
     }

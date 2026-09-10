@@ -214,11 +214,20 @@ static void object_string(const gchar *obj, const gchar *key, gchar **value, con
     }
 }
 
-GtvUpdateStatus gtv_update_parse_release(const gchar *json, const gchar *current_version,
-                                         gchar **out_tag, gchar **out_asset_url) {
+static gboolean exe_asset_match(const gchar *asset_name, const gchar *tag_version, gpointer user_data) {
+    (void)user_data;
+    gchar *want = gtv_update_asset_name(tag_version);
+    gboolean ok = !strcmp(asset_name, want);
+    g_free(want);
+    return ok;
+}
+
+GtvUpdateStatus gtv_update_parse_release_full(const gchar *json, const gchar *current_version,
+                                              GtvAssetMatch match, gpointer match_data,
+                                              gchar **out_tag, gchar **out_asset_url) {
     if (out_tag) *out_tag = NULL;
     if (out_asset_url) *out_asset_url = NULL;
-    if (!json || !current_version) return GTV_UPDATE_ERROR;
+    if (!json || !current_version || !match) return GTV_UPDATE_ERROR;
     const gchar *p = json;
     skip_space(&p);
     if (*p != '{') return GTV_UPDATE_ERROR;
@@ -226,8 +235,8 @@ GtvUpdateStatus gtv_update_parse_release(const gchar *json, const gchar *current
     object_string(p, "tag_name", &tag, NULL);
     if (!tag || !*tag) { g_free(tag); return GTV_UPDATE_ERROR; }
     if (gtv_version_compare(tag, current_version) <= 0) { g_free(tag); return GTV_UPDATE_CURRENT; }
-    /* Newer tag: locate the versioned setup asset. */
-    gchar *want = gtv_update_asset_name(tag);
+    /* Newer tag: locate the platform asset via the caller matcher. */
+    const gchar *tagver = strip_tag(tag);
     gchar *found_url = NULL;
     const gchar *assets = strstr(p, "\"assets\"");
     if (assets) {
@@ -259,7 +268,7 @@ GtvUpdateStatus gtv_update_parse_release(const gchar *json, const gchar *current
                 gchar *name = NULL, *url = NULL;
                 object_string(q, "name", &name, NULL);
                 object_string(q, "browser_download_url", &url, NULL);
-                if (name && url && !strcmp(name, want)) {
+                if (name && url && match(name, tagver, match_data)) {
                     found_url = url;
                     url = NULL;
                 }
@@ -273,13 +282,18 @@ GtvUpdateStatus gtv_update_parse_release(const gchar *json, const gchar *current
             }
         }
     }
-    g_free(want);
     if (!found_url) { g_free(tag); return GTV_UPDATE_ERROR; }
     if (out_tag) *out_tag = tag;
     else g_free(tag);
     if (out_asset_url) *out_asset_url = found_url;
     else g_free(found_url);
     return GTV_UPDATE_AVAILABLE;
+}
+
+GtvUpdateStatus gtv_update_parse_release(const gchar *json, const gchar *current_version,
+                                         gchar **out_tag, gchar **out_asset_url) {
+    return gtv_update_parse_release_full(json, current_version, exe_asset_match, NULL,
+                                         out_tag, out_asset_url);
 }
 
 static gchar *github_api_url(void) {
@@ -312,11 +326,12 @@ static gchar *curl_get(const gchar *url, glong max_bytes, glong max_secs) {
     return output;
 }
 
-GtvUpdateStatus gtv_update_check(const gchar *repo, const gchar *current_version,
+GtvUpdateStatus gtv_update_check_full(const gchar *repo, const gchar *current_version,
+                                 GtvAssetMatch match, gpointer match_data,
                                  gchar **out_tag, gchar **out_asset_url) {
     if (out_tag) *out_tag = NULL;
     if (out_asset_url) *out_asset_url = NULL;
-    if (!current_version) return GTV_UPDATE_ERROR;
+    if (!current_version || !match) return GTV_UPDATE_ERROR;
     gchar *url = NULL;
     if (repo && *repo)
         url = g_strdup_printf("https://api.github.com/repos/%s/releases/latest", repo);
@@ -325,9 +340,16 @@ GtvUpdateStatus gtv_update_check(const gchar *repo, const gchar *current_version
     gchar *body = curl_get(url, 1048576, 15);
     g_free(url);
     if (!body) return GTV_UPDATE_ERROR;
-    GtvUpdateStatus st = gtv_update_parse_release(body, current_version, out_tag, out_asset_url);
+    GtvUpdateStatus st = gtv_update_parse_release_full(body, current_version, match, match_data,
+                                                       out_tag, out_asset_url);
     g_free(body);
     return st;
+}
+
+GtvUpdateStatus gtv_update_check(const gchar *repo, const gchar *current_version,
+                                 gchar **out_tag, gchar **out_asset_url) {
+    return gtv_update_check_full(repo, current_version, exe_asset_match, NULL,
+                                 out_tag, out_asset_url);
 }
 
 gboolean gtv_update_download(const gchar *url, const gchar *dest_path) {

@@ -31,6 +31,9 @@ struct _GoTiengVietEngine {
     GString *preedit;
     GString *sentence_context;
     gboolean mode_telex;
+    /* Named Telex/VNI engines pin their method; the generic engine
+     * follows the config file instead. */
+    gboolean mode_pinned;
     gboolean modern;
     gboolean spellcheck;
     guint purpose;
@@ -289,7 +292,8 @@ static void reload_engine_config(IBusGoTiengVietEngine *e){
     gchar *directory = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
     gtv_config_clear(&e->config);
     gtv_config_load(&e->config, directory);
-    e->mode_telex = (e->config.mode == GTV_TELEX);
+    if(!e->mode_pinned)
+        e->mode_telex = (e->config.mode == GTV_TELEX);
     e->modern = e->config.modern;
     e->spellcheck = e->config.spellcheck;
     g_free(directory);
@@ -658,10 +662,10 @@ static IBusEngine* create_engine_cb(IBusFactory *f, const gchar *engine_name, gp
     if(!engine) return NULL;
     g_object_ref_sink(engine);
     IBusGoTiengVietEngine *ue = (IBusGoTiengVietEngine*)engine;
-    // Một engine duy nhất "gotiengviet"; giữ tương thích tên cũ khi user còn sót config
+    // Engine Telex/VNI riêng ghim kiểu gõ theo tên, engine chung theo config
     reload_engine_config(ue);
-    if(g_strcmp0(engine_name, "gotiengviet-vni") == 0) ue->mode_telex = FALSE;
-    else if(g_strcmp0(engine_name, "gotiengviet-telex") == 0) ue->mode_telex = TRUE;
+    if(g_strcmp0(engine_name, "gotiengviet-vni") == 0){ ue->mode_telex = FALSE; ue->mode_pinned = TRUE; }
+    else if(g_strcmp0(engine_name, "gotiengviet-telex") == 0){ ue->mode_telex = TRUE; ue->mode_pinned = TRUE; }
     return engine;
 }
 /* Crash handling - chỉ dùng glib hệ thống */

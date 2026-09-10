@@ -21,7 +21,7 @@ sudo apt install build-essential pkg-config libibus-1.0-dev libgtk-3-dev \
 sudo ./install.sh
 ```
 
-Rồi vào **Settings → Keyboard → Input Sources** thêm **GoTiengViet**, chọn bằng `Super+Space`.
+Rồi vào **Settings → Keyboard → Input Sources** thêm **GoTiengViet (Telex)** và/hoặc **GoTiengViet (VNI)** (nguồn `GoTiengViet` chung theo kiểu gõ trong app), chuyển bằng `Super+Space`.
 
 **Windows 10/11**: tải `gotiengviet-<version>-x64-setup.exe` ở trang Releases và chạy (cài per-user, không cần admin). Chi tiết xem [Bản Windows](docs/windows.md).
 

@@ -226,6 +226,17 @@ int main(int argc,char **argv) {
     g_assert_cmpstr(e->preedit->str,==,"a");
     g_free(last_commit);
     g_dbus_connection_signal_unsubscribe(connection,commit_sub);
+    /* Named VNI engine pins its method: config telex must not flip it. */
+    ibus_gotiengviet_engine_reset(e);
+    e->mode_telex=FALSE; e->mode_pinned=TRUE;
+    GtvConfig pinconfig; gtv_config_load(&pinconfig,config_dir);
+    pinconfig.mode=GTV_TELEX;
+    g_assert_true(gtv_config_save(&pinconfig,config_dir,NULL)); gtv_config_clear(&pinconfig);
+    for(const gchar *p="duoc579";*p;p++)
+        g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,(guint)*p,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"được");
+    g_assert_false(e->mode_telex);
+    e->mode_telex=TRUE; e->mode_pinned=FALSE;
     /* Ctrl+T is unbound: Ctrl+T must not be swallowed, it falls through. */
     ibus_gotiengviet_engine_reset(e);
     g_assert_false(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,IBUS_CONTROL_MASK));

@@ -124,6 +124,158 @@ static void tray_on_activate_quit(GtkMenuItem *item, gpointer data){
     gtk_main_quit();
 }
 
+// --- Tự cập nhật qua GitHub releases (dùng chung engine/update.c) ---
+typedef struct {
+    gchar *tag;
+    gchar *url;
+    gchar *note;
+    gboolean installed;
+    gboolean manual;
+    GtvUpdateStatus status;
+} TrayUpdate;
+static void tray_update_free(TrayUpdate *u){
+    if(!u) return;
+    g_free(u->tag); g_free(u->url); g_free(u->note); g_free(u);
+}
+/* Phiên bản đã cài (không revision .deb) để so với tag GitHub. */
+static gchar *tray_update_current_version(void){
+    gchar *contents = NULL, *ver = NULL;
+    if(g_file_get_contents("/usr/share/ibus/component/gotiengviet.xml", &contents, NULL, NULL) && contents){
+        gchar *p = strstr(contents, "<version>");
+        if(p){
+            p += strlen("<version>");
+            gchar *e = strstr(p, "</version>");
+            if(e) ver = g_strndup(p, e - p);
+        }
+    }
+    g_free(contents);
+    if(ver) g_strstrip(ver);
+    if(ver && !*ver){ g_free(ver); ver = NULL; }
+    return ver;
+}
+static gboolean deb_asset_match(const gchar *asset, const gchar *tagver, gpointer data){
+    const gchar *arch = data;
+    gchar *prefix = g_strdup_printf("gotiengviet_%s", tagver);
+    gboolean ok = g_str_has_prefix(asset, prefix) && g_str_has_suffix(asset, ".deb")
+        && (!arch || !*arch || strstr(asset, arch) != NULL);
+    g_free(prefix);
+    return ok;
+}
+static gboolean tray_update_installed_cb(gpointer data){
+    TrayUpdate *u = data;
+    GtkWidget *d;
+    if(u->installed){
+        run_shell("ibus restart >/dev/null 2>&1 &");
+        gchar *dest = g_build_filename(g_get_tmp_dir(), "gotiengviet-update.deb", NULL);
+        g_remove(dest);
+        g_free(dest);
+        d = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+            "Đã cài %s. IBus đang khởi động lại.", u->tag ? u->tag : "");
+    }else{
+        d = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+            "Cài đặt thất bại.%s%s", u->note ? "\n" : "", u->note ? u->note : "");
+    }
+    gtk_dialog_run(GTK_DIALOG(d));
+    gtk_widget_destroy(d);
+    tray_update_free(u);
+    return G_SOURCE_REMOVE;
+}
+static gpointer tray_update_install_thread(gpointer data){
+    TrayUpdate *u = data;
+    u->installed = FALSE;
+    g_free(u->note); u->note = NULL;
+    gchar *dest = g_build_filename(g_get_tmp_dir(), "gotiengviet-update.deb", NULL);
+    if(!(u->url && gtv_update_download(u->url, dest))){
+        u->note = g_strdup("Không tải được file .deb (cần mạng và curl).");
+    }else{
+        gchar *argv[] = {"pkexec", "dpkg", "-i", dest, NULL};
+        gchar *out = NULL, *err = NULL;
+        gint status = -1;
+        GError *error = NULL;
+        if(!g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
+                         &out, &err, &status, &error)){
+            u->note = g_strdup_printf("Không chạy được pkexec: %s",
+                                      error ? error->message : "lỗi không rõ");
+            g_clear_error(&error);
+        }else if(status != 0){
+            gchar *detail = (err && *err) ? g_strstrip(g_strdup(err)) : NULL;
+            u->note = g_strdup_printf("dpkg báo lỗi (mã %d)%s%s",
+                                      status, detail ? ": " : "", detail ? detail : "");
+            g_free(detail);
+        }else{
+            u->installed = TRUE;
+        }
+        g_free(out); g_free(err);
+    }
+    g_free(dest);
+    g_idle_add(tray_update_installed_cb, u);
+    return NULL;
+}
+static gboolean tray_update_checked_cb(gpointer data){
+    TrayUpdate *u = data;
+    if(u->status == GTV_UPDATE_AVAILABLE && u->tag && u->url){
+        GtkWidget *d = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION,
+            GTK_BUTTONS_NONE, "Có bản mới %s. Tải và cài đặt ngay?", u->tag);
+        gtk_dialog_add_button(GTK_DIALOG(d), "Để sau", GTK_RESPONSE_CANCEL);
+        gtk_dialog_add_button(GTK_DIALOG(d), "Tải và cài đặt", GTK_RESPONSE_OK);
+        gboolean install = (gtk_dialog_run(GTK_DIALOG(d)) == GTK_RESPONSE_OK);
+        gtk_widget_destroy(d);
+        if(install){
+            GThread *th = g_thread_new("gtv-update-install", tray_update_install_thread, u);
+            if(th){ g_thread_unref(th); return G_SOURCE_REMOVE; }
+        }
+        tray_update_free(u);
+    }else if(u->manual){
+        GtkWidget *d;
+        if(u->status == GTV_UPDATE_CURRENT){
+            d = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
+                GTK_BUTTONS_OK, "Đang dùng bản mới nhất.");
+        }else{
+            d = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
+                GTK_BUTTONS_OK, "Không kiểm tra được bản mới (cần mạng và curl).");
+        }
+        gtk_dialog_run(GTK_DIALOG(d));
+        gtk_widget_destroy(d);
+        tray_update_free(u);
+    }else{
+        if(u->status == GTV_UPDATE_AVAILABLE && u->tag){
+            gchar *cmd = g_strdup_printf(
+                "notify-send 'GoTiengViet' 'Đã có bản mới %s — mở menu tray, chọn Kiểm tra cập nhật để cài.' 2>/dev/null &",
+                u->tag);
+            run_shell(cmd);
+            g_free(cmd);
+        }
+        tray_update_free(u);
+    }
+    return G_SOURCE_REMOVE;
+}
+static gpointer tray_update_check_thread(gpointer data){
+    gboolean manual = GPOINTER_TO_INT(data);
+    gchar *current = tray_update_current_version();
+    gchar *arch = NULL;
+    if(!g_spawn_command_line_sync("dpkg --print-architecture", &arch, NULL, NULL, NULL) || !arch){
+        g_free(arch); arch = NULL;
+    }else{
+        g_strstrip(arch);
+        if(!*arch){ g_free(arch); arch = NULL; }
+    }
+    TrayUpdate *u = g_new0(TrayUpdate, 1);
+    u->manual = manual;
+    if(current) u->status = gtv_update_check_full(NULL, current, deb_asset_match, arch, &u->tag, &u->url);
+    else u->status = GTV_UPDATE_ERROR;
+    g_free(current); g_free(arch);
+    g_idle_add(tray_update_checked_cb, u);
+    return NULL;
+}
+static void tray_update_start(gboolean manual){
+    GThread *th = g_thread_new("gtv-update-check", tray_update_check_thread, GINT_TO_POINTER(manual));
+    if(th) g_thread_unref(th);
+}
+static void tray_on_activate_update(GtkMenuItem *item, gpointer data){
+    (void)item; (void)data;
+    tray_update_start(TRUE);
+}
+
 int tray_run(int argc, char *argv[]){
     g_set_prgname("gotiengviet");
     g_set_application_name("GoTiengViet");
@@ -154,20 +306,28 @@ int tray_run(int argc, char *argv[]){
     tray_item_vni = gtk_radio_menu_item_new_with_label(group, "VNI (1-5, 6-9)");
 
     GtkWidget *tray_item_setup = gtk_menu_item_new_with_label("Mở GoTiengViet Setup...");
+    GtkWidget *tray_item_update = gtk_menu_item_new_with_label("Kiểm tra cập nhật...");
     GtkWidget *tray_item_quit = gtk_menu_item_new_with_label("Thoát");
     g_signal_connect(tray_item_telex, "toggled", G_CALLBACK(tray_on_activate_telex), NULL);
     g_signal_connect(tray_item_vni, "toggled", G_CALLBACK(tray_on_activate_vni), NULL);
     g_signal_connect(tray_item_setup, "activate", G_CALLBACK(tray_on_activate_setup), NULL);
+    g_signal_connect(tray_item_update, "activate", G_CALLBACK(tray_on_activate_update), NULL);
     g_signal_connect(tray_item_quit, "activate", G_CALLBACK(tray_on_activate_quit), NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), tray_item_telex);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), tray_item_vni);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), tray_item_setup);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), tray_item_update);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), tray_item_quit);
     gtk_widget_show_all(menu);
 
     app_indicator_set_menu(tray_indicator, GTK_MENU(menu));
     tray_refresh_checks();
+
+    if(gtv_update_should_autocheck()){
+        gtv_update_mark_checked();
+        tray_update_start(FALSE);
+    }
 
     g_timeout_add(1000, (GSourceFunc)tray_check_config_timer, NULL);
 

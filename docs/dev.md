@@ -67,6 +67,7 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 
 ## Cắt release
 
-1. Bump version cùng số ở `windows/version.h`, `windows/resource.rc`, `ibus/gotiengviet.xml` (kèm `engine.c` fallback, `metainfo.xml`, default `Makefile[.win]`, `installer.iss`, `package.sh`).
+1. Bump một lệnh (đừng sửa tay từng file — script là nơi duy nhất ghi version): `make bump V=X.Y.Z ["ghi chú"]` (chạy `./bump-version.sh`). Kiểm tra `git diff`, rồi commit.
 2. Commit, push tag `vX.Y.Z`.
-3. CI Windows build `gotiengviet-X.Y.Z-x64-setup.exe`, đính kèm release → app Windows tự cập nhật. Linux đóng `.deb` bằng `make package` và đính kèm tay nếu cần.
+3. CI Windows build `gotiengviet-X.Y.Z-x64-setup.exe`, CI Linux build `gotiengviet_X.Y.Z-1_<arch>.deb`, cả hai đính kèm release để app tự cập nhật.
+4. Linux: khay hệ thống có mục **Kiểm tra cập nhật...** (tự kiểm tra mỗi ngày, báo qua notify khi có bản mới) — tải `.deb` đúng kiến trúc rồi cài qua `pkexec dpkg -i`, xong tự `ibus restart`. Cần `curl`.

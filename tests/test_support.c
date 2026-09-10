@@ -57,6 +57,14 @@ static void test_config(void) {
     path=g_build_filename(directory,"config",NULL);g_remove(path);g_free(path);
     g_rmdir(directory);g_free(directory);
 }
+static gboolean test_deb_match(const gchar *asset, const gchar *tagver, gpointer data) {
+    const gchar *arch = data;
+    gchar *prefix = g_strdup_printf("gotiengviet_%s", tagver);
+    gboolean ok = g_str_has_prefix(asset, prefix) && g_str_has_suffix(asset, ".deb")
+        && (!arch || !*arch || strstr(asset, arch) != NULL);
+    g_free(prefix);
+    return ok;
+}
 static void test_update(void) {
     /* Version ordering: numeric parts, missing parts are zero, leading v
      * ignored, release beats prerelease with the same numbers. */
@@ -105,6 +113,31 @@ static void test_update(void) {
         g_assert_cmpint(gtv_update_parse_release(bad[i], "0.3.0", &tag, &url), ==, GTV_UPDATE_ERROR);
     g_assert_cmpint(gtv_update_parse_release(NULL, "0.3.0", NULL, NULL), ==, GTV_UPDATE_ERROR);
     g_assert_cmpint(gtv_update_parse_release(payload, NULL, NULL, NULL), ==, GTV_UPDATE_ERROR);
+    /* Debian matcher: picks the arch build, ignores exe/foreign arch. */
+    const gchar *deb_payload =
+        "{\"tag_name\":\"v0.6.1\",\"assets\":["
+        "{\"name\":\"gotiengviet-0.6.1-x64-setup.exe\","
+        " \"browser_download_url\":\"https://example.com/setup.exe\"},"
+        "{\"name\":\"gotiengviet_0.6.1-1_arm64.deb\","
+        " \"browser_download_url\":\"https://example.com/arm64.deb\"},"
+        "{\"name\":\"gotiengviet_0.6.1-1_amd64.deb\","
+        " \"browser_download_url\":\"https://example.com/amd64.deb\"}]}";
+    tag = NULL; url = NULL;
+    g_assert_cmpint(gtv_update_parse_release_full(deb_payload, "0.6.0",
+        test_deb_match, (gpointer)"amd64", &tag, &url), ==, GTV_UPDATE_AVAILABLE);
+    g_assert_cmpstr(tag, ==, "v0.6.1");
+    g_assert_cmpstr(url, ==, "https://example.com/amd64.deb");
+    g_free(tag); g_free(url);
+    /* Up to date and wrong-arch cases. */
+    g_assert_cmpint(gtv_update_parse_release_full(deb_payload, "v0.6.1",
+        test_deb_match, (gpointer)"amd64", &tag, &url), ==, GTV_UPDATE_CURRENT);
+    g_assert_null(tag); g_assert_null(url);
+    g_assert_cmpint(gtv_update_parse_release_full(deb_payload, "0.6.0",
+        test_deb_match, (gpointer)"riscv64", &tag, &url), ==, GTV_UPDATE_ERROR);
+    g_assert_null(tag); g_assert_null(url);
+    /* NULL matcher is an error, never a blind match. */
+    g_assert_cmpint(gtv_update_parse_release_full(deb_payload, "0.6.0",
+        NULL, NULL, &tag, &url), ==, GTV_UPDATE_ERROR);
     /* 24h autocheck throttle honours XDG_CONFIG_HOME. */
     gchar *cfgdir = g_dir_make_tmp("gotiengviet-update-XXXXXX", NULL);
     g_assert_nonnull(cfgdir);

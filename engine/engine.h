@@ -39,6 +39,15 @@ typedef enum { GTV_UPDATE_AVAILABLE, GTV_UPDATE_CURRENT, GTV_UPDATE_ERROR } GtvU
 #define GTV_GITHUB_REPO "isthaison/gotiengviet"
 gint gtv_version_compare(const gchar *a, const gchar *b);
 gchar *gtv_update_asset_name(const gchar *version);
+/* Platform asset matcher: asset_name from the release payload, tag_version
+ * stripped of any leading v. Returns TRUE for the downloadable package. */
+typedef gboolean (*GtvAssetMatch)(const gchar *asset_name, const gchar *tag_version, gpointer user_data);
+GtvUpdateStatus gtv_update_parse_release_full(const gchar *json, const gchar *current_version,
+                                              GtvAssetMatch match, gpointer match_data,
+                                              gchar **out_tag, gchar **out_asset_url);
+GtvUpdateStatus gtv_update_check_full(const gchar *repo, const gchar *current_version,
+                                      GtvAssetMatch match, gpointer match_data,
+                                      gchar **out_tag, gchar **out_asset_url);
 GtvUpdateStatus gtv_update_parse_release(const gchar *json, const gchar *current_version,
                                          gchar **out_tag, gchar **out_asset_url);
 GtvUpdateStatus gtv_update_check(const gchar *repo, const gchar *current_version,

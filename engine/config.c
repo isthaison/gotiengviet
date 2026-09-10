@@ -13,15 +13,68 @@ gchar *gtv_data_path(const gchar *name){
     if(g_file_test(user, G_FILE_TEST_EXISTS)) return user;
     g_free(user);
 #ifdef G_OS_WIN32
-    /* Portable install: data/ next to the .exe. */
+    /* Check next to the running module (gtv_tsf.dll or gotiengviet.exe) */
+    {
+        HMODULE hDll = NULL;
+        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                (LPCSTR)gtv_data_path, &hDll) || !hDll) {
+            hDll = GetModuleHandleA("gtv_tsf.dll");
+        }
+        if (hDll) {
+            char dllpath[MAX_PATH];
+            if (GetModuleFileNameA(hDll, dllpath, sizeof(dllpath))) {
+                gchar *dlldir = g_path_get_dirname(dllpath);
+                gchar *bundled = g_build_filename(dlldir, "data", name, NULL);
+                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(dlldir); return bundled; }
+                g_free(bundled);
+                bundled = g_build_filename(dlldir, "..", "data", name, NULL);
+                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(dlldir); return bundled; }
+                g_free(bundled);
+                bundled = g_build_filename(dlldir, "..", "..", "data", name, NULL);
+                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(dlldir); return bundled; }
+                g_free(bundled);
+                g_free(dlldir);
+            }
+        }
+    }
+    /* Portable install: data/ next to the .exe (when running gotiengviet.exe) */
     {
         char exepath[MAX_PATH];
         if(GetModuleFileNameA(NULL, exepath, sizeof(exepath))){
             gchar *exedir = g_path_get_dirname(exepath);
             gchar *bundled = g_build_filename(exedir, "data", name, NULL);
-            g_free(exedir);
-            if(g_file_test(bundled, G_FILE_TEST_EXISTS)) return bundled;
+            if(g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(exedir); return bundled; }
             g_free(bundled);
+            bundled = g_build_filename(exedir, "..", "data", name, NULL);
+            if(g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(exedir); return bundled; }
+            g_free(bundled);
+            bundled = g_build_filename(exedir, "..", "..", "data", name, NULL);
+            if(g_file_test(bundled, G_FILE_TEST_EXISTS)) { g_free(exedir); return bundled; }
+            g_free(bundled);
+            g_free(exedir);
+        }
+    }
+    /* Registry lookup for registered InprocServer32 directory */
+    {
+        HKEY hKey;
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32", 0, KEY_READ, &hKey) == ERROR_SUCCESS ||
+            RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            char regpath[MAX_PATH] = {0};
+            DWORD size = sizeof(regpath);
+            if (RegQueryValueExA(hKey, NULL, NULL, NULL, (LPBYTE)regpath, &size) == ERROR_SUCCESS && *regpath) {
+                gchar *regdir = g_path_get_dirname(regpath);
+                gchar *bundled = g_build_filename(regdir, "data", name, NULL);
+                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { RegCloseKey(hKey); g_free(regdir); return bundled; }
+                g_free(bundled);
+                bundled = g_build_filename(regdir, "..", "data", name, NULL);
+                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { RegCloseKey(hKey); g_free(regdir); return bundled; }
+                g_free(bundled);
+                bundled = g_build_filename(regdir, "..", "..", "data", name, NULL);
+                if (g_file_test(bundled, G_FILE_TEST_EXISTS)) { RegCloseKey(hKey); g_free(regdir); return bundled; }
+                g_free(bundled);
+                g_free(regdir);
+            }
+            RegCloseKey(hKey);
         }
     }
 #endif

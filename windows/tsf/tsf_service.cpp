@@ -1,4 +1,5 @@
 #include "tsf_service.h"
+#include "tsf_langbar.h"
 
 CGtvTextService::CGtvTextService() :
     m_cRef(1),
@@ -7,7 +8,8 @@ CGtvTextService::CGtvTextService() :
     m_dwThreadMgrEventSinkCookie(TF_INVALID_COOKIE),
     m_dwKeyEventSinkCookie(TF_INVALID_COOKIE),
     m_pComposition(NULL),
-    m_pEngine(NULL)
+    m_pEngine(NULL),
+    m_pLangBarItem(NULL)
 {
     /* Same user config as the hook engine (%APPDATA%/gotiengviet), so
      * Telex/VNI, tone placement and spellcheck follow the control panel.
@@ -87,6 +89,8 @@ STDMETHODIMP CGtvTextService::Activate(ITfThreadMgr *ptim, TfClientId tid)
         return E_FAIL;
     }
 
+    InitLangBarItem();
+
     return S_OK;
 }
 
@@ -98,6 +102,7 @@ STDMETHODIMP CGtvTextService::Deactivate(void)
         m_pComposition = NULL;
     }
 
+    UninitLangBarItem();
     UninitKeyEventSink();
     UninitThreadMgrEventSink();
 
@@ -191,4 +196,52 @@ void CGtvTextService::UninitKeyEventSink()
         pKeystrokeMgr->UnadviseKeyEventSink(m_tfClientId);
         pKeystrokeMgr->Release();
     }
+}
+
+BOOL CGtvTextService::InitLangBarItem()
+{
+    if (m_pLangBarItem) return TRUE;
+
+    ITfLangBarItemMgr *pLangBarItemMgr = NULL;
+    HRESULT hr = m_pThreadMgr->QueryInterface(IID_ITfLangBarItemMgr, (void**)&pLangBarItemMgr);
+    if (FAILED(hr) || !pLangBarItemMgr) {
+        typedef HRESULT (WINAPI *pfnTF_CreateLangBarItemMgr)(ITfLangBarItemMgr **pplbim);
+        HMODULE hMsctf = GetModuleHandleA("msctf.dll");
+        if (hMsctf) {
+            pfnTF_CreateLangBarItemMgr pfn = reinterpret_cast<pfnTF_CreateLangBarItemMgr>(
+                reinterpret_cast<void*>(GetProcAddress(hMsctf, "TF_CreateLangBarItemMgr")));
+            if (pfn) pfn(&pLangBarItemMgr);
+        }
+    }
+    if (!pLangBarItemMgr) return FALSE;
+
+    m_pLangBarItem = new CGtvLangBarItem(this);
+    hr = pLangBarItemMgr->AddItem(m_pLangBarItem);
+    pLangBarItemMgr->Release();
+
+    return SUCCEEDED(hr);
+}
+
+void CGtvTextService::UninitLangBarItem()
+{
+    if (!m_pLangBarItem) return;
+
+    ITfLangBarItemMgr *pLangBarItemMgr = NULL;
+    HRESULT hr = m_pThreadMgr->QueryInterface(IID_ITfLangBarItemMgr, (void**)&pLangBarItemMgr);
+    if (FAILED(hr) || !pLangBarItemMgr) {
+        typedef HRESULT (WINAPI *pfnTF_CreateLangBarItemMgr)(ITfLangBarItemMgr **pplbim);
+        HMODULE hMsctf = GetModuleHandleA("msctf.dll");
+        if (hMsctf) {
+            pfnTF_CreateLangBarItemMgr pfn = reinterpret_cast<pfnTF_CreateLangBarItemMgr>(
+                reinterpret_cast<void*>(GetProcAddress(hMsctf, "TF_CreateLangBarItemMgr")));
+            if (pfn) pfn(&pLangBarItemMgr);
+        }
+    }
+    if (pLangBarItemMgr) {
+        pLangBarItemMgr->RemoveItem(m_pLangBarItem);
+        pLangBarItemMgr->Release();
+    }
+
+    m_pLangBarItem->Release();
+    m_pLangBarItem = NULL;
 }

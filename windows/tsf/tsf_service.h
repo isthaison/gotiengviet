@@ -66,11 +66,14 @@ private:
     DWORD m_dwKeyEventSinkCookie;
     ITfComposition *m_pComposition;
     GtvEngine *m_pEngine;
+    class CGtvLangBarItem *m_pLangBarItem;
 
     BOOL InitKeyEventSink();
     void UninitKeyEventSink();
     BOOL InitThreadMgrEventSink();
     void UninitThreadMgrEventSink();
+    BOOL InitLangBarItem();
+    void UninitLangBarItem();
 };
 
 #endif // GTV_TSF_SERVICE_H

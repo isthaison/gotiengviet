@@ -1,9 +1,13 @@
 CC ?= gcc
+CXX ?= g++
 WINDRES ?= windres
 PKG_CONFIG ?= pkg-config
 
 CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32
+
+TSF_CXXFLAGS ?= -O2 -g -std=c++14 -Wall -Wextra -Wno-unused-parameter -Iengine -Iwindows/tsf $(shell $(PKG_CONFIG) --cflags gio-2.0)
+TSF_LDFLAGS ?= -shared windows/tsf/gtv_tsf.def $(ENGINE_OBJS) $(shell $(PKG_CONFIG) --libs gio-2.0) -lintl -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -mwindows
 
 ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
               engine/engine.c engine/json.c engine/learn.c engine/macro.c \
@@ -11,6 +15,7 @@ ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
               engine/telex.c engine/text.c engine/mirror.c engine/update.c engine/vni.c
 
 WIN_SRCS = windows/main.c windows/hook.c windows/tray.c windows/setup.c windows/update.c
+TSF_SRCS = windows/tsf/tsf_service.cpp windows/tsf/tsf_key_sink.cpp windows/tsf/tsf_composition.cpp windows/tsf/tsf_register.cpp
 RC_SRC = windows/resource.rc
 
 # Release version: installer filename, Add/Remove Programs entry and the
@@ -22,10 +27,12 @@ VERSION_NUM ?= $(VERSION).0
 
 ENGINE_OBJS = $(ENGINE_SRCS:%.c=build/win/%.o)
 WIN_OBJS = $(WIN_SRCS:%.c=build/win/%.o)
+TSF_OBJS = $(TSF_SRCS:%.cpp=build/win/%.o)
 RC_OBJ = build/win/windows/resource.o
 CORE_LIB = build/win/libgotiengviet.a
 
 TARGET = build/win/gotiengviet.exe
+TSF_TARGET = build/win/gtv_tsf.dll
 TEST_ENGINE = build/win/test-engine.exe
 TEST_SUPPORT = build/win/test-support.exe
 FAKE_CURL = build/win/fixtures/curl.exe
@@ -33,11 +40,19 @@ FAKE_CURL = build/win/fixtures/curl.exe
 TEST_CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 TEST_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm
 
-all: $(TARGET)
+all: $(TARGET) $(TSF_TARGET)
 
 $(TARGET): $(ENGINE_OBJS) $(WIN_OBJS) $(RC_OBJ)
 	@mkdir -p $(dir $@)
 	$(CC) $(ENGINE_OBJS) $(WIN_OBJS) $(RC_OBJ) $(LDFLAGS) -o $@
+
+$(TSF_TARGET): $(TSF_OBJS) $(ENGINE_OBJS) windows/tsf/gtv_tsf.def
+	@mkdir -p $(dir $@)
+	$(CXX) $(TSF_OBJS) $(TSF_LDFLAGS) -o $@
+
+build/win/windows/tsf/%.o: windows/tsf/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(TSF_CXXFLAGS) -c $< -o $@
 
 $(CORE_LIB): $(ENGINE_OBJS)
 	@mkdir -p $(dir $@)

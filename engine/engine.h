@@ -3,6 +3,8 @@
 #include <glib.h>
 #include <gio/gio.h>
 
+G_BEGIN_DECLS
+
 /* Returned strings and arrays belong to the caller (g_free/g_ptr_array_unref). */
 typedef enum { GTV_TELEX, GTV_VNI } GtvMode;
 typedef struct {
@@ -60,4 +62,7 @@ guint gtv_mirror_erase_count(GtvMirror *m);
 void gtv_mirror_diff(GtvMirror *m, const gchar *new_text, guint *erase_chars, const gchar **send_from);
 void gtv_mirror_resent(GtvMirror *m, const gchar *buffer);
 void gtv_mirror_committed(GtvMirror *m);
+
+G_END_DECLS
+
 #endif

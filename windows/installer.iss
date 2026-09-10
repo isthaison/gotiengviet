@@ -1,4 +1,4 @@
-﻿; GoTiengViet versioned installer (Inno Setup 6).
+; GoTiengViet versioned installer (Inno Setup 6).
 ; Built by CI: make -f Makefile.win setup VERSION=<x.y.z>
 ;   iscc.exe /Q "/DAppVersion=<x.y.z>" "/DAppVerNum=<x.y.z.0>" /DSourceDir=..\release-pkg windows/installer.iss
 ; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
@@ -73,4 +73,8 @@ Name: "{userdesktop}\GoTiengViet"; Filename: "{app}\gotiengviet.exe"; Tasks: des
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GoTiengViet"; ValueData: """{app}\gotiengviet.exe"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
+Filename: "regsvr32.exe"; Parameters: "/s ""{app}\gtv_tsf.dll"""; Flags: runhidden
 Filename: "{app}\gotiengviet.exe"; Description: "{cm:LaunchProgram,GoTiengViet}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "regsvr32.exe"; Parameters: "/s /u ""{app}\gtv_tsf.dll"""; Flags: runhidden

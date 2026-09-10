@@ -6,6 +6,7 @@ CGtvLangBarItem::CGtvLangBarItem(CGtvTextService *pService) :
     m_pService(pService),
     m_hIcon(NULL)
 {
+    if (m_pService) m_pService->AddRef();
     BOOL enabled = m_pService ? m_pService->IsEnabled() : TRUE;
     m_hIcon = CreateGoTvIcon(enabled);
 }
@@ -15,6 +16,10 @@ CGtvLangBarItem::~CGtvLangBarItem()
     if (m_hIcon) {
         DestroyIcon(m_hIcon);
         m_hIcon = NULL;
+    }
+    if (m_pService) {
+        m_pService->Release();
+        m_pService = NULL;
     }
 }
 

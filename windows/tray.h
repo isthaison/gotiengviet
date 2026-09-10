@@ -27,10 +27,13 @@ typedef struct { gchar *typed; gchar *fix; } GtvAiResult;
 void gtv_tray_suggest_balloon(const gchar *typed, const gchar *correction);
 /* Apply (or copy, when the user kept typing) the pending suggestion. */
 void gtv_tray_apply_pending(void);
+/* Committed word delivered from gtv_tsf.dll (takes ownership); feeds the
+ * AI typo check the hook engine used to trigger. */
+void gtv_tray_ai_word(gchar *word);
 void gtv_config_strings_lock(void);
 void gtv_config_strings_unlock(void);
 /* Async Ollama typo check for a just-committed word; shows a balloon with
- * the top correction, if any. Safe to call from the keyboard hook. */
+ * the top correction, if any. */
 void gtv_tray_check_spelling_async(const gchar *word);
 
 #endif /* TRAY_H */

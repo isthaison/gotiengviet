@@ -5,8 +5,8 @@
 #endif
 
 #ifdef G_OS_WIN32
-/* This DLL's own CLSID key (matches windows/tsf/tsf_defs.h). */
-#define GTV_TSF_CLSID_KEY L"Software\\Classes\\CLSID\\{B6696545-9A29-4229-97AC-BC59B3191CC1}\\InprocServer32"
+/* This DLL's own CLSID key (must match windows/tsf/tsf_defs.h). */
+#define GTV_TSF_CLSID_KEY L"Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32"
 
 /* Module/registry paths may contain non-ASCII (usernames!): stay in
  * UTF-16, convert once to UTF-8 for glib. */

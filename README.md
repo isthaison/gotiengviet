@@ -1,6 +1,6 @@
 # GoTiengViet
 
-Bộ gõ tiếng Việt cho Linux (IBus) và Windows. Lõi gõ dùng chung viết bằng **C** (không Go, không CGO, không runtime ngoài); Windows có thêm Text Service **C++** (TSF, đang thử nghiệm).
+Bộ gõ tiếng Việt cho Linux (IBus) và Windows. Lõi gõ dùng chung viết bằng **C** (không Go, không CGO, không runtime ngoài); Windows gõ qua Text Service **C++** (TSF) kèm app khay hệ thống.
 
 - Một thuật toán chung cho Telex/VNI, kiểu đặt dấu hiện đại/truyền thống.
 - Chính tả ngoại tuyến theo quy tắc âm tiết, gạch đỏ ngay khi gõ.

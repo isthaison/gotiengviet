@@ -8,7 +8,7 @@
 
 GtvWindowsApp g_app = {0};
 
-static const char *WINDOW_CLASS_NAME = "GoTiengViet_Message_Window";
+static const char *WINDOW_CLASS_NAME = GTV_TRAY_WINDOW_CLASS;
 static const char *MUTEX_NAME = "GoTiengViet_Single_Instance_Mutex";
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -42,6 +42,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_GTV_UPDATE_DOWNLOADED: {
             gtv_update_on_downloaded((gchar *)lParam);
             break;
+        }
+        case WM_COPYDATA: {
+            /* Committed word from gtv_tsf.dll for the AI typo check. */
+            PCOPYDATASTRUCT pcds = (PCOPYDATASTRUCT)lParam;
+            if (pcds && pcds->dwData == GTV_AI_COPYDATA_ID && pcds->cbData > 1
+                && pcds->cbData <= 256 && pcds->lpData
+                && ((const char *)pcds->lpData)[pcds->cbData - 1] == '\0') {
+                gchar *word = g_strndup((const char *)pcds->lpData, pcds->cbData - 1);
+                if (g_utf8_validate(word, -1, NULL)) gtv_tray_ai_word(word);
+                else g_free(word);
+            }
+            return TRUE;
         }
         case WM_DESTROY:
             PostQuitMessage(0);

@@ -138,10 +138,14 @@ STDMETHODIMP CGtvTextService::Activate(ITfThreadMgr *ptim, TfClientId tid)
 
 STDMETHODIMP CGtvTextService::Deactivate(void)
 {
-    if (m_pComposition) {
-        m_pComposition->EndComposition(0);
-        m_pComposition->Release();
-        m_pComposition = NULL;
+    /* NULL the member first: EndComposition re-enters through
+     * OnCompositionTerminated, which would otherwise release the same
+     * pointer again. */
+    ITfComposition *pComp = m_pComposition;
+    m_pComposition = NULL;
+    if (pComp) {
+        pComp->EndComposition(0);
+        pComp->Release();
     }
 
     UninitLangBarItem();
@@ -166,10 +170,11 @@ STDMETHODIMP CGtvTextService::OnInitDocumentMgr(ITfDocumentMgr *pdim) { return S
 STDMETHODIMP CGtvTextService::OnUninitDocumentMgr(ITfDocumentMgr *pdim) { return S_OK; }
 STDMETHODIMP CGtvTextService::OnSetFocus(ITfDocumentMgr *pdimFocus, ITfDocumentMgr *pdimPrevFocus)
 {
-    if (m_pComposition) {
-        m_pComposition->EndComposition(0);
-        m_pComposition->Release();
-        m_pComposition = NULL;
+    ITfComposition *pComp = m_pComposition;
+    m_pComposition = NULL;
+    if (pComp) {
+        pComp->EndComposition(0);
+        pComp->Release();
     }
     ReloadConfig();
     if (m_pEngine) {

@@ -38,7 +38,6 @@
 #define ID_TRAY_EXIT        307
 #define ID_TRAY_MODERN      308
 #define ID_TRAY_UPDATE      309
-#define ID_TRAY_TSF         310
 #define ID_TRAY_TOGGLE      311
 
 #endif /* RESOURCE_H */

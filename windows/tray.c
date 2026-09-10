@@ -234,12 +234,13 @@ static void w_learned_ensure(void){
     }
 }
 
-/* Pending suggestion behind the balloon: click applies it when nothing was
- * typed since, otherwise the correction is copied to the clipboard. */
+/* Pending suggestion behind the balloon: click applies it when no word
+ * was committed since (generation counter replaces the old input-tick
+ * check: without a keyboard hook there are no keystroke ticks). */
 static gchar *pending_typed = NULL;
 static gchar *pending_fix = NULL;
-static DWORD pending_tick = 0;
-static DWORD pending_input_tick = 0;
+static volatile LONG ai_word_generation = 0;
+static LONG pending_ai_generation = 0;
 
 void gtv_tray_suggest_balloon(const gchar *typed, const gchar *correction){
     gtv_update_disown_balloon();
@@ -248,8 +249,7 @@ void gtv_tray_suggest_balloon(const gchar *typed, const gchar *correction){
     if(!typed || !*typed || !correction || !*correction) return;
     pending_typed = g_strdup(typed);
     pending_fix = g_strdup(correction);
-    pending_tick = GetTickCount();
-    pending_input_tick = g_app.last_input_tick;
+    pending_ai_generation = ai_word_generation;
     gchar *msg = g_strdup_printf("\"%s\" co the ban muon go \"%s\"?", typed, correction);
     gtv_tray_balloon("GoTiengViet goi y", msg);
     g_free(msg);
@@ -298,13 +298,56 @@ static void learn_accepted(const gchar *typed, const gchar *fix){
     LeaveCriticalSection(&learned_lock);
 }
 
+/* Direct keystroke injection for applying AI corrections (no low-level
+ * hook exists anymore, so plain SendInput suffices). */
+static void send_replace_text(glong erase_chars, const gchar *utf8) {
+    glong wlen = 0;
+    guint16 *wstr = NULL;
+    if (utf8 && *utf8) wstr = g_utf8_to_utf16(utf8, -1, NULL, &wlen, NULL);
+    if (!wstr) wlen = 0;
+    if (erase_chars <= 0 && wlen == 0) { g_free(wstr); return; }
+    guint total = (guint)(erase_chars * 2 + wlen * 2);
+    INPUT *inputs = g_new0(INPUT, total);
+    guint k = 0;
+    for (glong i = 0; i < erase_chars; i++) {
+        inputs[k].type = INPUT_KEYBOARD; inputs[k].ki.wVk = VK_BACK; k++;
+        inputs[k].type = INPUT_KEYBOARD; inputs[k].ki.wVk = VK_BACK;
+        inputs[k].ki.dwFlags = KEYEVENTF_KEYUP; k++;
+    }
+    for (glong i = 0; i < wlen; i++) {
+        inputs[k].type = INPUT_KEYBOARD; inputs[k].ki.wScan = wstr[i];
+        inputs[k].ki.dwFlags = KEYEVENTF_UNICODE; k++;
+        inputs[k].type = INPUT_KEYBOARD; inputs[k].ki.wScan = wstr[i];
+        inputs[k].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP; k++;
+    }
+    SendInput(total, inputs, sizeof(INPUT));
+    g_free(inputs);
+    g_free(wstr);
+}
+
 void gtv_tray_apply_pending(void){
     if(!pending_typed || !pending_fix) return;
     gchar *typed = pending_typed, *fix = pending_fix;
     pending_typed = pending_fix = NULL;
-    copy_to_clipboard(fix);
+    if (ai_word_generation == pending_ai_generation
+        && g_utf8_validate(typed, -1, NULL) && g_utf8_validate(fix, -1, NULL)
+        && g_utf8_strlen(typed, -1) >= 2 && g_utf8_strlen(typed, -1) <= 64) {
+        send_replace_text(g_utf8_strlen(typed, -1), fix);
+    } else {
+        copy_to_clipboard(fix);
+    }
     learn_accepted(typed, fix);
     g_free(typed); g_free(fix);
+}
+
+/* Committed word delivered from gtv_tsf.dll (takes ownership). Feeds the
+ * same AI typo check the hook engine used to trigger. */
+void gtv_tray_ai_word(gchar *word){
+    if (!word || !*word) { g_free(word); return; }
+    InterlockedIncrement(&ai_word_generation);
+    if (g_app.config.spellcheck && g_app.config.ai_enabled && gtv_tray_should_check(word))
+        gtv_tray_check_spelling_async(word);
+    g_free(word);
 }
 
 static gpointer ai_worker(gpointer data) {

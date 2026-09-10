@@ -9,10 +9,15 @@ typedef struct {
     gboolean enabled;       /* TRUE = Vietnamese [V], FALSE = English [E] */
     GtvConfig config;
     HWND hwnd_main;
-    DWORD last_input_tick;
 } GtvWindowsApp;
 
 extern GtvWindowsApp g_app;
+
+/* Message-only window class shared with gtv_tsf.dll (it notifies the
+ * tray about committed words for AI checks). */
+#define GTV_TRAY_WINDOW_CLASS "GoTiengViet_Message_Window"
+/* WM_COPYDATA dwData for a committed word (NUL-terminated UTF-8). */
+#define GTV_AI_COPYDATA_ID 0x47545641
 
 void gtv_app_toggle_mode(void);
 void gtv_app_set_mode(gboolean enabled);

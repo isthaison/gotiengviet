@@ -1,4 +1,19 @@
 #include "tsf_service.h"
+#include "../app.h"
+
+/* Report a committed word to the tray app for the AI typo check. The tray
+ * owns suggestions/balloons/learning; TSF just types. Best-effort: the
+ * tray may not run (portable use), and must never block typing. */
+static void NotifyTrayWord(const char *word) {
+    if (!word || !*word) return;
+    HWND tray = FindWindowA(GTV_TRAY_WINDOW_CLASS, NULL);
+    if (!tray) return;
+    COPYDATASTRUCT cds;
+    cds.dwData = (ULONG_PTR)GTV_AI_COPYDATA_ID;
+    cds.cbData = (DWORD)strlen(word) + 1;
+    cds.lpData = (PVOID)word;
+    SendMessageTimeoutA(tray, WM_COPYDATA, 0, (LPARAM)&cds, SMTO_ABORTIFHUNG, 500, NULL);
+}
 
 STDMETHODIMP CGtvTextService::OnSetFocus(BOOL fForeground)
 {
@@ -155,6 +170,14 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
                     g_free(wcommit);
                 }
                 EndComposition(pic, TRUE);
+                /* AI check on the word without its trailing delimiter. */
+                const gchar *end = commit + strlen(commit);
+                const gchar *prev = g_utf8_prev_char(end);
+                if (prev > commit) {
+                    gchar *wordonly = g_strndup(commit, prev - commit);
+                    NotifyTrayWord(wordonly);
+                    g_free(wordonly);
+                }
                 g_free(commit);
             } else {
                 EndComposition(pic, TRUE);

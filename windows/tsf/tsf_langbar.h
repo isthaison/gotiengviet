@@ -69,7 +69,7 @@ private:
     CGtvTextService *m_pService;
     HICON m_hIcon;
 
-    HICON CreateGoTvIcon();
+    HICON CreateGoTvIcon(BOOL enabled);
 };
 
 #endif // GTV_TSF_LANGBAR_H

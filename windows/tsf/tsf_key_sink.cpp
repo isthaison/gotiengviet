@@ -28,6 +28,8 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
+    if (!m_fEnabled) return S_OK;
+
     // Check modifiers
     if ((GetKeyState(VK_CONTROL) & 0x8000) ||
         (GetKeyState(VK_MENU) & 0x8000) ||
@@ -36,28 +38,24 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
         return S_OK;
     }
 
-    if (wParam == VK_ESCAPE || wParam == VK_RETURN) {
+    if (wParam == VK_ESCAPE || wParam == VK_RETURN || wParam == VK_BACK) {
         if (IsComposing()) *pfEaten = TRUE;
-        return S_OK;
-    }
-
-    if (wParam == VK_BACK) {
-        if (IsComposing()) *pfEaten = TRUE;
-        return S_OK;
-    }
-
-    if (wParam >= 'A' && wParam <= 'Z') {
-        *pfEaten = TRUE;
-        return S_OK;
-    }
-
-    if (wParam >= '0' && wParam <= '9') {
-        *pfEaten = TRUE;
         return S_OK;
     }
 
     if (wParam == VK_SPACE) {
         if (IsComposing()) *pfEaten = TRUE;
+        return S_OK;
+    }
+
+    // Convert key to Unicode to support letters, numbers, and punctuation (: ; < > for emojis)
+    BYTE key_state[256];
+    GetKeyboardState(key_state);
+    WCHAR wchars[4] = {0};
+    HKL layout = GetKeyboardLayout(0);
+    int count = ToUnicodeEx((UINT)wParam, (UINT)((lParam >> 16) & 0xFF), key_state, wchars, 4, 0, layout);
+    if (count == 1 && wchars[0] >= 0x20) {
+        *pfEaten = TRUE;
         return S_OK;
     }
 
@@ -69,6 +67,7 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
+    if (!m_fEnabled) return S_OK;
     if (!pic || !m_pEngine) return S_OK;
 
     // Modifiers reset composition

@@ -1,5 +1,5 @@
 #include "update.h"
-#include "hook.h"
+#include "app.h"
 #include "tray.h"
 #include "version.h"
 #include "internal.h"

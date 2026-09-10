@@ -58,6 +58,11 @@ public:
     HRESULT EndComposition(ITfContext *pic, BOOL commit);
     BOOL IsComposing() const { return m_pComposition != NULL; }
 
+    void ReloadConfig();
+    BOOL IsEnabled() const { return m_fEnabled; }
+    void SetEnabled(BOOL enabled);
+    void ToggleEnabled();
+
 private:
     LONG m_cRef;
     ITfThreadMgr *m_pThreadMgr;
@@ -67,6 +72,7 @@ private:
     ITfComposition *m_pComposition;
     GtvEngine *m_pEngine;
     class CGtvLangBarItem *m_pLangBarItem;
+    BOOL m_fEnabled;
 
     BOOL InitKeyEventSink();
     void UninitKeyEventSink();

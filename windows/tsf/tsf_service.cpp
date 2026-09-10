@@ -9,19 +9,61 @@ CGtvTextService::CGtvTextService() :
     m_dwKeyEventSinkCookie(TF_INVALID_COOKIE),
     m_pComposition(NULL),
     m_pEngine(NULL),
-    m_pLangBarItem(NULL)
+    m_pLangBarItem(NULL),
+    m_fEnabled(TRUE)
 {
-    /* Same user config as the hook engine (%APPDATA%/gotiengviet), so
-     * Telex/VNI, tone placement and spellcheck follow the control panel.
-     * AI keys are not needed here (no suggestions UI yet). */
+    ReloadConfig();
+    DllAddRef();
+}
+
+void CGtvTextService::ReloadConfig()
+{
     GtvConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
     gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
     gtv_config_load(&cfg, config_dir);
+
+    m_fEnabled = TRUE;
+    gchar *path = g_build_filename(config_dir, "config", NULL);
+    GKeyFile *kf = g_key_file_new();
+    if (g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)) {
+        if (g_key_file_has_key(kf, "input", "enabled", NULL))
+            m_fEnabled = g_key_file_get_boolean(kf, "input", "enabled", NULL);
+    }
+    g_key_file_unref(kf);
+    g_free(path);
     g_free(config_dir);
-    m_pEngine = gtv_engine_new(&cfg);
+
+    if (m_pEngine) {
+        m_pEngine->mode = cfg.mode;
+        m_pEngine->modern = cfg.modern;
+        m_pEngine->spellcheck = cfg.spellcheck;
+    } else {
+        m_pEngine = gtv_engine_new(&cfg);
+    }
     gtv_config_clear(&cfg);
-    DllAddRef();
+}
+
+void CGtvTextService::SetEnabled(BOOL enabled)
+{
+    m_fEnabled = enabled;
+    gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *path = g_build_filename(config_dir, "config", NULL);
+    GKeyFile *kf = g_key_file_new();
+    g_key_file_load_from_file(kf, path, G_KEY_FILE_KEEP_COMMENTS, NULL);
+    g_key_file_set_boolean(kf, "input", "enabled", m_fEnabled);
+    gchar *dir = g_path_get_dirname(path);
+    g_mkdir_with_parents(dir, 0755);
+    g_free(dir);
+    g_key_file_save_to_file(kf, path, NULL);
+    g_key_file_unref(kf);
+    g_free(path);
+    g_free(config_dir);
+}
+
+void CGtvTextService::ToggleEnabled()
+{
+    SetEnabled(!m_fEnabled);
 }
 
 CGtvTextService::~CGtvTextService()
@@ -129,6 +171,7 @@ STDMETHODIMP CGtvTextService::OnSetFocus(ITfDocumentMgr *pdimFocus, ITfDocumentM
         m_pComposition->Release();
         m_pComposition = NULL;
     }
+    ReloadConfig();
     if (m_pEngine) {
         gtv_engine_reset(m_pEngine);
     }

@@ -1,8 +1,7 @@
 #include "tray.h"
-#include "hook.h"
+#include "app.h"
 #include "setup.h"
 #include "update.h"
-#include "tsf_mode.h"
 #include "resource.h"
 #include "internal.h"
 
@@ -66,12 +65,6 @@ void gtv_config_strings_unlock(void) {
     LeaveCriticalSection(&config_lock);
 }
 
-/* Config lives in %APPDATA%/gotiengviet (same dir main.c loads from). */
-static void save_app_config(void) {
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
-    gtv_config_save(&g_app.config, dir, NULL);
-    g_free(dir);
-}
 
 void gtv_tray_set_startup(gboolean enable) {
     HKEY hkey;
@@ -132,6 +125,8 @@ void gtv_tray_show_menu(HWND hwnd) {
     GetCursorPos(&pt);
 
     HMENU hmenu = CreatePopupMenu();
+    UINT toggle_flag = g_app.enabled ? MF_CHECKED : MF_UNCHECKED;
+    menu_add(hmenu, "Bật gõ tiếng Việt [V]", toggle_flag, ID_TRAY_TOGGLE);
     menu_add(hmenu, "Bảng điều khiển...", 0, ID_TRAY_SETTINGS);
     menu_add(hmenu, NULL, MF_SEPARATOR, 0);
 
@@ -150,10 +145,6 @@ void gtv_tray_show_menu(HWND hwnd) {
     menu_add(hmenu, "Khởi động cùng Windows", start_flag, ID_TRAY_STARTUP);
 
     menu_add(hmenu, "Kiểm tra cập nhật...", 0, ID_TRAY_UPDATE);
-
-    UINT tsf_flag = g_app.tsf_mode ? MF_CHECKED : MF_UNCHECKED;
-    menu_add(hmenu, "TSF Text Service (thử nghiệm)", tsf_flag, ID_TRAY_TSF);
-
     menu_add(hmenu, NULL, MF_SEPARATOR, 0);
     menu_add(hmenu, "Thoát", 0, ID_TRAY_EXIT);
 
@@ -163,28 +154,25 @@ void gtv_tray_show_menu(HWND hwnd) {
     DestroyMenu(hmenu);
 
     switch (cmd) {
+        case ID_TRAY_TOGGLE:
+            gtv_app_toggle_mode();
+            break;
         case ID_TRAY_SETTINGS:
             gtv_setup_show(hwnd);
             break;
         case ID_TRAY_MODE_TELEX:
-            g_app.config.mode = GTV_TELEX;
-            if (g_app.engine) g_app.engine->mode = GTV_TELEX;
-            save_app_config();
+            gtv_app_set_input_method(GTV_TELEX);
             break;
         case ID_TRAY_MODE_VNI:
-            g_app.config.mode = GTV_VNI;
-            if (g_app.engine) g_app.engine->mode = GTV_VNI;
-            save_app_config();
+            gtv_app_set_input_method(GTV_VNI);
             break;
         case ID_TRAY_SPELLCHECK:
             g_app.config.spellcheck = !g_app.config.spellcheck;
-            if (g_app.engine) g_app.engine->spellcheck = g_app.config.spellcheck;
-            save_app_config();
+            gtv_app_save_config();
             break;
         case ID_TRAY_MODERN:
             g_app.config.modern = !g_app.config.modern;
-            if (g_app.engine) g_app.engine->modern = g_app.config.modern;
-            save_app_config();
+            gtv_app_save_config();
             break;
         case ID_TRAY_STARTUP:
             gtv_tray_set_startup(!get_startup_enabled());
@@ -192,22 +180,6 @@ void gtv_tray_show_menu(HWND hwnd) {
         case ID_TRAY_UPDATE:
             gtv_update_check_async(hwnd, TRUE);
             break;
-        case ID_TRAY_TSF: {
-            /* Hook and TSF must never process the same keystroke: exactly
-             * one engine owns the keyboard at a time. */
-            gboolean want = !g_app.tsf_mode;
-            if (want && !gtv_tsf_set_enabled(TRUE)) {
-                gtv_tray_balloon("GoTiengViet", "Không bật được TSF (DLL chưa đăng ký). Cài đặt lại rồi thử lại.");
-                break;
-            }
-            if (!want) gtv_tsf_set_enabled(FALSE);
-            g_app.tsf_mode = want;
-            gtv_hook_save_tsf_mode();
-            gtv_hook_reset_buffer();
-            if (want)
-                gtv_tray_balloon("GoTiengViet", "Đã bật TSF thử nghiệm. Đăng xuất/đăng nhập lại rồi chọn GoTiengViet bằng Win+Space.");
-            break;
-        }
         case ID_TRAY_EXIT:
             PostQuitMessage(0);
             break;
@@ -330,14 +302,7 @@ void gtv_tray_apply_pending(void){
     if(!pending_typed || !pending_fix) return;
     gchar *typed = pending_typed, *fix = pending_fix;
     pending_typed = pending_fix = NULL;
-    gboolean fresh = (DWORD)(GetTickCount() - pending_tick) < 15000
-        && g_app.last_input_tick == pending_input_tick;
-    if(fresh && g_utf8_validate(typed, -1, NULL) && g_utf8_validate(fix, -1, NULL)
-       && g_utf8_strlen(typed, -1) >= 2 && g_utf8_strlen(typed, -1) <= 64){
-        gtv_hook_replace_text((int)g_utf8_strlen(typed, -1), fix);
-    }else{
-        copy_to_clipboard(fix);
-    }
+    copy_to_clipboard(fix);
     learn_accepted(typed, fix);
     g_free(typed); g_free(fix);
 }

@@ -20,6 +20,11 @@
   </provides>
   <url type="homepage">https://github.com/isthaison/gotiengviet</url>
   <releases>
+    <release version="0.6.1" date="2026-09-10">
+      <description>
+        <p>Gợi ý AI trở lại qua TSF, đồng bộ Việt/Anh, tra dữ liệu Unicode.</p>
+      </description>
+    </release>
     <release version="0.6.0" date="2026-09-10">
       <description>
         <p>TSF Text Service thử nghiệm (chuyển đổi với hook), Unicode toàn bộ UI Windows, cập nhật tin cậy.</p>

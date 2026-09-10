@@ -161,7 +161,9 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
                 EndComposition(pic, TRUE);
             }
             gtv_engine_reset(m_pEngine);
-            *pfEaten = FALSE; // let the space/punctuation pass to app
+            /* The delimiter is already inside the committed composition
+             * text above: eat the key or it inserts a second one. */
+            *pfEaten = TRUE;
             return S_OK;
         }
         return S_OK;

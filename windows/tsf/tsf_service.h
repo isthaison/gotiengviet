@@ -6,6 +6,11 @@
 #include "tsf_defs.h"
 #include "engine.h"
 
+/* Process-wide DLL refcount backing DllCanUnloadNow (defined in
+ * tsf_register.cpp). Every live service/factory object holds one. */
+void DllAddRef(void);
+void DllRelease(void);
+
 class CEditSession;
 
 class CGtvTextService :

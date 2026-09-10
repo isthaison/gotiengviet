@@ -16,6 +16,7 @@ public:
         m_action(action),
         m_len(len)
     {
+        if (m_pService) m_pService->AddRef();
         if (text && len > 0) {
             m_text = new wchar_t[len + 1];
             wcsncpy(m_text, text, len);
@@ -30,6 +31,7 @@ public:
     virtual ~CEditSession() {
         if (m_text) delete[] m_text;
         if (m_pContext) m_pContext->Release();
+        if (m_pService) m_pService->Release();
     }
 
     // IUnknown
@@ -142,22 +144,27 @@ private:
 
     HRESULT DoEndComposition(TfEditCookie ec) {
         if (!m_pService->m_pComposition) return S_OK;
-        m_pService->m_pComposition->EndComposition(ec);
-        m_pService->m_pComposition->Release();
+        /* Clear the member FIRST: EndComposition re-enters through
+         * OnCompositionTerminated, which would otherwise release the
+         * same pointer again (use-after-free / double free). */
+        ITfComposition *pComp = m_pService->m_pComposition;
         m_pService->m_pComposition = NULL;
+        pComp->EndComposition(ec);
+        pComp->Release();
         return S_OK;
     }
 
     HRESULT DoCancelComposition(TfEditCookie ec) {
         if (!m_pService->m_pComposition) return S_OK;
+        ITfComposition *pComp = m_pService->m_pComposition;
+        m_pService->m_pComposition = NULL;
         ITfRange *pRange = NULL;
-        if (SUCCEEDED(m_pService->m_pComposition->GetRange(&pRange)) && pRange) {
+        if (SUCCEEDED(pComp->GetRange(&pRange)) && pRange) {
             pRange->SetText(ec, 0, L"", 0);
             pRange->Release();
         }
-        m_pService->m_pComposition->EndComposition(ec);
-        m_pService->m_pComposition->Release();
-        m_pService->m_pComposition = NULL;
+        pComp->EndComposition(ec);
+        pComp->Release();
         return S_OK;
     }
 };

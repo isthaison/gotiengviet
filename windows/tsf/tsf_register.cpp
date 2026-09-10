@@ -1,11 +1,17 @@
 #include <windows.h>
 #include <ole2.h>
 #include <msctf.h>
+#include <new>
 #include "tsf_defs.h"
 #include "tsf_service.h"
 
 static HINSTANCE g_hModule = NULL;
 static LONG g_cServerLocks = 0;
+static LONG g_cRefDll = 0;
+
+/* DllCanUnloadNow must account for live objects, not just server locks. */
+void DllAddRef(void) { InterlockedIncrement(&g_cRefDll); }
+void DllRelease(void) { InterlockedDecrement(&g_cRefDll); }
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
@@ -18,8 +24,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 
 class CClassFactory : public IClassFactory {
 public:
-    CClassFactory() : m_cRef(1) {}
-    virtual ~CClassFactory() {}
+    CClassFactory() : m_cRef(1) { DllAddRef(); }
+    virtual ~CClassFactory() { DllRelease(); }
 
     STDMETHODIMP QueryInterface(REFIID riid, void **ppvObj) {
         if (!ppvObj) return E_INVALIDARG;
@@ -41,7 +47,7 @@ public:
 
     STDMETHODIMP CreateInstance(IUnknown *pUnkOuter, REFIID riid, void **ppvObj) {
         if (pUnkOuter != NULL) return CLASS_E_NOAGGREGATION;
-        CGtvTextService *pService = new CGtvTextService();
+        CGtvTextService *pService = new (std::nothrow) CGtvTextService();
         if (!pService) return E_OUTOFMEMORY;
         HRESULT hr = pService->QueryInterface(riid, ppvObj);
         pService->Release();
@@ -66,7 +72,7 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void **ppv)
     if (!IsEqualCLSID(rclsid, CLSID_GtvTextService))
         return CLASS_E_CLASSNOTAVAILABLE;
 
-    CClassFactory *pFactory = new CClassFactory();
+    CClassFactory *pFactory = new (std::nothrow) CClassFactory();
     if (!pFactory) return E_OUTOFMEMORY;
 
     HRESULT hr = pFactory->QueryInterface(riid, ppv);
@@ -76,57 +82,49 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void **ppv)
 
 STDAPI DllCanUnloadNow(void)
 {
-    return (g_cServerLocks == 0) ? S_OK : S_FALSE;
+    return (g_cServerLocks == 0 && g_cRefDll == 0) ? S_OK : S_FALSE;
 }
+
+/* Per-user COM registration under HKCU\Software\Classes: the installer
+ * runs without elevation (PrivilegesRequired=lowest), so HKLM writes
+ * would fail silently and the service would never activate. HKCU classes
+ * take precedence over HKLM for COM lookup. */
+static const WCHAR *const kClassesRoot = L"Software\\Classes\\CLSID\\";
 
 static BOOL RegisterServerKeys(LPCWSTR szClsid, LPCWSTR szModule)
 {
     WCHAR szKey[256];
-    wsprintfW(szKey, L"Software\\Classes\\CLSID\\%ls", szClsid);
-
     HKEY hKey;
-    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, szKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-        RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)GTV_TSF_MODEL_NAME, (DWORD)((wcslen(GTV_TSF_MODEL_NAME) + 1) * sizeof(WCHAR)));
-        RegCloseKey(hKey);
+    BOOL ok = TRUE;
 
-        wsprintfW(szKey, L"Software\\Classes\\CLSID\\%ls\\InprocServer32", szClsid);
-        if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, szKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-            RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)szModule, (DWORD)((wcslen(szModule) + 1) * sizeof(WCHAR)));
-            LPCWSTR szModel = L"Apartment";
-            RegSetValueExW(hKey, L"ThreadingModel", 0, REG_SZ, (const BYTE*)szModel, (DWORD)((wcslen(szModel) + 1) * sizeof(WCHAR)));
-            RegCloseKey(hKey);
-        }
+    wsprintfW(szKey, L"%ls%ls", kClassesRoot, szClsid);
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, szKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS)
+        return FALSE;
+    if (RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)GTV_TSF_MODEL_NAME, (DWORD)((wcslen(GTV_TSF_MODEL_NAME) + 1) * sizeof(WCHAR))) != ERROR_SUCCESS)
+        ok = FALSE;
+    RegCloseKey(hKey);
+
+    wsprintfW(szKey, L"%ls%ls\\InprocServer32", kClassesRoot, szClsid);
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, szKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS)
+        return FALSE;
+    if (RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)szModule, (DWORD)((wcslen(szModule) + 1) * sizeof(WCHAR))) != ERROR_SUCCESS)
+        ok = FALSE;
+    else {
+        LPCWSTR szModel = L"Apartment";
+        if (RegSetValueExW(hKey, L"ThreadingModel", 0, REG_SZ, (const BYTE*)szModel, (DWORD)((wcslen(szModel) + 1) * sizeof(WCHAR))) != ERROR_SUCCESS)
+            ok = FALSE;
     }
-
-    wsprintfW(szKey, L"CLSID\\%ls", szClsid);
-    if (RegCreateKeyExW(HKEY_CLASSES_ROOT, szKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-        RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)GTV_TSF_MODEL_NAME, (DWORD)((wcslen(GTV_TSF_MODEL_NAME) + 1) * sizeof(WCHAR)));
-        RegCloseKey(hKey);
-
-        wsprintfW(szKey, L"CLSID\\%ls\\InprocServer32", szClsid);
-        if (RegCreateKeyExW(HKEY_CLASSES_ROOT, szKey, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-            RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)szModule, (DWORD)((wcslen(szModule) + 1) * sizeof(WCHAR)));
-            LPCWSTR szModel = L"Apartment";
-            RegSetValueExW(hKey, L"ThreadingModel", 0, REG_SZ, (const BYTE*)szModel, (DWORD)((wcslen(szModel) + 1) * sizeof(WCHAR)));
-            RegCloseKey(hKey);
-        }
-    }
-
-    return TRUE;
+    RegCloseKey(hKey);
+    return ok;
 }
 
 static void UnregisterServerKeys(LPCWSTR szClsid)
 {
     WCHAR szKey[256];
-    wsprintfW(szKey, L"Software\\Classes\\CLSID\\%ls\\InprocServer32", szClsid);
-    RegDeleteKeyW(HKEY_LOCAL_MACHINE, szKey);
-    wsprintfW(szKey, L"Software\\Classes\\CLSID\\%ls", szClsid);
-    RegDeleteKeyW(HKEY_LOCAL_MACHINE, szKey);
-
-    wsprintfW(szKey, L"CLSID\\%ls\\InprocServer32", szClsid);
-    RegDeleteKeyW(HKEY_CLASSES_ROOT, szKey);
-    wsprintfW(szKey, L"CLSID\\%ls", szClsid);
-    RegDeleteKeyW(HKEY_CLASSES_ROOT, szKey);
+    wsprintfW(szKey, L"%ls%ls\\InprocServer32", kClassesRoot, szClsid);
+    RegDeleteKeyW(HKEY_CURRENT_USER, szKey);
+    wsprintfW(szKey, L"%ls%ls", kClassesRoot, szClsid);
+    RegDeleteKeyW(HKEY_CURRENT_USER, szKey);
 }
 
 STDAPI DllRegisterServer(void)
@@ -149,7 +147,11 @@ STDAPI DllRegisterServer(void)
 
     if (SUCCEEDED(hr) && pProfiles) {
         hr = pProfiles->Register(CLSID_GtvTextService);
-        // Register under English (US) - so it appears in Win+Space on standard Windows
+        // Profiles stay DISABLED until the user opts into TSF mode in our
+        // own UI (which enables them programmatically). Auto-enabling here
+        // would double-process every keystroke together with the default
+        // low-level hook engine. Register under English (US) so it appears
+        // in Win+Space on standard Windows once enabled.
         pProfiles->AddLanguageProfile(CLSID_GtvTextService,
             GTV_LANG_ENGLISH,
             GUID_GtvProfile,
@@ -158,7 +160,6 @@ STDAPI DllRegisterServer(void)
             szModule,
             (ULONG)wcslen(szModule),
             0);
-        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, TRUE);
 
         // Also register under Vietnamese
         pProfiles->AddLanguageProfile(CLSID_GtvTextService,
@@ -169,18 +170,18 @@ STDAPI DllRegisterServer(void)
             szModule,
             (ULONG)wcslen(szModule),
             0);
-        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile, TRUE);
         pProfiles->Release();
     }
 
-    // Register TSF Categories
+    // Register TSF Categories (keyboard TIP only; the display-attribute
+    // provider category is intentionally not claimed: QueryInterface does
+    // not implement ITfDisplayAttributeProvider).
     ITfCategoryMgr *pCategoryMgr = NULL;
     hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfCategoryMgr, (void**)&pCategoryMgr);
 
     if (SUCCEEDED(hr) && pCategoryMgr) {
         pCategoryMgr->RegisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
-        pCategoryMgr->RegisterCategory(CLSID_GtvTextService, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_GtvTextService);
         pCategoryMgr->Release();
     }
 
@@ -198,7 +199,6 @@ STDAPI DllUnregisterServer(void)
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfCategoryMgr, (void**)&pCategoryMgr)) && pCategoryMgr) {
         pCategoryMgr->UnregisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
-        pCategoryMgr->UnregisterCategory(CLSID_GtvTextService, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_GtvTextService);
         pCategoryMgr->Release();
     }
 

@@ -9,12 +9,17 @@ CGtvTextService::CGtvTextService() :
     m_pComposition(NULL),
     m_pEngine(NULL)
 {
+    /* Same user config as the hook engine (%APPDATA%/gotiengviet), so
+     * Telex/VNI, tone placement and spellcheck follow the control panel.
+     * AI keys are not needed here (no suggestions UI yet). */
     GtvConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
-    cfg.mode = GTV_TELEX;
-    cfg.modern = TRUE;
-    cfg.spellcheck = TRUE;
+    gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gtv_config_load(&cfg, config_dir);
+    g_free(config_dir);
     m_pEngine = gtv_engine_new(&cfg);
+    gtv_config_clear(&cfg);
+    DllAddRef();
 }
 
 CGtvTextService::~CGtvTextService()
@@ -23,6 +28,7 @@ CGtvTextService::~CGtvTextService()
         gtv_engine_free(m_pEngine);
         m_pEngine = NULL;
     }
+    DllRelease();
 }
 
 // IUnknown implementation
@@ -156,6 +162,7 @@ BOOL CGtvTextService::InitThreadMgrEventSink()
 void CGtvTextService::UninitThreadMgrEventSink()
 {
     if (m_dwThreadMgrEventSinkCookie == TF_INVALID_COOKIE) return;
+    if (!m_pThreadMgr) { m_dwThreadMgrEventSinkCookie = TF_INVALID_COOKIE; return; }
     ITfSource *pSource = NULL;
     if (SUCCEEDED(m_pThreadMgr->QueryInterface(IID_ITfSource, (void**)&pSource))) {
         pSource->UnadviseSink(m_dwThreadMgrEventSinkCookie);
@@ -178,6 +185,7 @@ BOOL CGtvTextService::InitKeyEventSink()
 
 void CGtvTextService::UninitKeyEventSink()
 {
+    if (!m_pThreadMgr) return;
     ITfKeystrokeMgr *pKeystrokeMgr = NULL;
     if (SUCCEEDED(m_pThreadMgr->QueryInterface(IID_ITfKeystrokeMgr, (void**)&pKeystrokeMgr))) {
         pKeystrokeMgr->UnadviseKeyEventSink(m_tfClientId);

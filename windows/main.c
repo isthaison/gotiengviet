@@ -77,6 +77,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     g_app.engine = gtv_engine_new(&g_app.config);
     g_app.enabled = gtv_hook_load_enabled(TRUE); /* Restore V/E mode, default [V] */
+    g_app.tsf_mode = gtv_hook_load_tsf_mode(FALSE); /* Hook owns keys by default */
 
     /* 3. Register message window class */
     WNDCLASSEXA wc = {0};

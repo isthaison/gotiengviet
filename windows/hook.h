@@ -9,6 +9,7 @@
 
 typedef struct {
     gboolean enabled;       /* TRUE = Vietnamese [V], FALSE = English [E] */
+    gboolean tsf_mode;      /* TRUE = TSF text service owns keys, hook passive */
     GtvConfig config;
     GtvEngine *engine;
     HHOOK keyboard_hook;
@@ -32,5 +33,9 @@ void gtv_hook_replace_text(int erase_count, const gchar *utf8);
  * Unknown keys are ignored by the shared engine, so Linux is unaffected. */
 void gtv_hook_save_enabled(void);
 gboolean gtv_hook_load_enabled(gboolean def);
+/* TSF mode flag lives in the same user config file ([input]/tsf_mode);
+ * unknown keys are ignored by the shared engine, so Linux is unaffected. */
+void gtv_hook_save_tsf_mode(void);
+gboolean gtv_hook_load_tsf_mode(gboolean def);
 
 #endif /* HOOK_H */

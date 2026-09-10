@@ -186,6 +186,31 @@ gboolean gtv_hook_load_enabled(gboolean def) {
     return enabled;
 }
 
+void gtv_hook_save_tsf_mode(void) {
+    gchar *path = windows_config_path();
+    GKeyFile *kf = g_key_file_new();
+    g_key_file_load_from_file(kf, path, G_KEY_FILE_KEEP_COMMENTS, NULL);
+    g_key_file_set_boolean(kf, "input", "tsf_mode", g_app.tsf_mode);
+    gchar *dir = g_path_get_dirname(path);
+    g_mkdir_with_parents(dir, 0755);
+    g_free(dir);
+    g_key_file_save_to_file(kf, path, NULL);
+    g_key_file_unref(kf);
+    g_free(path);
+}
+
+gboolean gtv_hook_load_tsf_mode(gboolean def) {
+    gchar *path = windows_config_path();
+    GKeyFile *kf = g_key_file_new();
+    gboolean mode = def;
+    if (g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)
+        && g_key_file_has_key(kf, "input", "tsf_mode", NULL))
+        mode = g_key_file_get_boolean(kf, "input", "tsf_mode", NULL);
+    g_key_file_unref(kf);
+    g_free(path);
+    return mode;
+}
+
 void gtv_hook_set_mode(gboolean enabled) {
     g_app.enabled = enabled;
     gtv_hook_reset_buffer();
@@ -206,6 +231,12 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 
     /* Ignore events injected by our own SendInput */
     if (kbd->dwExtraInfo == GTV_HOOK_MAGIC) {
+        return CallNextHookEx(NULL, nCode, wParam, lParam);
+    }
+
+    /* TSF mode: the text service owns keystrokes, the hook stays fully
+     * passive so nothing is ever processed twice. */
+    if (g_app.tsf_mode) {
         return CallNextHookEx(NULL, nCode, wParam, lParam);
     }
 

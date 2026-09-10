@@ -2,6 +2,7 @@
 #include "hook.h"
 #include "setup.h"
 #include "update.h"
+#include "tsf_mode.h"
 #include "resource.h"
 #include "internal.h"
 
@@ -15,6 +16,8 @@ static HICON icon_e = NULL;
 static void wstr_copy(WCHAR *dst, guint dst_chars, const gunichar2 *src) {
     guint i = 0;
     if (src) while (i + 1 < dst_chars && src[i]) { dst[i] = (WCHAR)src[i]; i++; }
+    /* Never split a surrogate pair at the truncation edge. */
+    if (i > 0 && i + 1 >= dst_chars && dst[i - 1] >= 0xD800 && dst[i - 1] <= 0xDBFF) i--;
     dst[i] = 0;
 }
 static void set_field(const gchar *utf8, WCHAR *dst, guint dst_chars) {
@@ -148,6 +151,9 @@ void gtv_tray_show_menu(HWND hwnd) {
 
     menu_add(hmenu, "Kiểm tra cập nhật...", 0, ID_TRAY_UPDATE);
 
+    UINT tsf_flag = g_app.tsf_mode ? MF_CHECKED : MF_UNCHECKED;
+    menu_add(hmenu, "TSF Text Service (thử nghiệm)", tsf_flag, ID_TRAY_TSF);
+
     menu_add(hmenu, NULL, MF_SEPARATOR, 0);
     menu_add(hmenu, "Thoát", 0, ID_TRAY_EXIT);
 
@@ -186,6 +192,22 @@ void gtv_tray_show_menu(HWND hwnd) {
         case ID_TRAY_UPDATE:
             gtv_update_check_async(hwnd, TRUE);
             break;
+        case ID_TRAY_TSF: {
+            /* Hook and TSF must never process the same keystroke: exactly
+             * one engine owns the keyboard at a time. */
+            gboolean want = !g_app.tsf_mode;
+            if (want && !gtv_tsf_set_enabled(TRUE)) {
+                gtv_tray_balloon("GoTiengViet", "Không bật được TSF (DLL chưa đăng ký). Cài đặt lại rồi thử lại.");
+                break;
+            }
+            if (!want) gtv_tsf_set_enabled(FALSE);
+            g_app.tsf_mode = want;
+            gtv_hook_save_tsf_mode();
+            gtv_hook_reset_buffer();
+            if (want)
+                gtv_tray_balloon("GoTiengViet", "Đã bật TSF thử nghiệm. Đăng xuất/đăng nhập lại rồi chọn GoTiengViet bằng Win+Space.");
+            break;
+        }
         case ID_TRAY_EXIT:
             PostQuitMessage(0);
             break;

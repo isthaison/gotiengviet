@@ -1,4 +1,4 @@
-; GoTiengViet versioned installer (Inno Setup 6).
+﻿; GoTiengViet versioned installer (Inno Setup 6).
 ; Built by CI: make -f Makefile.win setup VERSION=<x.y.z>
 ;   iscc.exe /Q "/DAppVersion=<x.y.z>" "/DAppVerNum=<x.y.z.0>" /DSourceDir=..\release-pkg windows/installer.iss
 ; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
@@ -57,7 +57,9 @@ Name: "desktopicon"; Description: "{cm:DesktopDesc}"; GroupDescription: "{cm:Add
 
 [Files]
 Source: "{#SourceDir}\gotiengviet.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+; gtv_tsf.dll (TSF text service) included via the glob below; restartreplace
+; because host apps may still hold it while updating.
+Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist restartreplace
 Source: "{#SourceDir}\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion

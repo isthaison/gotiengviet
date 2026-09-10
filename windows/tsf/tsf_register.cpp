@@ -160,6 +160,7 @@ STDAPI DllRegisterServer(void)
             szModule,
             (ULONG)wcslen(szModule),
             0);
+        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, TRUE);
 
         // Also register under Vietnamese
         pProfiles->AddLanguageProfile(CLSID_GtvTextService,
@@ -170,6 +171,7 @@ STDAPI DllRegisterServer(void)
             szModule,
             (ULONG)wcslen(szModule),
             0);
+        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile, TRUE);
         pProfiles->Release();
     }
 

@@ -9,6 +9,7 @@
 .ibus-1.5.32*/
 
 /build/
+/release-pkg/
 core
 core.*
 .env

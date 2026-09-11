@@ -8,11 +8,11 @@
 #include "win_utf.h"
 
 static NOTIFYICONDATAW nid = {0};
-static HICON icon_v = NULL;
-static HICON icon_e = NULL;
 static HICON icon_current = NULL;
 
-static HICON create_tray_text_icon(gboolean enabled, GtvMode mode) {
+/* Like the Linux indicator (Telex/VNI label): T = Telex, V = VNI.
+ * Always "on" — English is a Win+Space keyboard switch, not a tray state. */
+static HICON create_tray_text_icon(GtvMode mode) {
     int cx = GetSystemMetrics(SM_CXSMICON);
     int cy = GetSystemMetrics(SM_CYSMICON);
     if (cx <= 0) cx = 16;
@@ -25,7 +25,7 @@ static HICON create_tray_text_icon(gboolean enabled, GtvMode mode) {
     HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmColor);
 
     RECT rc = {0, 0, cx, cy};
-    HBRUSH hbr = CreateSolidBrush(enabled ? RGB(178, 34, 34) : RGB(70, 80, 95));
+    HBRUSH hbr = CreateSolidBrush(RGB(178, 34, 34));
     FillRect(hdcMem, &rc, hbr);
     DeleteObject(hbr);
 
@@ -35,7 +35,7 @@ static HICON create_tray_text_icon(gboolean enabled, GtvMode mode) {
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
     HFONT hFontOld = (HFONT)SelectObject(hdcMem, hFont);
-    DrawTextW(hdcMem, enabled ? (mode == GTV_VNI ? L"V" : L"T") : L"E",
+    DrawTextW(hdcMem, mode == GTV_VNI ? L"V" : L"T",
               -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     SelectObject(hdcMem, hFontOld);
@@ -71,25 +71,24 @@ void gtv_config_strings_unlock(void) {
     LeaveCriticalSection(&config_lock);
 }
 
+static void tray_apply_icon_tip(void) {
+    if (icon_current) DestroyIcon(icon_current);
+    icon_current = create_tray_text_icon(g_app.config.mode);
+    nid.hIcon = icon_current;
+    gtv_win_copy_utf8(nid.szTip, G_N_ELEMENTS(nid.szTip),
+                      g_app.config.mode == GTV_VNI ? "GoTiengViet [VNI]" : "GoTiengViet [Telex]");
+}
+
 gboolean gtv_tray_init(HWND hwnd) {
     gtv_tray_ai_init();
-    HINSTANCE hinst = GetModuleHandle(NULL);
-    icon_v = LoadIcon(hinst, MAKEINTRESOURCE(IDI_TRAY_V));
-    icon_e = LoadIcon(hinst, MAKEINTRESOURCE(IDI_TRAY_E));
-    icon_current = create_tray_text_icon(g_app.enabled, g_app.config.mode);
 
     nid.cbSize = sizeof(NOTIFYICONDATAW);
     nid.hWnd = hwnd;
     nid.uID = 1;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
-    nid.hIcon = icon_current ? icon_current : (g_app.enabled ? icon_v : icon_e);
-    if (g_app.enabled) {
-        gtv_win_copy_utf8(nid.szTip, G_N_ELEMENTS(nid.szTip),
-                          g_app.config.mode == GTV_VNI ? "GoTiengViet [VNI]" : "GoTiengViet [Telex]");
-    } else {
-        gtv_win_copy_utf8(nid.szTip, G_N_ELEMENTS(nid.szTip), "GoTiengViet [English]");
-    }
+    tray_apply_icon_tip();
+    if (!nid.hIcon) return FALSE;
 
     return Shell_NotifyIconW(NIM_ADD, &nid);
 }
@@ -102,21 +101,12 @@ void gtv_tray_cleanup(void) {
     }
     Shell_NotifyIconW(NIM_DELETE, &nid);
     if (icon_current) DestroyIcon(icon_current);
-    if (icon_v) DestroyIcon(icon_v);
-    if (icon_e) DestroyIcon(icon_e);
+    icon_current = NULL;
 }
 
-void gtv_tray_update_icon(gboolean enabled) {
+void gtv_tray_update_icon(void) {
     nid.uFlags &= (UINT)~NIF_INFO; /* drop stale balloon text on icon updates */
-    if (icon_current) DestroyIcon(icon_current);
-    icon_current = create_tray_text_icon(enabled, g_app.config.mode);
-    nid.hIcon = icon_current ? icon_current : (enabled ? icon_v : icon_e);
-    if (enabled) {
-        gtv_win_copy_utf8(nid.szTip, G_N_ELEMENTS(nid.szTip),
-                          g_app.config.mode == GTV_VNI ? "GoTiengViet [VNI]" : "GoTiengViet [Telex]");
-    } else {
-        gtv_win_copy_utf8(nid.szTip, G_N_ELEMENTS(nid.szTip), "GoTiengViet [English]");
-    }
+    tray_apply_icon_tip();
     Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
@@ -125,8 +115,6 @@ void gtv_tray_show_menu(HWND hwnd) {
     GetCursorPos(&pt);
 
     HMENU hmenu = CreatePopupMenu();
-    UINT toggle_flag = g_app.enabled ? MF_CHECKED : MF_UNCHECKED;
-    gtv_win_menu_add_utf8(hmenu, "Bật gõ tiếng Việt [V]", toggle_flag, ID_TRAY_TOGGLE);
     gtv_win_menu_add_utf8(hmenu, "Bảng điều khiển...", 0, ID_TRAY_SETTINGS);
     gtv_win_menu_add_utf8(hmenu, NULL, MF_SEPARATOR, 0);
 
@@ -157,9 +145,6 @@ void gtv_tray_show_menu(HWND hwnd) {
     DestroyMenu(hmenu);
 
     switch (cmd) {
-        case ID_TRAY_TOGGLE:
-            gtv_app_toggle_mode();
-            break;
         case ID_TRAY_SETTINGS:
             gtv_setup_show(hwnd);
             break;

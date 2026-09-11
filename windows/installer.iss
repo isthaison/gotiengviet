@@ -35,6 +35,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; The running tray app holds this mutex (see windows/main.c); setup asks
 ; the user to close it instead of failing on locked exe/dlls.
 AppMutex=GoTiengViet_Single_Instance_Mutex
+; NEVER auto-close apps: CloseApplications once killed Explorer (black
+; screen) and hangs in /VERYSILENT (unanswerable dialog). In-use DLLs use
+; restartreplace (reboot finishes the swap); the user closes apps by hand.
+CloseApplications=no
 WizardStyle=modern
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\gotiengviet.exe
@@ -84,3 +88,16 @@ Filename: "{app}\gotiengviet.exe"; Description: "{cm:LaunchProgram,GoTiengViet}"
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/c set PATH={app};%PATH%&& regsvr32.exe /s /u ""{app}\gtv_tsf.dll"""; Flags: runhidden
+; The tray menu manages this same value independently of the installer's
+; [Tasks]/[Registry] entry, so delete it explicitly (stale autostart would
+; point at the removed {app} after uninstall).
+Filename: "{cmd}"; Parameters: "/c reg delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v GoTiengViet /f >nul 2>nul & exit /b 0"; Flags: runhidden; RunOnceId: "DelRun"
+; The elevated logon task is created by the app via schtasks (admin mode),
+; never by the installer, so remove it here (needs elevation itself when the
+; task is elevated; best-effort when running asInvoker).
+Filename: "schtasks.exe"; Parameters: "/Delete /TN GoTiengViet /F"; Flags: runhidden; RunOnceId: "DelTask"
+
+[UninstallDelete]
+; Catch strays the [Files] list never owned (downloaded deps, update
+; leftovers): {app} holds no user data (config lives in %APPDATA%).
+Type: filesandordirs; Name: "{app}"

@@ -11,7 +11,6 @@ ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
 # Windows tray app (C) + TSF text service (C++). Keep beside ENGINE_SRCS so
 # Makefile.win never drifts from the file list again.
 WIN_SRCS = windows/main.c windows/app.c windows/tray.c windows/tray_ai.c \
-           windows/setup.c windows/data.c windows/startup.c windows/update.c windows/tsf_install.c windows/win_utf.c
+           windows/setup.c windows/data.c windows/startup.c windows/update.c windows/tsf_install.c windows/win_utf.c windows/ollama.c
 TSF_SRCS = windows/tsf/tsf_service.cpp windows/tsf/tsf_key_sink.cpp \
-           windows/tsf/tsf_composition.cpp windows/tsf/tsf_register.cpp \
-           windows/tsf/tsf_langbar.cpp
+           windows/tsf/tsf_composition.cpp windows/tsf/tsf_register.cpp

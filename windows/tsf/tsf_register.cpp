@@ -6,8 +6,8 @@
 #include "tsf_service.h"
 
 static HINSTANCE g_hModule = NULL;
-static LONG g_cServerLocks = 0;
-static LONG g_cRefDll = 0;
+static volatile LONG g_cServerLocks = 0;
+static volatile LONG g_cRefDll = 0;
 
 /* DllCanUnloadNow must account for live objects, not just server locks. */
 void DllAddRef(void) { InterlockedIncrement(&g_cRefDll); }
@@ -61,7 +61,7 @@ public:
     }
 
 private:
-    LONG m_cRef;
+    volatile LONG m_cRef;
 };
 
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void **ppv)

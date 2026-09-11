@@ -1,9 +1,18 @@
 # Phát triển
 
-## Build và kiểm thử (Linux)
+## Build và kiểm thử (mọi nền tảng — một cửa lệnh)
 
 ```sh
-./gtv.sh build                    # = make build test
+./gtv.sh build        # Linux: make build test | Win: Makefile.win | mac: core + app
+./gtv.sh test         # chạy test suite của OS hiện tại
+./gtv.sh vet          # build + test nghiêm (-Werror nếu hỗ trợ)
+./gtv.sh clean        # xóa build/ và release-pkg/
+# Windows cmd (MSYS2/Git Bash đằng sau): gtv build | test | vet | clean
+```
+
+Linux giữ `make ...` trực tiếp vẫn dùng được:
+
+```sh
 make build                         # 3 binary + libgotiengviet.a
 make test                          # engine + support + thuật toán
 make vet                           # build + test với -Werror
@@ -12,18 +21,31 @@ make test-ui                       # giao diện setup
 make help
 ```
 
-Mọi lệnh shell gom trong một file duy nhất: `./gtv.sh <build|test|vet|clean|install|package|bump|help>` (`make ...` tương ứng vẫn dùng được).
+Mọi lệnh shell gom trong một file duy nhất: `./gtv.sh <build|test|vet|clean|install|uninstall|package|bump|help>`.
 
 `make test` gồm: Telex/VNI, stateful, config, JSON, Ollama (curl giả lập), chính tả, macro/emoji, prompts, config mặc định, từ điển học, so version/cập nhật, mirror màn hình, hoán vị thao tác, 20.000 chuỗi ngẫu nhiên.
 
 Binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` trong IBus), `ibus-setup-gotiengviet` (GUI/`--tray`/`--cli`), `gotiengviet-demo`, `libgotiengviet.a`.
 
-## Cài đặt và đóng gói (Linux)
+## Cài đặt, gỡ và đóng gói
 
 ```sh
-sudo ./gtv.sh install
-make package VERSION=X.Y-1
+sudo ./gtv.sh install              # Linux: chép file hệ thống + ibus restart
+sudo ./gtv.sh uninstall            # Linux: gỡ đúng danh sách install (giữ ~/.config)
+./gtv.sh package [VERSION]         # Linux: .deb
+make package VERSION=X.Y-1         # tương đương (Linux)
 ```
+
+Windows (MSYS2 MinGW, hoặc `gtv ...` từ cmd):
+
+```sh
+./gtv.sh package                   # staging + iscc -> gotiengviet-X.Y.Z-x64-setup.exe
+./gtv.sh install                   # dựng setup (nếu thiếu) + cài silent + chạy app
+./gtv.sh uninstall                 # gỡ silent + dọn Run/task/profile thừa
+```
+
+macOS: `./gtv.sh package` (zip `GoTiengViet.app`), `./gtv.sh install` (chép vào
+`~/Library/Input Methods`), `./gtv.sh uninstall` (xóa app, giữ `~/.config`).
 
 Giữ nguyên cấu hình người dùng; cuối cài đặt tự `ibus restart` từng phiên desktop (báo chứ không fail nếu không được). Thử không chạm hệ thống: `DESTDIR=/tmp/gotiengviet-staging ./gtv.sh install`. `make clean` chỉ xóa `build/`. Gỡ thủ công: xóa `/usr/libexec/ibus-engine-gotiengviet`, `/usr/libexec/ibus-setup-gotiengviet`, `/usr/bin/gotiengviet*`, `/usr/share/ibus/component/gotiengviet.xml`, rồi `ibus restart`.
 

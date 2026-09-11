@@ -1,5 +1,4 @@
 #include "tsf_service.h"
-#include "tsf_langbar.h"
 
 CGtvTextService::CGtvTextService() :
     m_cRef(1),
@@ -8,9 +7,7 @@ CGtvTextService::CGtvTextService() :
     m_dwThreadMgrEventSinkCookie(TF_INVALID_COOKIE),
     m_dwKeyEventSinkCookie(TF_INVALID_COOKIE),
     m_pComposition(NULL),
-    m_pEngine(NULL),
-    m_pLangBarItem(NULL),
-    m_fEnabled(TRUE)
+    m_pEngine(NULL)
 {
     ReloadConfig();
     DllAddRef();
@@ -22,16 +19,6 @@ void CGtvTextService::ReloadConfig()
     memset(&cfg, 0, sizeof(cfg));
     gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
     gtv_config_load(&cfg, config_dir);
-
-    m_fEnabled = TRUE;
-    gchar *path = g_build_filename(config_dir, "config", NULL);
-    GKeyFile *kf = g_key_file_new();
-    if (g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)) {
-        if (g_key_file_has_key(kf, "input", "enabled", NULL))
-            m_fEnabled = g_key_file_get_boolean(kf, "input", "enabled", NULL);
-    }
-    g_key_file_unref(kf);
-    g_free(path);
     g_free(config_dir);
 
     if (m_pEngine) {
@@ -42,28 +29,6 @@ void CGtvTextService::ReloadConfig()
         m_pEngine = gtv_engine_new(&cfg);
     }
     gtv_config_clear(&cfg);
-}
-
-void CGtvTextService::SetEnabled(BOOL enabled)
-{
-    m_fEnabled = enabled;
-    gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
-    gchar *path = g_build_filename(config_dir, "config", NULL);
-    GKeyFile *kf = g_key_file_new();
-    g_key_file_load_from_file(kf, path, G_KEY_FILE_KEEP_COMMENTS, NULL);
-    g_key_file_set_boolean(kf, "input", "enabled", m_fEnabled);
-    gchar *dir = g_path_get_dirname(path);
-    g_mkdir_with_parents(dir, 0755);
-    g_free(dir);
-    g_key_file_save_to_file(kf, path, NULL);
-    g_key_file_unref(kf);
-    g_free(path);
-    g_free(config_dir);
-}
-
-void CGtvTextService::ToggleEnabled()
-{
-    SetEnabled(!m_fEnabled);
 }
 
 CGtvTextService::~CGtvTextService()
@@ -131,8 +96,6 @@ STDMETHODIMP CGtvTextService::Activate(ITfThreadMgr *ptim, TfClientId tid)
         return E_FAIL;
     }
 
-    InitLangBarItem();
-
     return S_OK;
 }
 
@@ -148,7 +111,6 @@ STDMETHODIMP CGtvTextService::Deactivate(void)
         pComp->Release();
     }
 
-    UninitLangBarItem();
     UninitKeyEventSink();
     UninitThreadMgrEventSink();
 
@@ -244,52 +206,4 @@ void CGtvTextService::UninitKeyEventSink()
         pKeystrokeMgr->UnadviseKeyEventSink(m_tfClientId);
         pKeystrokeMgr->Release();
     }
-}
-
-BOOL CGtvTextService::InitLangBarItem()
-{
-    if (m_pLangBarItem) return TRUE;
-
-    ITfLangBarItemMgr *pLangBarItemMgr = NULL;
-    HRESULT hr = m_pThreadMgr->QueryInterface(IID_ITfLangBarItemMgr, (void**)&pLangBarItemMgr);
-    if (FAILED(hr) || !pLangBarItemMgr) {
-        typedef HRESULT (WINAPI *pfnTF_CreateLangBarItemMgr)(ITfLangBarItemMgr **pplbim);
-        HMODULE hMsctf = GetModuleHandleA("msctf.dll");
-        if (hMsctf) {
-            pfnTF_CreateLangBarItemMgr pfn = reinterpret_cast<pfnTF_CreateLangBarItemMgr>(
-                reinterpret_cast<void*>(GetProcAddress(hMsctf, "TF_CreateLangBarItemMgr")));
-            if (pfn) pfn(&pLangBarItemMgr);
-        }
-    }
-    if (!pLangBarItemMgr) return FALSE;
-
-    m_pLangBarItem = new CGtvLangBarItem(this);
-    hr = pLangBarItemMgr->AddItem(m_pLangBarItem);
-    pLangBarItemMgr->Release();
-
-    return SUCCEEDED(hr);
-}
-
-void CGtvTextService::UninitLangBarItem()
-{
-    if (!m_pLangBarItem) return;
-
-    ITfLangBarItemMgr *pLangBarItemMgr = NULL;
-    HRESULT hr = m_pThreadMgr->QueryInterface(IID_ITfLangBarItemMgr, (void**)&pLangBarItemMgr);
-    if (FAILED(hr) || !pLangBarItemMgr) {
-        typedef HRESULT (WINAPI *pfnTF_CreateLangBarItemMgr)(ITfLangBarItemMgr **pplbim);
-        HMODULE hMsctf = GetModuleHandleA("msctf.dll");
-        if (hMsctf) {
-            pfnTF_CreateLangBarItemMgr pfn = reinterpret_cast<pfnTF_CreateLangBarItemMgr>(
-                reinterpret_cast<void*>(GetProcAddress(hMsctf, "TF_CreateLangBarItemMgr")));
-            if (pfn) pfn(&pLangBarItemMgr);
-        }
-    }
-    if (pLangBarItemMgr) {
-        pLangBarItemMgr->RemoveItem(m_pLangBarItem);
-        pLangBarItemMgr->Release();
-    }
-
-    m_pLangBarItem->Release();
-    m_pLangBarItem = NULL;
 }

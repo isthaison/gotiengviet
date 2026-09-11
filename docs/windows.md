@@ -4,7 +4,7 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (`gtv_tsf.dll`, comp
 
 - Sau khi cài: đăng xuất/đăng nhập lại rồi chọn GoTiengViet bằng `Win+Space`.
 - Nếu chưa thấy bàn phím GoTiengViet: vào **Settings → Time & Language → Language** → chọn `English` (hoặc `Tiếng Việt`) → **Options** → **Add a keyboard** → chọn **GoTiengViet**. Không thấy nữa thì đăng xuất/đăng nhập lại một lần.
-- Nút `GoTV` trên language bar click để chuyển Việt/Anh (đỏ `V` / xám `E`); menu tray **Bật gõ tiếng Việt [V]** làm việc tương tự (đồng bộ qua file cấu hình).
+- Icon khay hiện kiểu gõ như bản Linux: đỏ `T` = Telex, đỏ `V` = VNI (click-trái/chuột-phải đều mở menu). Không có chữ `E`/nút tắt: chuyển Anh/Việt bằng `Win+Space` (Windows quản lý indicator ngôn ngữ).
 - Telex/VNI, chuẩn dấu, chính tả đổi trong Bảng điều khiển/menu tray, TSF nhận ngay khi chuyển ô nhập (đọc lại cấu hình mỗi lần kích hoạt).
 
 ## Cài đặt và cập nhật
@@ -15,10 +15,14 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (`gtv_tsf.dll`, comp
 
 ## Dùng hằng ngày
 
-- **Menu chuột phải**: Bật gõ tiếng Việt, Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu,
+- **Menu khay**: Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu,
   tự khởi động (thường/admin), Kiểm tra cập nhật, Thoát.
-- **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (Ollama, model, URL),
-  nút **Dữ liệu...** — lưu ở `%APPDATA%\gotiengviet\` như bản Linux.
+- **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (Ollama, model chọn
+  trong dropdown như bản Linux — `qwen2:0.5b`/`qwen2:1.5b`/`rule`, gõ tay model khác vẫn được — URL,
+  dòng trạng thái + log `ollama serve` như bản Linux),
+  nút **Dữ liệu...** — lưu ở `%APPDATA%\gotiengviet\` như bản Linux. Log serve nằm ở `%TEMP%\ollama_serve.log`;
+  khi bật AI (tick checkbox hoặc lưu), app tự kiểm tra → tải `OllamaSetup.exe` và cài im lặng nếu thiếu →
+  chạy `ollama serve` nền → pull model nếu chưa có, chờ `/api/tags` tối đa 15s. Cần mạng lần đầu (bản cài ~1GB).
 - **Gợi ý AI dạng balloon**: TSF báo mỗi từ vừa commit về app khay; từ sai được hỏi Ollama nền (`"sai" co the ban muon go "dung"?`, chống spam 10 giây). Cần Ollama + `curl` (có sẵn từ Windows 10). **Click balloon** để nhận (chưa gõ tiếp thì thay tại chỗ, rồi thì copy vào clipboard); lựa chọn được học vào `learned-corrections.txt` nên offline vẫn gợi ý.
 - Macro/emoji/prompts/config: chung lõi và file `data/` với bản Linux.
 - Chữ Việt hiển thị đúng mọi locale: toàn bộ UI dùng Unicode API, dialog đặt chữ lúc chạy.
@@ -54,10 +58,14 @@ hoặc Windows (Settings → Time & language → Typing → Highlight misspelt w
 ## Build và release
 
 ```sh
-# MSYS2 MinGW-w64:
+# MSYS2 MinGW-w64 (cửa lệnh chung, như Linux/macOS):
 pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glib2 make
-make -f Makefile.win            # gotiengviet.exe + gtv_tsf.dll, chạy test
-make -f Makefile.win setup VERSION=X.Y.Z   # cần Inno Setup (iscc.exe)
+./gtv.sh build                 # gotiengviet.exe + gtv_tsf.dll + test
+./gtv.sh package               # gotiengviet-X.Y.Z-x64-setup.exe (cần Inno Setup)
+./gtv.sh install               # cài silent + chạy app (đóng app giữ DLL trước)
+./gtv.sh uninstall             # gỡ + dọn Run/task/profile
+# Từ cmd.exe: gtv build | test | package | install | uninstall
+# Lệnh make gốc vẫn dùng được: mingw32-make -f Makefile.win [test|staging]
 ```
 
 Cắt release: `./gtv.sh bump X.Y.Z` (ghi `VERSION` + mọi file mang version),

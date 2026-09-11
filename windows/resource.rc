@@ -15,10 +15,8 @@
 1 RT_MANIFEST "app.manifest"
 
 IDI_APP_ICON    ICON    "icons/gotiengviet.ico"
-IDI_TRAY_V      ICON    "icons/tray_v.ico"
-IDI_TRAY_E      ICON    "icons/tray_e.ico"
 
-IDD_SETUP_DIALOG DIALOGEX 0, 0, 240, 225
+IDD_SETUP_DIALOG DIALOGEX 0, 0, 240, 312
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "GoTiengViet - Setup"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -38,13 +36,24 @@ BEGIN
     GROUPBOX        "AI suggestions (Ollama, optional)", IDC_GROUP_AI, 10, 130, 220, 60
     AUTOCHECKBOX    "Enable AI suggestions", IDC_CHECK_AI, 20, 144, 200, 10
     LTEXT           "Model:", IDC_LBL_MODEL, 20, 160, 40, 10
-    EDITTEXT        IDC_EDIT_MODEL, 65, 158, 155, 12
+    /* Dropdown (editable): same choices as Linux (qwen2:0.5b/1.5b/rule),
+     * custom model IDs can still be typed. Height 60 = dropped list. */
+    COMBOBOX        IDC_EDIT_MODEL, 65, 158, 155, 60,
+                    CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP
     LTEXT           "URL:", IDC_LBL_URL, 20, 174, 40, 10
     EDITTEXT        IDC_EDIT_URL, 65, 172, 155, 12
 
-    DEFPUSHBUTTON   "OK", IDC_BTN_OK, 120, 200, 50, 14
-    PUSHBUTTON      "Cancel", IDC_BTN_CANCEL, 175, 200, 50, 14
-    PUSHBUTTON      "Data", IDC_BTN_DATA, 55, 200, 60, 14
+    LTEXT           "Status", IDC_LBL_AI_STATUS, 10, 192, 220, 10
+    /* Short on purpose: the full log path has no spaces to wrap on, so it
+     * lives as the first line inside the log box instead. */
+    LTEXT           "Log", IDC_LBL_AI_LOG, 10, 204, 220, 10
+    CONTROL         "", IDC_EDIT_AI_LOG, "EDIT",
+                    ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_BORDER | WS_VSCROLL | WS_TABSTOP,
+                    10, 216, 220, 64
+
+    DEFPUSHBUTTON   "OK", IDC_BTN_OK, 120, 288, 50, 14
+    PUSHBUTTON      "Cancel", IDC_BTN_CANCEL, 175, 288, 50, 14
+    PUSHBUTTON      "Data", IDC_BTN_DATA, 55, 288, 60, 14
 END
 
 IDD_DATA_DIALOG DIALOGEX 0, 0, 280, 232

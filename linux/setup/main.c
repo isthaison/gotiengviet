@@ -120,6 +120,24 @@ static void tray_on_activate_vni(GtkMenuItem *item, gpointer data){
     run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
     tray_refresh_checks();
 }
+static void tray_toggle_method(void){
+    char *m = tray_current_method();
+    gboolean is_telex = (g_strcmp0(m, "vni") != 0 && g_strcmp0(m, "VNI") != 0);
+    g_free(m);
+    if (is_telex) {
+        tray_update_config_method("vni");
+        run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
+    } else {
+        tray_update_config_method("telex");
+        run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
+    }
+    run_shell("gsettings set org.gnome.desktop.input-sources sources \"[('xkb','us'),('ibus','gotiengviet')]\" 2>/dev/null; ibus engine gotiengviet 2>/dev/null &");
+    tray_refresh_checks();
+}
+static void tray_on_activate_toggle(GtkMenuItem *item, gpointer data){
+    (void)item; (void)data;
+    tray_toggle_method();
+}
 static void tray_on_activate_quit(GtkMenuItem *item, gpointer data){
     (void)item; (void)data;
     gtk_main_quit();
@@ -306,6 +324,9 @@ int tray_run(int argc, char *argv[]){
     group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(tray_item_telex));
     tray_item_vni = gtk_radio_menu_item_new_with_label(group, "VNI (1-5, 6-9)");
 
+    GtkWidget *tray_item_toggle = gtk_menu_item_new_with_label("Chuyển kiểu gõ (Telex ↔ VNI)");
+    g_signal_connect(tray_item_toggle, "activate", G_CALLBACK(tray_on_activate_toggle), NULL);
+
     GtkWidget *tray_item_setup = gtk_menu_item_new_with_label("Mở GoTiengViet Setup...");
     GtkWidget *tray_item_update = gtk_menu_item_new_with_label("Kiểm tra cập nhật...");
     GtkWidget *tray_item_quit = gtk_menu_item_new_with_label("Thoát");
@@ -314,6 +335,8 @@ int tray_run(int argc, char *argv[]){
     g_signal_connect(tray_item_setup, "activate", G_CALLBACK(tray_on_activate_setup), NULL);
     g_signal_connect(tray_item_update, "activate", G_CALLBACK(tray_on_activate_update), NULL);
     g_signal_connect(tray_item_quit, "activate", G_CALLBACK(tray_on_activate_quit), NULL);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), tray_item_toggle);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), tray_item_telex);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), tray_item_vni);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
@@ -323,6 +346,7 @@ int tray_run(int argc, char *argv[]){
     gtk_widget_show_all(menu);
 
     app_indicator_set_menu(tray_indicator, GTK_MENU(menu));
+    app_indicator_set_secondary_activate_target(tray_indicator, tray_item_toggle);
     tray_refresh_checks();
 
     if(gtv_update_should_autocheck()){
@@ -556,17 +580,9 @@ static void auto_install_ollama(void){
     if(lf){ fprintf(lf, "=== Cài Ollama (GoTiengViet Setup) ===\n"); fclose(lf); }
     snprintf(active_log_path, sizeof(active_log_path), "/tmp/ollama_install.log");
     start_log_poll();
-    gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang tải script cài Ollama...");
-    ai_log("Tải https://ollama.com/install.sh ...");
-    int rc = run_shell("curl -fsSL -m 60 https://ollama.com/install.sh -o /tmp/ollama_install.sh >>/tmp/ollama_install.log 2>&1");
-    if(rc != 0){
-        ai_log("LỖI tải script cài đặt (mất mạng?). Thử lại sau.");
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Không tải được script cài Ollama (kiểm tra mạng).");
-        return;
-    }
-    ai_log("Chạy cài đặt với quyền root (pkexec có thể hỏi mật khẩu)...");
-    gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang cài Ollama — xem log bên dưới.");
-    gchar *argv[] = {"pkexec", "sh", "-c", "sh /tmp/ollama_install.sh >>/tmp/ollama_install.log 2>&1", NULL};
+    gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang cài Ollama (curl -fsSL https://ollama.com/install.sh | sh)...");
+    ai_log("Chạy lệnh: curl -fsSL https://ollama.com/install.sh | sh (pkexec có thể hỏi mật khẩu)...");
+    gchar *argv[] = {"pkexec", "sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh >>/tmp/ollama_install.log 2>&1", NULL};
     GError *err = NULL;
     GPid pid = 0;
     if(!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, &err)){

@@ -1,8 +1,128 @@
 #include "internal.h"
 #include <gio/gio.h>
 
+#ifdef _WIN32
+#include <windows.h>
+
+static gchar *ollama_request_win32(const GtvConfig *config, const gchar *endpoint, const gchar *body, GCancellable *cancel) {
+    (void)cancel;
+    gchar *url = g_strconcat(config->url, endpoint, NULL);
+    HANDLE hStdInRead = NULL, hStdInWrite = NULL;
+    HANDLE hStdOutRead = NULL, hStdOutWrite = NULL;
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = NULL;
+
+    if (body) {
+        if (!CreatePipe(&hStdInRead, &hStdInWrite, &sa, 0)) {
+            g_free(url);
+            return NULL;
+        }
+        SetHandleInformation(hStdInWrite, HANDLE_FLAG_INHERIT, 0);
+    }
+    if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sa, 0)) {
+        if (hStdInRead) { CloseHandle(hStdInRead); CloseHandle(hStdInWrite); }
+        g_free(url);
+        return NULL;
+    }
+    SetHandleInformation(hStdOutRead, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    si.hStdInput = body ? hStdInRead : GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdOutput = hStdOutWrite;
+    si.hStdError = hStdOutWrite;
+    ZeroMemory(&pi, sizeof(pi));
+
+    gunichar2 *wurl = g_utf8_to_utf16(url, -1, NULL, NULL, NULL);
+    g_free(url);
+    if (!wurl) {
+        if (hStdInRead) { CloseHandle(hStdInRead); CloseHandle(hStdInWrite); }
+        CloseHandle(hStdOutRead); CloseHandle(hStdOutWrite);
+        return NULL;
+    }
+
+    const char *max_time = body ? "20" : "1";
+    gchar *curl_path = NULL;
+    const gchar *test_dir = g_getenv("GTV_TEST_CURL_DIR");
+    if (test_dir && *test_dir) {
+        gchar *cand = g_build_filename(test_dir, "curl.exe", NULL);
+        if (g_file_test(cand, G_FILE_TEST_EXISTS)) curl_path = cand;
+        else g_free(cand);
+    }
+    if (!curl_path) curl_path = g_find_program_in_path("curl.exe");
+    if (!curl_path) curl_path = g_find_program_in_path("curl");
+    gunichar2 *wprog = curl_path ? g_utf8_to_utf16(curl_path, -1, NULL, NULL, NULL) : NULL;
+    g_free(curl_path);
+    const WCHAR *prog_cmd = wprog ? (LPCWSTR)wprog : L"curl.exe";
+
+    size_t cmdlen = 0;
+    { gunichar2 *p = wurl; while (*p++) cmdlen++; }
+    cmdlen += wcslen(prog_cmd) + 256;
+    WCHAR *cmd = g_new0(WCHAR, cmdlen);
+    if (body) {
+        wsprintfW(cmd, L"\"%ls\" --silent --show-error --fail --max-time %hs --max-filesize 1048576 --proto =http,https --header \"Content-Type: application/json\" --data-binary @- --url \"%ls\"", prog_cmd, max_time, (LPCWSTR)wurl);
+    } else {
+        wsprintfW(cmd, L"\"%ls\" --silent --show-error --fail --max-time %hs --max-filesize 1048576 --proto =http,https --url \"%ls\"", prog_cmd, max_time, (LPCWSTR)wurl);
+    }
+    g_free(wurl);
+    g_free(wprog);
+
+    BOOL created = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    g_free(cmd);
+    if (hStdInRead) CloseHandle(hStdInRead);
+    CloseHandle(hStdOutWrite);
+
+    if (!created) {
+        if (hStdInWrite) CloseHandle(hStdInWrite);
+        CloseHandle(hStdOutRead);
+        return NULL;
+    }
+
+    if (body && hStdInWrite) {
+        DWORD written = 0;
+        size_t len = strlen(body);
+        WriteFile(hStdInWrite, body, (DWORD)len, &written, NULL);
+        CloseHandle(hStdInWrite);
+    }
+
+    CloseHandle(pi.hThread);
+    DWORD timeout = body ? 25000 : 3000;
+    DWORD wr = WaitForSingleObject(pi.hProcess, timeout);
+    if (wr == WAIT_TIMEOUT) {
+        TerminateProcess(pi.hProcess, 1);
+    }
+    DWORD exit_code = 1;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hProcess);
+
+    GString *res = g_string_new("");
+    char buf[1024];
+    DWORD bytesRead = 0;
+    while (ReadFile(hStdOutRead, buf, sizeof(buf) - 1, &bytesRead, NULL) && bytesRead > 0) {
+        buf[bytesRead] = '\0';
+        g_string_append(res, buf);
+    }
+    CloseHandle(hStdOutRead);
+
+    if (exit_code != 0) {
+        g_string_free(res, TRUE);
+        return NULL;
+    }
+    return g_string_free(res, FALSE);
+}
+#endif
+
 /* Requests run on a worker; cancellation also stops the curl process. */
 static gchar *ollama_request(const GtvConfig *config, const gchar *endpoint, const gchar *body, GCancellable *cancel) {
+#ifdef _WIN32
+    return ollama_request_win32(config, endpoint, body, cancel);
+#else
     gchar *url = g_strconcat(config->url, endpoint, NULL);
     const gchar *args[] = {"curl", "--silent", "--show-error", "--fail", "--max-time", body ? "20" : "1",
         "--max-filesize", "1048576", "--proto", "=http,https", "--url", url,
@@ -17,6 +137,7 @@ static gchar *ollama_request(const GtvConfig *config, const gchar *endpoint, con
     if (!ok || !g_subprocess_get_successful(process)) g_clear_pointer(&output, g_free);
     g_object_unref(process);
     return output;
+#endif
 }
 gboolean gtv_ai_available(const GtvConfig *config) {
     if (!config || !config->ai_enabled) return FALSE;

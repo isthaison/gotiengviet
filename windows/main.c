@@ -15,11 +15,19 @@ GtvWindowsApp g_app = {0};
 static const char *WINDOW_CLASS_NAME = GTV_TRAY_WINDOW_CLASS;
 static const char *MUTEX_NAME = "GoTiengViet_Single_Instance_Mutex";
 
+static UINT s_uTaskbarRestartMsg = 0;
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (s_uTaskbarRestartMsg != 0 && msg == s_uTaskbarRestartMsg) {
+        gtv_tray_init(hwnd);
+        return 0;
+    }
+
     switch (msg) {
         case WM_TRAY_CALLBACK: {
             if (lParam == WM_LBUTTONUP) {
-                gtv_app_toggle_mode();
+                GtvMode new_mode = (g_app.config.mode == GTV_TELEX) ? GTV_VNI : GTV_TELEX;
+                gtv_app_set_input_method(new_mode);
             } else if (lParam == WM_RBUTTONUP) {
                 gtv_tray_show_menu(hwnd);
             } else if (lParam == WM_LBUTTONDBLCLK) {
@@ -108,9 +116,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     gtv_config_load(&g_app.config, config_dir);
     g_free(config_dir);
 
-    g_app.enabled = gtv_app_load_enabled(TRUE); /* Restore V/E mode, default [V] */
-
     /* 4. Register message window class */
+    s_uTaskbarRestartMsg = RegisterWindowMessageA("TaskbarCreated");
+
     WNDCLASSEXA wc = {0};
     wc.cbSize = sizeof(WNDCLASSEXA);
     wc.lpfnWndProc = WndProc;
@@ -119,8 +127,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     RegisterClassExA(&wc);
 
     g_app.hwnd_main = CreateWindowExA(0, WINDOW_CLASS_NAME, "GoTiengViet Hidden Window",
-                                      0, 0, 0, 0, 0,
-                                      HWND_MESSAGE, NULL, hInstance, NULL);
+                                      WS_POPUP, 0, 0, 0, 0,
+                                      NULL, NULL, hInstance, NULL);
 
     /* 5. Initialize Tray Icon (typing is handled natively by Windows TSF) */
     gtv_tray_init(g_app.hwnd_main);

@@ -12,7 +12,7 @@
 
 gboolean gtv_tray_init(HWND hwnd);
 void gtv_tray_cleanup(void);
-void gtv_tray_update_icon(gboolean enabled);
+void gtv_tray_update_icon(void);
 void gtv_tray_show_menu(HWND hwnd);
 void gtv_tray_balloon(const gchar *title, const gchar *msg);
 /* Same balloon without the 10s anti-spam throttle, for rare update

@@ -6,8 +6,6 @@
 #endif
 
 #define IDI_APP_ICON        101
-#define IDI_TRAY_V          102
-#define IDI_TRAY_E          103
 
 #define IDD_SETUP_DIALOG    201
 #define IDC_RADIO_TELEX     202
@@ -18,7 +16,7 @@
 #define IDC_BTN_OK          207
 #define IDC_BTN_CANCEL      208
 #define IDC_CHECK_AI        209
-#define IDC_EDIT_MODEL      210
+#define IDC_EDIT_MODEL      210 /* CBS_DROPDOWN ComboBox (was EDITTEXT) */
 #define IDC_EDIT_URL        211
 /* Labels need individual IDs: every visible string is set at runtime
  * (UTF-8 -> UTF-16) so the dialog never depends on how windres decodes
@@ -37,10 +35,12 @@
 #define ID_TRAY_EXIT        307
 #define ID_TRAY_MODERN      308
 #define ID_TRAY_UPDATE      309
-#define ID_TRAY_TOGGLE      311
 #define ID_TRAY_STARTUP_ADMIN 312
 
 #define IDC_BTN_DATA        217
+#define IDC_LBL_AI_STATUS   233
+#define IDC_LBL_AI_LOG      234
+#define IDC_EDIT_AI_LOG     235
 
 #define IDD_DATA_DIALOG     220
 #define IDC_DATA_MACRO      221

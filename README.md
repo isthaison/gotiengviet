@@ -97,7 +97,9 @@ build/gotiengviet-demo --suggest kông              # cần Ollama
 ibus-setup-gotiengviet            # GUI Linux (tự bật tray nền)
 ibus-setup-gotiengviet --tray     # chỉ indicator
 ibus-setup-gotiengviet --cli      # terminal
-./gtv.sh build | test | vet | install | package | bump | help
+./gtv.sh build | test | vet | install | uninstall | package | bump | help
+# Windows (MSYS2 MinGW hoặc cmd):  gtv build | test | install | uninstall | package
+# macOS: ./gtv.sh build | test | install | uninstall | package  (app vào ~/Library/Input Methods)
 ```
 
 ## Xử lý sự cố
@@ -114,7 +116,7 @@ ibus-setup-gotiengviet --cli      # terminal
 ## Đóng góp
 
 Mời issue/PR: mở issue mô tả lỗi kèm OS + phiên bản + log, hoặc PR nhỏ, test xanh
-(`./gtv.sh build` trên Linux, `mingw32-make -f Makefile.win test` trên Windows).
+(`./gtv.sh test` mọi nền tảng — Windows chạy trong MSYS2 MinGW hoặc `gtv test` từ cmd).
 Chuẩn code: `engine/` thuần C đa nền tảng, adapter riêng từng OS trong `linux/`, `windows/`, `macos/`.
 
 > 💡 **Gợi ý topics cho repo** (mục About → ⚙️): `vietnamese` `tieng-viet` `telex` `vni`

@@ -59,27 +59,20 @@ public:
     BOOL IsComposing() const { return m_pComposition != NULL; }
 
     void ReloadConfig();
-    BOOL IsEnabled() const { return m_fEnabled; }
-    void SetEnabled(BOOL enabled);
-    void ToggleEnabled();
 
 private:
-    LONG m_cRef;
+    volatile LONG m_cRef;
     ITfThreadMgr *m_pThreadMgr;
     TfClientId m_tfClientId;
     DWORD m_dwThreadMgrEventSinkCookie;
     DWORD m_dwKeyEventSinkCookie;
     ITfComposition *m_pComposition;
     GtvEngine *m_pEngine;
-    class CGtvLangBarItem *m_pLangBarItem;
-    BOOL m_fEnabled;
 
     BOOL InitKeyEventSink();
     void UninitKeyEventSink();
     BOOL InitThreadMgrEventSink();
     void UninitThreadMgrEventSink();
-    BOOL InitLangBarItem();
-    void UninitLangBarItem();
 };
 
 #endif // GTV_TSF_SERVICE_H

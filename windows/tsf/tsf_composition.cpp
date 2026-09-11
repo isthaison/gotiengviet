@@ -69,7 +69,7 @@ public:
     }
 
 private:
-    LONG m_cRef;
+    volatile LONG m_cRef;
     CGtvTextService *m_pService;
     ITfContext *m_pContext;
     EditAction m_action;

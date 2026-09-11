@@ -32,18 +32,31 @@ Giữ nguyên cấu hình người dùng; cuối cài đặt tự `ibus restart`
 ```text
 engine/           lõi dùng chung (C): compose, charset, phonology, config,
                   spell, macro/emoji, ai+ollama, json, learn, update
-                  (check version GitHub), mirror (mirror màn hình cho
-                  client pass-through), text, telex/vni adapter
+                  (check version GitHub), text, telex/vni adapter
 linux/
   ibus/           adapter IBus: engine.c, gotiengviet.xml/icons
   setup/          GTK, indicator, CLI
+windows/          app khay + setup + update (C: main/app/tray/tray_ai/
+                  setup/update/tsf_install/win_utf) + tsf/ (C++ TSF Text Service)
+macos/            IME InputMethodKit: controller, main, Info.plist (bundle),
+                  SetupWindowController (preview, đang hoàn thiện)
+site/             trang chủ GitHub Pages (HTML/CSS tĩnh + SEO meta),
+                  deploy bằng .github/workflows/pages.yml
+.github/          CI: build-linux, build-windows, build-macos (test lõi +
+                  đóng gói .deb/.exe/.app), pages (deploy site)
+mk/common.mk      danh sách file dùng chung (ENGINE_SRCS/WIN_SRCS/TSF_SRCS)
+VERSION           số version duy nhất (Makefile/Makefile.win đọc từ đây;
+                  bump bằng ./gtv.sh bump, không sửa tay)
 tools/
   demo/           demo terminal dùng chung mọi nền tảng
 tests/            kiểm thử C (+ fake curl)
-windows/          app khay, setup, update (C) + tsf/ (C++ TSF Text Service)
-macos/            IME InputMethodKit (đang làm)
 data/             macro, emoji, config/ai mẫu, prompts, seed từ điển
 ```
+
+Quy ước đa nền tảng: `engine/` không chứa code riêng OS nào
+(chỉ glib/gio); mỗi OS là một adapter mỏng trong `linux/`, `windows/`,
+`macos/` gọi vào engine. Thêm file nguồn mới thì khai báo ở
+`mk/common.mk` (Windows) — Linux tự glob `engine/*.c`.
 
 Mọi lệnh shell gom trong `./gtv.sh` duy nhất (`build|test|vet|clean|install|package|bump|help`).
 
@@ -77,3 +90,7 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 2. Commit, push tag `vX.Y.Z`.
 3. CI Windows build `gotiengviet-X.Y.Z-x64-setup.exe`, CI Linux build `gotiengviet_X.Y.Z-1_<arch>.deb`, cả hai đính kèm release để app tự cập nhật.
 4. Linux: khay hệ thống có mục **Kiểm tra cập nhật...** (tự kiểm tra mỗi ngày, báo qua notify khi có bản mới) — tải `.deb` đúng kiến trúc rồi cài qua `pkexec dpkg -i`, xong tự `ibus restart`. Cần `curl`.
+
+---
+Xem thêm: [README](../README.md) · [Cấu hình](config.md) · [Bản Windows](windows.md) ·
+[Bản macOS](macos.md) · [Trang chủ](https://isthaison.github.io/gotiengviet/)

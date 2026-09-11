@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GoTiengViet — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows, macOS</title>
+  <meta name="description" content="GoTiengViet là bộ gõ tiếng Việt mã nguồn mở (Telex/VNI) cho Linux (IBus), Windows 10/11 (TSF) và macOS. Nhẹ, riêng tư, chính tả ngoại tuyến, gợi ý AI Ollama local.">
+  <meta name="keywords" content="bộ gõ tiếng việt, go tieng viet, gotiengviet, telex, vni, vietnamese input method, vietnamese keyboard, ibus vietnamese, unikey alternative, evkey, openkey, gõ tiếng việt linux, gõ tiếng việt windows, ollama vietnamese">
+  <meta name="author" content="GoTiengViet Project">
+  <link rel="canonical" href="https://isthaison.github.io/gotiengviet/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="GoTiengViet">
+  <meta property="og:title" content="GoTiengViet — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows, macOS">
+  <meta property="og:description" content="Một lõi C duy nhất, gõ Telex/VNI mọi nền tảng. Chính tả ngoại tuyến, macro/emoji, AI Ollama local. MIT.">
+  <meta property="og:url" content="https://isthaison.github.io/gotiengviet/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="GoTiengViet — Bộ gõ tiếng Việt mã nguồn mở">
+  <meta name="twitter:description" content="Telex/VNI cho Linux, Windows, macOS. Nhẹ, riêng tư, AI local.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23b22222'/><text x='8' y='12' font-size='10' font-weight='bold' text-anchor='middle' fill='white' font-family='sans-serif'>T</text></svg>">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "GoTiengViet",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": ["Linux", "Windows 10", "Windows 11", "macOS"],
+    "license": "https://opensource.org/licenses/MIT",
+    "inLanguage": "vi",
+    "description": "Bộ gõ tiếng Việt Telex/VNI mã nguồn mở cho Linux, Windows và macOS.",
+    "downloadUrl": "https://github.com/isthaison/gotiengviet/releases/latest",
+    "codeRepository": "https://github.com/isthaison/gotiengviet"
+  }
+  </script>
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="./"><span class="badge">T</span> GoTiengViet</a>
+    <nav>
+      <a href="#tinh-nang">Tính năng</a>
+      <a href="#cai-dat">Cài đặt</a>
+      <a href="#tai-ve">Tải về</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/isthaison/gotiengviet" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Bộ gõ tiếng Việt <span class="hl">Telex/VNI</span> cho Linux, Windows &amp; macOS</h1>
+      <p class="tagline">Một lõi C duy nhất — gõ <code>duocjwd</code> ra <strong>được</strong> ở mọi nơi.
+        Chính tả ngoại tuyến, macro/emoji, AI local. Mã nguồn mở MIT.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/isthaison/gotiengviet/releases/latest" rel="noopener">⬇ Tải bản mới nhất</a>
+        <a class="btn" href="https://github.com/isthaison/gotiengviet" rel="noopener">★ Star trên GitHub</a>
+      </div>
+      <pre class="demo"><code>$ gotiengviet-demo --transform telex duocjwd
+được</code></pre>
+    </section>
+
+    <section id="tinh-nang">
+      <h2>Tính năng</h2>
+      <div class="grid">
+        <article><h3>⌨️ Telex + VNI một lõi</h3><p>Một thuật toán chung, chỉ khác bảng phím. Kiểu đặt dấu hiện đại (<em>hòa</em>) hoặc truyền thống (<em>hoà</em>).</p></article>
+        <article><h3>🛰️ Chính tả không cần mạng</h3><p>Gạch đỏ ngay khi gõ theo quy tắc âm tiết tiếng Việt: âm đầu, vần, phụ âm cuối, thanh.</p></article>
+        <article><h3>🤖 Gợi ý AI local</h3><p>Ollama chạy trên máy bạn — debounce 350&nbsp;ms, rớt mạng vẫn gợi ý từ dữ liệu đã học.</p></article>
+        <article><h3>⚡ Macro &amp; emoji text</h3><p><code>cty=Công ty TNHH</code>, <code>:smile:</code>→😊, <code>(y)</code>→👍. Sửa file text là xong.</p></article>
+        <article><h3>🪶 Nhẹ &amp; riêng tư</h3><p>Lõi C thuần + glib, không runtime ngoài, không gửi phím đi đâu. Cài per-user, không cần admin (Windows).</p></article>
+        <article><h3>🔄 Tự cập nhật</h3><p>Kiểm tra release GitHub mỗi ngày, cài đè giữ nguyên cấu hình trên cả 3 nền tảng.</p></article>
+      </div>
+    </section>
+
+    <section id="cai-dat">
+      <h2>Cài đặt</h2>
+      <div class="grid">
+        <article>
+          <h3>🐧 Linux (Ubuntu/GNOME)</h3>
+          <pre><code>sudo apt install build-essential pkg-config \
+  libibus-1.0-dev libgtk-3-dev \
+  libayatana-appindicator3-dev librsvg2-bin
+./gtv.sh build
+sudo ./gtv.sh install</code></pre>
+          <p>Rồi thêm <strong>GoTiengViet</strong> trong Settings → Keyboard → Input Sources, chuyển bằng <code>Super+Space</code>.</p>
+        </article>
+        <article>
+          <h3>🪟 Windows 10/11</h3>
+          <p>Chạy <code>gotiengviet-*-x64-setup.exe</code> từ trang Releases → đăng xuất/đăng nhập lại → chọn <strong>GoTV</strong> bằng <code>Win+Space</code>.</p>
+          <p><a href="https://github.com/isthaison/gotiengviet/blob/main/docs/windows.md" rel="noopener">Hướng dẫn bản Windows →</a></p>
+        </article>
+        <article>
+          <h3>🍎 macOS <span class="pill">preview</span></h3>
+          <p>Giải nén <code>gotiengviet-*-macos.zip</code> vào <code>~/Library/Input Methods</code>, mở app một lần (chuột phải → Open), đăng nhập lại.</p>
+          <p><a href="https://github.com/isthaison/gotiengviet/blob/main/docs/macos.md" rel="noopener">Hướng dẫn bản macOS →</a></p>
+        </article>
+      </div>
+    </section>
+
+    <section id="tai-ve">
+      <h2>Tải về</h2>
+      <table>
+        <thead><tr><th>Nền tảng</th><th>File</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+          <tr><td>Windows 10/11 (x64)</td><td><code>gotiengviet-*-x64-setup.exe</code></td><td>✅ Ổn định</td></tr>
+          <tr><td>Linux (.deb)</td><td><code>gotiengviet_*_amd64.deb</code></td><td>✅ Ổn định</td></tr>
+          <tr><td>macOS (.app zip)</td><td><code>gotiengviet-*-macos.zip</code></td><td>🧪 Preview</td></tr>
+        </tbody>
+      </table>
+      <p><a class="btn primary" href="https://github.com/isthaison/gotiengviet/releases/latest" rel="noopener">Đến trang Releases</a></p>
+    </section>
+
+    <section id="faq">
+      <h2>Câu hỏi thường gặp</h2>
+      <details><summary>Khác gì Unikey / EVKey?</summary><p>GoTiengViet dùng một lõi C chung cho cả 3 OS, có gạch đỏ chính tả khi gõ và gợi ý AI local (Ollama) — những thứ Unikey/EVKey không có. Unikey vẫn gọn nhẹ nếu bạn chỉ cần gõ cơ bản trên Windows.</p></details>
+      <details><summary>Có cần mạng không?</summary><p>Không. Gõ, chính tả, macro/emoji đều ngoại tuyến. Chỉ gợi ý AI online mới cần Ollama (chạy local) và chỉ khi bạn bật.</p></details>
+      <details><summary>Gõ <code>1</code> ra <code>ă</code> trên Windows?</summary><p>Đó là layout VIE của Windows đặt chữ Việt ở hàng số. GoTiengViet đã ép dịch phím qua layout US nên gõ <code>1</code> ra <code>1</code> đúng. Nếu còn bị: kiểm tra đang dùng bàn phím <strong>GoTV</strong> (không phải Vietnamese Telex của Microsoft) và cập nhật bản mới nhất.</p></details>
+      <details><summary>macOS báo “unidentified developer”?</summary><p>Bản preview chưa ký số Apple. Chuột phải vào app → Open để chấp nhận một lần. Bản ổn định sẽ được ký + notarize.</p></details>
+      <details><summary>Mất GoTV sau cập nhật Windows?</summary><p>Đăng xuất/đăng nhập lại; nếu chưa thấy: Settings → Time &amp; Language → Language → Options → Add a keyboard → GoTiengViet.</p></details>
+      <details><summary>Cấu hình lưu ở đâu?</summary><p>Linux/macOS: <code>~/.config/gotiengviet/</code> — Windows: <code>%APPDATA%\gotiengviet\</code>. Macro/emoji/từ điển học đều là file text, sửa tay được. <a href="https://github.com/isthaison/gotiengviet/blob/main/docs/config.md" rel="noopener">Chi tiết →</a></p></details>
+    </section>
+  </main>
+
+  <footer>
+    <p><strong>GoTiengViet</strong> — MIT License ·
+      <a href="https://github.com/isthaison/gotiengviet" rel="noopener">GitHub</a> ·
+      <a href="https://github.com/isthaison/gotiengviet/blob/main/docs/config.md" rel="noopener">Cấu hình</a> ·
+      <a href="https://github.com/isthaison/gotiengviet/blob/main/docs/dev.md" rel="noopener">Phát triển</a></p>
+    <p class="kw">bộ gõ tiếng việt · telex · vni · vietnamese input method · ibus · unikey alternative</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,96 @@
+name: Build macOS Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    # Needed by the Release Asset step (softprops/action-gh-release)
+    # to attach the macOS zip on tags.
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install glib pkg-config
+
+      - name: Build and test core engine
+        # Same suites as Windows (engine + support + algorithm):
+        # the IBus/GTK tests stay Linux-only.
+        run: |
+          mkdir -p build/macos/fixtures
+          CORE_CFLAGS="$(pkg-config --cflags glib-2.0 gio-2.0) -Iengine"
+          CORE_LIBS="$(pkg-config --libs glib-2.0 gio-2.0) -lm"
+          clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
+            $CORE_CFLAGS tests/test_engine.c engine/*.c $CORE_LIBS \
+            -o build/macos/test-engine
+          clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
+            $CORE_CFLAGS tests/test_support.c engine/*.c $CORE_LIBS \
+            -o build/macos/test-support
+          clang -O2 -g -std=gnu11 -Wall -Wextra \
+            tests/fake_curl.c $CORE_LIBS -o build/macos/fixtures/curl
+          GTV_DATA_DIR="$PWD/data" ./build/macos/test-engine
+          GTV_DATA_DIR="$PWD/data" \
+            GTV_TEST_CURL_DIR="$PWD/build/macos/fixtures" \
+            ./build/macos/test-support
+
+      - name: Build GoTiengViet.app bundle
+        run: |
+          APP=build/macos/GoTiengViet.app/Contents
+          mkdir -p "$APP/MacOS" "$APP/Resources/data"
+          CORE_CFLAGS="$(pkg-config --cflags glib-2.0 gio-2.0) -Iengine"
+          CORE_LIBS="$(pkg-config --libs glib-2.0 gio-2.0) -lm"
+          # Manual-retain sources (no ARC): matches Xcode default for these files.
+          clang -O2 -g -Wall \
+            $CORE_CFLAGS \
+            -framework Cocoa -framework InputMethodKit \
+            engine/*.c macos/*.m $CORE_LIBS \
+            -o "$APP/MacOS/GoTiengViet"
+          cp macos/Info.plist "$APP/Info.plist"
+          printf 'APPL????' > "$APP/PkgInfo"
+          cp data/macros.txt data/emojis.txt data/config data/ai.conf \
+            data/prompts.conf data/learned-corrections.txt \
+            data/learned-words.txt "$APP/Resources/data/"
+          plutil -lint "$APP/Info.plist"
+          file "$APP/MacOS/GoTiengViet"
+          find build/macos/GoTiengViet.app -maxdepth 4 | sort
+
+      - name: Compute version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            VER="$(cat VERSION 2>/dev/null || echo 0.8.0)"
+          fi
+          echo "APP_VERSION=$VER" >> "$GITHUB_ENV"
+          echo "version: $VER"
+
+      - name: Package .app zip (on Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cd build/macos
+          zip -qry "gotiengviet-${APP_VERSION}-macos.zip" GoTiengViet.app
+          ls -la gotiengviet-*-macos.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gotiengviet-macos-app
+          path: build/macos/GoTiengViet.app
+
+      - name: Release Asset (on Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/macos/gotiengviet-*-macos.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

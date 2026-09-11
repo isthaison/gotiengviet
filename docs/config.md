@@ -46,3 +46,7 @@ prompt=...            # correct_hint: từ bị đánh dấu sai; complete_hint:
 ```
 
 Mọi `%` khác giữ nguyên (`%%` cho dấu phần trăm), `\n` là xuống dòng. Thiếu mẫu nào, yêu cầu đó trả rỗng/báo lỗi thay vì dùng chữ cứng.
+
+---
+Xem thêm: [README](../README.md) · [Bản Windows](windows.md) · [Bản macOS](macos.md) ·
+[Phát triển](dev.md) · [Trang chủ](https://isthaison.github.io/gotiengviet/)

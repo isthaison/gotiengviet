@@ -35,4 +35,9 @@ make -f Makefile.win            # gotiengviet.exe + gtv_tsf.dll, chạy test
 make -f Makefile.win setup VERSION=X.Y.Z   # cần Inno Setup (iscc.exe)
 ```
 
-Cắt release: bump `windows/version.h` + `windows/resource.rc` + `linux/ibus/gotiengviet.xml` cùng số, commit, push tag `vX.Y.Z` — CI build `gotiengviet-X.Y.Z-x64-setup.exe` và đính kèm release để app tự cập nhật.
+Cắt release: `./gtv.sh bump X.Y.Z` (ghi `VERSION` + mọi file mang version),
+commit, push tag `vX.Y.Z` — CI build `gotiengviet-X.Y.Z-x64-setup.exe` và đính kèm release để app tự cập nhật.
+
+---
+Xem thêm: [README](../README.md) · [Cấu hình](config.md) · [Bản macOS](macos.md) ·
+[Phát triển](dev.md) · [Trang chủ](https://isthaison.github.io/gotiengviet/)

@@ -2,6 +2,8 @@
 #include "tray.h"
 #include <glib/gstdio.h>
 
+static void gtv_app_save_enabled(void);
+
 gchar *gtv_app_config_path(void) {
     return g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
 }

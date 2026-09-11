@@ -97,7 +97,7 @@ build/gotiengviet-demo --suggest kông              # cần Ollama
 ibus-setup-gotiengviet            # GUI Linux (tự bật tray nền)
 ibus-setup-gotiengviet --tray     # chỉ indicator
 ibus-setup-gotiengviet --cli      # terminal
-./gtv.sh build | test | vet | install | uninstall | package | bump | help
+./gtv.sh build | test | vet | install | install-ollama | uninstall | package | bump | help
 # Windows (MSYS2 MinGW hoặc cmd):  gtv build | test | install | uninstall | package
 # macOS: ./gtv.sh build | test | install | uninstall | package  (app vào ~/Library/Input Methods)
 ```

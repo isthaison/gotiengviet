@@ -23,7 +23,7 @@ make help
 
 Mọi lệnh shell gom trong một file duy nhất: `./gtv.sh <build|test|vet|clean|install|uninstall|package|bump|help>`.
 
-`make test` gồm: Telex/VNI, stateful, config, JSON, Ollama (curl giả lập), chính tả, macro/emoji, prompts, config mặc định, từ điển học, so version/cập nhật, mirror màn hình, hoán vị thao tác, 20.000 chuỗi ngẫu nhiên.
+`make test` gồm: Telex/VNI, stateful, config, JSON, Ollama (curl giả lập), chính tả, macro/emoji, prompts, config mặc định, từ điển học, so version/cập nhật, hoán vị thao tác, 20.000 chuỗi ngẫu nhiên.
 
 Binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` trong IBus), `ibus-setup-gotiengviet` (GUI/`--tray`/`--cli`), `gotiengviet-demo`, `libgotiengviet.a`.
 

@@ -50,7 +50,7 @@ jobs:
             VER="${GITHUB_REF#refs/tags/v}"
           else
             VER="$(sed -n 's/^#define GTV_VERSION "\(.*\)"/\1/p' windows/version.h)"
-            [ -n "$VER" ] || VER="0.8.1"
+            [ -n "$VER" ] || VER="0.8.2"
           fi
           VERNUM="$(echo "$VER" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/').0"
           case "$VERNUM" in
@@ -69,6 +69,18 @@ jobs:
         run: |
           make -f Makefile.win staging
 
+      - name: Code sign staging binaries
+        shell: powershell
+        run: |
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert `
+            -Subject "CN=GoTiengViet Open Source Project, O=GoTiengViet, C=VN" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -NotAfter (Get-Date).AddYears(5)
+          Export-Certificate -Cert $cert -FilePath gotiengviet.cer
+          Get-ChildItem -Path release-pkg -Include *.exe, *.dll -Recurse | ForEach-Object {
+            Set-AuthenticodeSignature -FilePath $_.FullName -Certificate $cert -HashAlgorithm SHA256
+          }
+
       - name: Build versioned installer
         # Native ISCC must receive /Q /D... literally: exclude all args
         # from msys2's automatic POSIX->Windows path conversion.
@@ -78,16 +90,30 @@ jobs:
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /Q "/DAppVersion=$APP_VERSION" "/DAppVerNum=$APP_VERNUM" "/DSourceDir=..\\release-pkg" windows/installer.iss
           ls -la gotiengviet-*-x64-setup.exe
 
+      - name: Code sign setup installer
+        shell: powershell
+        run: |
+          $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -match "GoTiengViet Open Source Project" } | Select-Object -First 1
+          if ($cert) {
+            Get-ChildItem -Filter "gotiengviet-*-x64-setup.exe" | ForEach-Object {
+              Set-AuthenticodeSignature -FilePath $_.FullName -Certificate $cert -HashAlgorithm SHA256
+            }
+          }
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: gotiengviet-windows-setup
-          path: gotiengviet-*-x64-setup.exe
+          path: |
+            gotiengviet-*-x64-setup.exe
+            gotiengviet.cer
 
       - name: Release Asset (on Tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: gotiengviet-*-x64-setup.exe
+          files: |
+            gotiengviet-*-x64-setup.exe
+            gotiengviet.cer
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

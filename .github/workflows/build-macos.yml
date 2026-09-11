@@ -74,23 +74,43 @@ jobs:
           echo "APP_VERSION=$VER" >> "$GITHUB_ENV"
           echo "version: $VER"
 
-      - name: Package .app zip (on Tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Package installer .dmg and .pkg
         run: |
-          cd build/macos
-          zip -qry "gotiengviet-${APP_VERSION}-macos.zip" GoTiengViet.app
-          ls -la gotiengviet-*-macos.zip
+          # 1. Package .pkg installer via Apple native pkgbuild
+          mkdir -p "build/macos/pkg_root/Library/Input Methods"
+          cp -R build/macos/GoTiengViet.app "build/macos/pkg_root/Library/Input Methods/"
+          pkgbuild --root build/macos/pkg_root \
+                   --identifier "org.freedesktop.IBus.GoTiengViet" \
+                   --version "${APP_VERSION}" \
+                   --install-location "/" \
+                   "build/macos/gotiengviet-${APP_VERSION}-macos.pkg"
+
+          # 2. Package .dmg installer via Apple native hdiutil
+          mkdir -p build/macos/dmg_root
+          cp -R build/macos/GoTiengViet.app build/macos/dmg_root/
+          ln -s "/Library/Input Methods" "build/macos/dmg_root/Input Methods"
+          ln -s /Applications build/macos/dmg_root/Applications
+          hdiutil create -volname "GoTiengViet" \
+                         -srcfolder build/macos/dmg_root \
+                         -ov -format UDZO \
+                         "build/macos/gotiengviet-${APP_VERSION}-macos.dmg"
+
+          ls -la build/macos/gotiengviet-*-macos.*
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gotiengviet-macos-app
-          path: build/macos/GoTiengViet.app
+          name: gotiengviet-macos-installers
+          path: |
+            build/macos/gotiengviet-*-macos.dmg
+            build/macos/gotiengviet-*-macos.pkg
 
       - name: Release Asset (on Tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/macos/gotiengviet-*-macos.zip
+          files: |
+            build/macos/gotiengviet-*-macos.dmg
+            build/macos/gotiengviet-*-macos.pkg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

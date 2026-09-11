@@ -9,10 +9,12 @@ cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotiengviet/`.
 
 ## Cài bản preview
 
-1. Tải `gotiengviet-<version>-macos.zip` ở trang
+1. Tải file cài đặt `gotiengviet-<version>-macos.dmg` hoặc `gotiengviet-<version>-macos.pkg` ở trang
    [Releases](https://github.com/isthaison/gotiengviet/releases/latest)
    (do CI build, chưa ký số Apple).
-2. Giải nén vào `~/Library/Input Methods/GoTiengViet.app`.
+2. **Cài đặt**:
+   - Nếu dùng file `.pkg`: Click đúp để chạy trình cài đặt chuẩn của macOS, ứng dụng sẽ được tự động cài vào `/Library/Input Methods/`.
+   - Nếu dùng file `.dmg`: Mở file và kéo thả `GoTiengViet.app` vào thư mục `Input Methods`.
 3. Mở app một lần (chuột phải → Open, chấp nhận cảnh báo "unidentified developer"),
    rồi đăng xuất/đăng nhập lại.
 4. Vào **System Settings → Keyboard → Text Input → Edit → Add** → chọn **GoTiengViet**,
@@ -25,8 +27,7 @@ cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotiengviet/`.
 - Mở app lần nữa để mở cửa sổ **Dữ liệu** (bảng Macro/Emoji: xem, thêm/sửa/xóa,
   mở thư mục — chung API với bản Windows/Linux; lưu xong khởi động lại app để nhận).
   Bảng Cài đặt đầy đủ (kiểu gõ/chuẩn dấu/AI) đang làm tiếp.
-- Tự kiểm tra cập nhật mỗi ngày như bản Windows (tải `.zip` macOS về `/tmp`, tự giải nén
-  vào `~/Library/Input Methods` rồi đăng xuất/đăng nhập lại).
+- Tự kiểm tra cập nhật mỗi ngày như bản Windows (tự tải bản cập nhật mới nhất về `/tmp` và mở để cài đặt).
 - Macro/emoji/prompts/config: chung lõi và file `data/` với mọi nền tảng.
 - Hỗ trợ AI (Ollama): cài đặt Ollama trên macOS bằng lệnh chính thức:
   ```sh

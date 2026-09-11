@@ -7,9 +7,13 @@ static const char *kConnectionName = "GoTiengViet_Connection";
 
 static gboolean mac_asset_match(const gchar *asset, const gchar *tagver, gpointer unused) {
     (void)unused;
-    gchar *want = g_strdup_printf("gotiengviet-%s-macos.zip", tagver);
-    gboolean ok = strcmp(asset, want) == 0;
-    g_free(want);
+    gchar *want_dmg = g_strdup_printf("gotiengviet-%s-macos.dmg", tagver);
+    gchar *want_pkg = g_strdup_printf("gotiengviet-%s-macos.pkg", tagver);
+    gchar *want_zip = g_strdup_printf("gotiengviet-%s-macos.zip", tagver);
+    gboolean ok = (strcmp(asset, want_dmg) == 0 || strcmp(asset, want_pkg) == 0 || strcmp(asset, want_zip) == 0);
+    g_free(want_dmg);
+    g_free(want_pkg);
+    g_free(want_zip);
     return ok;
 }
 
@@ -20,7 +24,7 @@ static NSString *bundleVersion(void) {
 
 static void showAvailableAlert(NSString *tag, NSString *url) {
     NSString *msg = [NSString stringWithFormat:
-        @"Có bản mới %@. Tải về ngay? (Giải nén vào ~/Library/Input Methods rồi đăng xuất/đăng nhập lại.)",
+        @"Có bản mới %@. Tải về file cài đặt ngay?",
         tag];
     NSAlert *alert = [[[NSAlert alloc] init] autorelease];
     [alert setMessageText:@"GoTiengViet cập nhật"];
@@ -28,7 +32,9 @@ static void showAvailableAlert(NSString *tag, NSString *url) {
     [alert addButtonWithTitle:@"Tải về"];
     [alert addButtonWithTitle:@"Để sau"];
     if ([alert runModal] != NSAlertFirstButtonReturn) return;
-    NSString *dest = [NSString stringWithFormat:@"/tmp/gotiengviet-%@-macos.zip", tag];
+    NSString *ext = [url pathExtension];
+    if (![ext length]) ext = @"dmg";
+    NSString *dest = [NSString stringWithFormat:@"/tmp/gotiengviet-%@-macos.%@", tag, ext];
     if (gtv_update_download([url UTF8String], [dest UTF8String])) {
         [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:
             [NSArray arrayWithObject:[NSURL fileURLWithPath:dest]]];

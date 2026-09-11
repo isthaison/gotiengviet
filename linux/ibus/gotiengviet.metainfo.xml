@@ -20,6 +20,11 @@
   </provides>
   <url type="homepage">https://github.com/isthaison/gotiengviet</url>
   <releases>
+    <release version="0.8.2" date="2026-09-11">
+      <description>
+        <p>Sửa lỗi ẩn icon khay hệ thống, click icon chuyển nhanh Telex/VNI, chuẩn hóa lệnh cài Ollama chính thức, đóng gói macOS dmg/pkg.</p>
+      </description>
+    </release>
     <release version="0.8.1" date="2026-09-11">
       <description>
         <p>Sửa lỗi gõ phím số ra chữ Việt trên layout VIE, thêm GoTV cho ENG, balloon có dấu, preview macOS, site mới.</p>

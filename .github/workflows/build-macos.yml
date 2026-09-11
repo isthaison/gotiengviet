@@ -49,9 +49,8 @@ jobs:
           mkdir -p "$APP/MacOS" "$APP/Resources/data"
           CORE_CFLAGS="$(pkg-config --cflags glib-2.0 gio-2.0) -Iengine"
           CORE_LIBS="$(pkg-config --libs glib-2.0 gio-2.0) -lm"
-          # Manual-retain sources (no ARC) + Blocks (main.m uses ^{}
-          # dispatch blocks): matches Xcode defaults for these files.
-          clang -O2 -g -Wall -fblocks \
+          # Manual-retain sources, no Blocks, no ARC: plain clang must pass.
+          clang -O2 -g -Wall \
             $CORE_CFLAGS \
             -framework Cocoa -framework InputMethodKit \
             engine/*.c macos/*.m $CORE_LIBS \

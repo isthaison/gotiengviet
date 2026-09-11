@@ -1,6 +1,5 @@
 #import <Cocoa/Cocoa.h>
 #import <InputMethodKit/InputMethodKit.h>
-#import <dispatch/dispatch.h>
 #include "engine.h"
 #include "SetupWindowController.h"
 
@@ -41,6 +40,72 @@ static void showAvailableAlert(NSString *tag, NSString *url) {
     }
 }
 
+/* No Blocks anywhere in this file on purpose: it compiles with plain clang
+ * (no -fblocks, no ARC), so background work uses NSThread and UI hops use
+ * performSelectorOnMainThread:. */
+@interface GtvUpdater : NSObject
++ (instancetype)sharedUpdater;
+- (void)checkInBackground:(NSDictionary *)args;
+- (void)presentResult:(NSDictionary *)info;
+- (void)showSettingsNotification:(NSNotification *)note;
+@end
+
+@implementation GtvUpdater
+
++ (instancetype)sharedUpdater {
+    static GtvUpdater *shared = nil;
+    if (!shared) shared = [[GtvUpdater alloc] init];
+    return shared;
+}
+
+- (void)checkInBackground:(NSDictionary *)args {
+    @autoreleasepool {
+        BOOL manual = [[args objectForKey:@"manual"] boolValue];
+        NSString *current = [args objectForKey:@"current"];
+        gchar *tag = NULL, *url = NULL;
+        GtvUpdateStatus st = gtv_update_check_full(NULL, [current UTF8String],
+                                                   mac_asset_match, NULL, &tag, &url);
+        NSString *nstag = tag ? [NSString stringWithUTF8String:tag] : nil;
+        NSString *nsurl = url ? [NSString stringWithUTF8String:url] : nil;
+        g_free(tag);
+        g_free(url);
+        NSMutableDictionary *info = [NSMutableDictionary dictionary];
+        [info setObject:[NSNumber numberWithInt:(int)st] forKey:@"status"];
+        [info setObject:[NSNumber numberWithBool:manual] forKey:@"manual"];
+        [info setObject:current forKey:@"current"];
+        if (nstag) [info setObject:nstag forKey:@"tag"];
+        if (nsurl) [info setObject:nsurl forKey:@"url"];
+        [[GtvUpdater sharedUpdater] performSelectorOnMainThread:@selector(presentResult:)
+                                                     withObject:info
+                                                  waitUntilDone:NO];
+    }
+}
+
+- (void)presentResult:(NSDictionary *)info {
+    GtvUpdateStatus st = (GtvUpdateStatus)[[info objectForKey:@"status"] intValue];
+    BOOL manual = [[info objectForKey:@"manual"] boolValue];
+    NSString *current = [info objectForKey:@"current"];
+    NSString *nstag = [info objectForKey:@"tag"];
+    NSString *nsurl = [info objectForKey:@"url"];
+    if (st == GTV_UPDATE_AVAILABLE && nstag && nsurl) {
+        showAvailableAlert(nstag, nsurl);
+    } else if (manual) {
+        NSAlert *alert = [[[NSAlert alloc] init] autorelease];
+        [alert setMessageText:@"GoTiengViet cập nhật"];
+        [alert setInformativeText:(st == GTV_UPDATE_CURRENT)
+            ? [NSString stringWithFormat:@"Đang dùng bản mới nhất (%@).", current]
+            : @"Không kiểm tra được bản mới. Thử lại sau."];
+        [alert runModal];
+    }
+}
+
+- (void)showSettingsNotification:(NSNotification *)note {
+    (void)note;
+    GoTiengVietShowSettings();
+}
+
+@end
+
 /* Network off the main thread, alerts back on it. Manual mode always
  * reports; auto mode is silent unless an update exists. */
 static void checkForUpdates(BOOL manual) {
@@ -49,28 +114,12 @@ static void checkForUpdates(BOOL manual) {
         gtv_update_mark_checked();
     }
     NSString *current = bundleVersion();
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        @autoreleasepool {
-            gchar *tag = NULL, *url = NULL;
-            GtvUpdateStatus st = gtv_update_check_full(NULL, [current UTF8String],
-                                                       mac_asset_match, NULL, &tag, &url);
-        NSString *nstag = tag ? [NSString stringWithUTF8String:tag] : nil;
-        NSString *nsurl = url ? [NSString stringWithUTF8String:url] : nil;
-        g_free(tag);
-        g_free(url);
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (st == GTV_UPDATE_AVAILABLE && nstag && nsurl) {
-                showAvailableAlert(nstag, nsurl);
-            } else if (manual) {
-                NSAlert *alert = [[[NSAlert alloc] init] autorelease];
-                [alert setMessageText:@"GoTiengViet cập nhật"];
-                [alert setInformativeText:(st == GTV_UPDATE_CURRENT)
-                    ? [NSString stringWithFormat:@"Đang dùng bản mới nhất (%@).", current]
-                    : @"Không kiểm tra được bản mới. Thử lại sau."];
-                [alert runModal];
-            }
-        });
-    });
+    NSDictionary *args = [NSDictionary dictionaryWithObjectsAndKeys:
+        [NSNumber numberWithBool:manual], @"manual",
+        current, @"current", nil];
+    [NSThread detachNewThreadSelector:@selector(checkInBackground:)
+                             toTarget:[GtvUpdater sharedUpdater]
+                           withObject:args];
 }
 
 void GoTiengVietCheckForUpdates(BOOL manual) {
@@ -99,13 +148,10 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     [[NSDistributedNotificationCenter defaultCenter]
-        addObserverForName:@"vn.gotiengviet.ShowSettings" object:nil queue:nil
-               usingBlock:^(NSNotification *note) {
-                   (void)note;
-                   dispatch_async(dispatch_get_main_queue(), ^{
-                       GoTiengVietShowSettings();
-                   });
-               }];
+        addObserver:[GtvUpdater sharedUpdater]
+           selector:@selector(showSettingsNotification:)
+               name:@"vn.gotiengviet.ShowSettings"
+             object:nil];
 
     IMKServer *server = [[IMKServer alloc]
         initWithName:[NSString stringWithUTF8String:kConnectionName]

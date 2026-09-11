@@ -28,6 +28,10 @@ cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotiengviet/`.
 - Tự kiểm tra cập nhật mỗi ngày như bản Windows (tải `.zip` macOS về `/tmp`, tự giải nén
   vào `~/Library/Input Methods` rồi đăng xuất/đăng nhập lại).
 - Macro/emoji/prompts/config: chung lõi và file `data/` với mọi nền tảng.
+- Hỗ trợ AI (Ollama): cài đặt Ollama trên macOS bằng lệnh chính thức:
+  ```sh
+  curl -fsSL https://ollama.com/install.sh | sh
+  ```
 
 ## Build từ source (dev)
 

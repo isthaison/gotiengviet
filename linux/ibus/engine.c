@@ -504,8 +504,68 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     }
     return FALSE;
 }
+static void update_mode_property(IBusEngine *engine){
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    IBusProperty *prop=ibus_property_new(
+        "mode",
+        PROP_TYPE_NORMAL,
+        ibus_text_new_from_static_string(e->mode_telex ? "Telex" : "VNI"),
+        NULL,
+        ibus_text_new_from_static_string("Chuyển kiểu gõ (Telex ↔ VNI)"),
+        TRUE,
+        TRUE,
+        PROP_STATE_UNCHECKED,
+        NULL
+    );
+    ibus_engine_update_property(engine, prop);
+}
+
+static void register_engine_properties(IBusEngine *engine){
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    IBusPropList *prop_list=ibus_prop_list_new();
+    IBusProperty *prop=ibus_property_new(
+        "mode",
+        PROP_TYPE_NORMAL,
+        ibus_text_new_from_static_string(e->mode_telex ? "Telex" : "VNI"),
+        NULL,
+        ibus_text_new_from_static_string("Chuyển kiểu gõ (Telex ↔ VNI)"),
+        TRUE,
+        TRUE,
+        PROP_STATE_UNCHECKED,
+        NULL
+    );
+    ibus_prop_list_append(prop_list, prop);
+    ibus_engine_register_properties(engine, prop_list);
+}
+
+static void ibus_gotiengviet_engine_property_activate(IBusEngine *engine, const gchar *prop_name, guint prop_state){
+    (void)prop_state;
+    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    if(g_strcmp0(prop_name, "mode") == 0){
+        e->mode_telex = !e->mode_telex;
+        gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+        char *dir = g_path_get_dirname(path);
+        g_mkdir_with_parents(dir, 0755);
+        g_free(dir);
+        GKeyFile *kf = g_key_file_new();
+        g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL);
+        g_key_file_set_string(kf, "input", "method", e->mode_telex ? "telex" : "vni");
+        gsize len = 0;
+        gchar *data = g_key_file_to_data(kf, &len, NULL);
+        if(data){
+            g_file_set_contents(path, data, (gssize)len, NULL);
+            g_free(data);
+        }
+        g_key_file_free(kf);
+        g_free(path);
+
+        update_mode_property(engine);
+    }
+}
+
 static void ibus_gotiengviet_engine_enable(IBusEngine *engine){
     ibus_engine_get_surrounding_text(engine,NULL,NULL,NULL);
+    register_engine_properties(engine);
 }
 static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
@@ -518,6 +578,7 @@ static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
      * next keystroke; nothing is redrawn here, so a client that already
      * consumed the text can never see a ghost duplicate. */
     clear_candidates(e);
+    update_mode_property(engine);
     // Một engine duy nhất "gotiengviet": chuyển Telex/VNI trên indicator của app GoTiengViet
     // Đồng bộ cache mtime để reload_config_if_changed không load lại ngay
     gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
@@ -643,6 +704,7 @@ static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass
     ec->set_capabilities=ibus_gotiengviet_engine_set_capabilities;
     ec->set_content_type=ibus_gotiengviet_engine_set_content_type;
     ec->candidate_clicked=ibus_gotiengviet_engine_candidate_clicked;
+    ec->property_activate=ibus_gotiengviet_engine_property_activate;
 }
 static void ibus_gotiengviet_engine_init(IBusGoTiengVietEngine *e){
     e->preedit=g_string_new("");

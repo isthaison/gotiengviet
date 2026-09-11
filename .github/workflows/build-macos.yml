@@ -37,7 +37,7 @@ jobs:
             $CORE_CFLAGS tests/test_support.c engine/*.c $CORE_LIBS \
             -o build/macos/test-support
           clang -O2 -g -std=gnu11 -Wall -Wextra \
-            tests/fake_curl.c $CORE_LIBS -o build/macos/fixtures/curl
+            $CORE_CFLAGS tests/fake_curl.c $CORE_LIBS -o build/macos/fixtures/curl
           GTV_DATA_DIR="$PWD/data" ./build/macos/test-engine
           GTV_DATA_DIR="$PWD/data" \
             GTV_TEST_CURL_DIR="$PWD/build/macos/fixtures" \

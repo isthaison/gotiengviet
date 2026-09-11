@@ -2,6 +2,7 @@
 #include "tray.h"
 #include "tray_ai.h"
 #include "setup.h"
+#include "startup.h"
 #include "tsf_install.h"
 #include "update.h"
 #include "resource.h"
@@ -68,8 +69,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     (void)hPrevInstance;
-    (void)lpCmdLine;
     (void)nCmdShow;
+
+    /* Elevated startup worker: apply and exit before any window/mutex.
+     * Forms: --configure-startup admin|admin-off|user (from gtv_startup_request). */
+    if (lpCmdLine && !strncmp(lpCmdLine, "--configure-startup", 19)) {
+        const char *op = lpCmdLine + 19;
+        while (*op == ' ') op++;
+        return gtv_startup_apply(op);
+    }
+    (void)lpCmdLine;
 
     /* 1. Single-instance check */
     HANDLE hMutex = CreateMutexA(NULL, TRUE, MUTEX_NAME);

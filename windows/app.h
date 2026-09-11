@@ -21,7 +21,7 @@ extern GtvWindowsApp g_app;
 
 void gtv_app_toggle_mode(void);
 void gtv_app_set_mode(gboolean enabled);
-void gtv_app_toggle_mode(void);
+void gtv_app_set_input_method(GtvMode mode);
 void gtv_app_save_config(void);
 gboolean gtv_app_load_enabled(gboolean def);
 gchar *gtv_app_config_path(void);

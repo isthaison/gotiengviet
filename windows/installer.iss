@@ -76,8 +76,11 @@ Name: "{userdesktop}\GoTiengViet"; Filename: "{app}\gotiengviet.exe"; Tasks: des
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GoTiengViet"; ValueData: """{app}\gotiengviet.exe"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
-Filename: "regsvr32.exe"; Parameters: "/s ""{app}\gtv_tsf.dll"""; Flags: runhidden
+; regsvr32 loads from System32, so its DLL search misses our bundled glib
+; next to gtv_tsf.dll: prepend {app} to PATH or registration silently
+; fails and no keyboard appears in language settings.
+Filename: "{cmd}"; Parameters: "/c \"set PATH={app};%PATH%&& regsvr32.exe /s ""{app}\gtv_tsf.dll""\""; Flags: runhidden
 Filename: "{app}\gotiengviet.exe"; Description: "{cm:LaunchProgram,GoTiengViet}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "regsvr32.exe"; Parameters: "/s /u ""{app}\gtv_tsf.dll"""; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c \"set PATH={app};%PATH%&& regsvr32.exe /s /u ""{app}\gtv_tsf.dll""\""; Flags: runhidden

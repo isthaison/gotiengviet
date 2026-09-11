@@ -41,17 +41,17 @@ test: $(BUILD_DIR)/test-engine $(BUILD_DIR)/test-support $(BUILD_DIR)/fixtures/c
 vet:
 	$(MAKE) build test CFLAGS='-O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Werror' BUILD_DIR=$(BUILD_DIR)/strict
 install: build
-	sudo ./install.sh
+	sudo ./gtv.sh install
 package: build
-	./package.sh $(VERSION)
+	./gtv.sh package "$(VERSION)"
 clean:
-	./clean.sh
+	./gtv.sh clean
 help:
-	@echo 'make build | test | vet | install | package VERSION=... | clean'
-	@echo 'make bump V=X.Y.Z [NOTES="..."]  - bump version everywhere via ./bump-version.sh'
+	@echo 'make build | test | vet | install | package VERSION=... | clean | bump V=...'
+	@echo '  (shell entry point: ./gtv.sh <build|test|vet|clean|install|package|bump|help>)'
 .PHONY: bump
 bump:
-	./bump-version.sh "$(V)" "$(NOTES)"
+	./gtv.sh bump "$(V)" "$(NOTES)"
 -include $(CORE_OBJ:.o=.d)
 
 $(BUILD_DIR)/test-setup: tests/test_setup.c cmd/setup/main.c $(CORE_LIB)

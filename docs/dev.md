@@ -3,7 +3,7 @@
 ## Build và kiểm thử (Linux)
 
 ```sh
-./build.sh                         # = make build test
+./gtv.sh build                    # = make build test
 make build                         # 3 binary + libgotiengviet.a
 make test                          # engine + support + thuật toán
 make vet                           # build + test với -Werror
@@ -12,6 +12,8 @@ make test-ui                       # giao diện setup
 make help
 ```
 
+Mọi lệnh shell gom trong một file duy nhất: `./gtv.sh <build|test|vet|clean|install|package|bump|help>` (`make ...` tương ứng vẫn dùng được).
+
 `make test` gồm: Telex/VNI, stateful, config, JSON, Ollama (curl giả lập), chính tả, macro/emoji, prompts, config mặc định, từ điển học, so version/cập nhật, mirror màn hình, hoán vị thao tác, 20.000 chuỗi ngẫu nhiên.
 
 Binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` trong IBus), `ibus-setup-gotiengviet` (GUI/`--tray`/`--cli`), `gotiengviet-demo`, `libgotiengviet.a`.
@@ -19,11 +21,11 @@ Binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` trong IBus), `ibus-se
 ## Cài đặt và đóng gói (Linux)
 
 ```sh
-sudo ./install.sh
+sudo ./gtv.sh install
 make package VERSION=X.Y-1
 ```
 
-Giữ nguyên cấu hình người dùng; cuối cài đặt tự `ibus restart` từng phiên desktop (báo chứ không fail nếu không được). Thử không chạm hệ thống: `DESTDIR=/tmp/gotiengviet-staging ./install.sh`. `make clean` chỉ xóa `build/`. Gỡ thủ công: xóa `/usr/libexec/ibus-engine-gotiengviet`, `/usr/libexec/ibus-setup-gotiengviet`, `/usr/bin/gotiengviet*`, `/usr/share/ibus/component/gotiengviet.xml`, rồi `ibus restart`.
+Giữ nguyên cấu hình người dùng; cuối cài đặt tự `ibus restart` từng phiên desktop (báo chứ không fail nếu không được). Thử không chạm hệ thống: `DESTDIR=/tmp/gotiengviet-staging ./gtv.sh install`. `make clean` chỉ xóa `build/`. Gỡ thủ công: xóa `/usr/libexec/ibus-engine-gotiengviet`, `/usr/libexec/ibus-setup-gotiengviet`, `/usr/bin/gotiengviet*`, `/usr/share/ibus/component/gotiengviet.xml`, rồi `ibus restart`.
 
 ## Cấu trúc mã nguồn
 
@@ -67,7 +69,7 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 
 ## Cắt release
 
-1. Bump một lệnh (đừng sửa tay từng file — script là nơi duy nhất ghi version): `make bump V=X.Y.Z ["ghi chú"]` (chạy `./bump-version.sh`). Kiểm tra `git diff`, rồi commit.
+1. Bump một lệnh (đừng sửa tay từng file — script là nơi duy nhất ghi version): `make bump V=X.Y.Z ["ghi chú"]` (chạy `./gtv.sh bump`). Kiểm tra `git diff`, rồi commit.
 2. Commit, push tag `vX.Y.Z`.
 3. CI Windows build `gotiengviet-X.Y.Z-x64-setup.exe`, CI Linux build `gotiengviet_X.Y.Z-1_<arch>.deb`, cả hai đính kèm release để app tự cập nhật.
 4. Linux: khay hệ thống có mục **Kiểm tra cập nhật...** (tự kiểm tra mỗi ngày, báo qua notify khi có bản mới) — tải `.deb` đúng kiến trúc rồi cài qua `pkexec dpkg -i`, xong tự `ibus restart`. Cần `curl`.

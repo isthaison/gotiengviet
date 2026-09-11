@@ -17,8 +17,8 @@ Tài liệu chi tiết: [Cấu hình](docs/config.md) · [Bản Windows](docs/wi
 ```sh
 sudo apt install build-essential pkg-config libibus-1.0-dev libgtk-3-dev \
   libayatana-appindicator3-dev librsvg2-bin
-./build.sh
-sudo ./install.sh
+./gtv.sh build
+sudo ./gtv.sh install
 ```
 
 Rồi vào **Settings → Keyboard → Input Sources** thêm **GoTiengViet (Telex)** và/hoặc **GoTiengViet (VNI)** (nguồn `GoTiengViet` chung theo kiểu gõ trong app), chuyển bằng `Super+Space`.

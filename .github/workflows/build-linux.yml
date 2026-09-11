@@ -26,7 +26,7 @@ jobs:
 
       - name: Build and test
         run: |
-          ./build.sh
+          ./gtv.sh build
 
       - name: Compute version
         if: startsWith(github.ref, 'refs/tags/v')

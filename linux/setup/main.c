@@ -1,4 +1,5 @@
 #include "../../engine/engine.h"
+#include "data.h"
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
 #include <libayatana-appindicator/app-indicator.h>
@@ -752,6 +753,10 @@ static void on_save(GtkWidget *w, gpointer data){
 static void on_cancel(GtkWidget *w, gpointer data){
     gtk_main_quit();
 }
+static void on_data(GtkWidget *w, gpointer data){
+    (void)w;
+    data_show(GTK_WINDOW(data));
+}
 static gboolean update_progress(gpointer data){
     if(download_in_progress){
         gtk_progress_bar_pulse(GTK_PROGRESS_BAR(progress_ai));
@@ -891,6 +896,9 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     GtkWidget *bbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_widget_set_halign(bbox, GTK_ALIGN_END);
     gtk_box_pack_start(GTK_BOX(vbox), bbox, FALSE, FALSE, 0);
+    GtkWidget *btn_data = gtk_button_new_with_label("Dữ liệu...");
+    g_signal_connect(btn_data, "clicked", G_CALLBACK(on_data), win);
+    gtk_box_pack_start(GTK_BOX(bbox), btn_data, FALSE, FALSE, 0);
     GtkWidget *btn_cancel = gtk_button_new_with_label("Hủy");
     g_signal_connect(btn_cancel, "clicked", G_CALLBACK(on_cancel), NULL);
     gtk_box_pack_start(GTK_BOX(bbox), btn_cancel, FALSE, FALSE, 0);

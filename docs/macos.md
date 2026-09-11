@@ -22,7 +22,9 @@ cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotiengviet/`.
 
 - Gõ Telex/VNI như bản Linux/Windows (kiểu gõ, chuẩn dấu, chính tả đọc từ
   `~/.config/gotiengviet/config` — xem [Cấu hình](config.md)).
-- Mở app lần nữa để mở Cài đặt (preview hiện chỉ bring-to-front; bảng đầy đủ đang làm).
+- Mở app lần nữa để mở cửa sổ **Dữ liệu** (bảng Macro/Emoji: xem, thêm/sửa/xóa,
+  mở thư mục — chung API với bản Windows/Linux; lưu xong khởi động lại app để nhận).
+  Bảng Cài đặt đầy đủ (kiểu gõ/chuẩn dấu/AI) đang làm tiếp.
 - Tự kiểm tra cập nhật mỗi ngày như bản Windows (tải `.zip` macOS về `/tmp`, tự giải nén
   vào `~/Library/Input Methods` rồi đăng xuất/đăng nhập lại).
 - Macro/emoji/prompts/config: chung lõi và file `data/` với mọi nền tảng.

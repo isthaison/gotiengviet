@@ -3,25 +3,20 @@ CXX ?= g++
 WINDRES ?= windres
 PKG_CONFIG ?= pkg-config
 
+include mk/common.mk
+
 CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32 -lole32 -luuid
 
 TSF_CXXFLAGS ?= -O2 -g -std=c++14 -Wall -Wextra -Wno-unused-parameter -Iengine -Iwindows/tsf $(shell $(PKG_CONFIG) --cflags gio-2.0)
 TSF_LDFLAGS ?= -shared windows/tsf/gtv_tsf.def $(ENGINE_OBJS) $(shell $(PKG_CONFIG) --libs gio-2.0) -lintl -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -lgdi32 -mwindows
 
-ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
-              engine/engine.c engine/json.c engine/learn.c engine/macro.c \
-              engine/phonology.c engine/promotion.c engine/spell.c \
-              engine/telex.c engine/text.c engine/update.c engine/vni.c
-
-WIN_SRCS = windows/main.c windows/app.c windows/tray.c windows/setup.c windows/update.c
-TSF_SRCS = windows/tsf/tsf_service.cpp windows/tsf/tsf_key_sink.cpp windows/tsf/tsf_composition.cpp windows/tsf/tsf_register.cpp windows/tsf/tsf_langbar.cpp
 RC_SRC = windows/resource.rc
 
 # Release version: installer filename, Add/Remove Programs entry and the
-# in-app updater compare against this. Bump windows/version.h,
-# windows/resource.rc and linux/ibus/gotiengviet.xml together on release.
-VERSION ?= 0.8.0
+# in-app updater compare against this. Single source is ./VERSION
+# (see mk/common.mk); bump via ./gtv.sh bump, never by hand.
+VERSION ?= $(GTV_VERSION)
 # Inno needs a 4-part numeric version; keep VERSION as X.Y.Z for that.
 VERSION_NUM ?= $(VERSION).0
 

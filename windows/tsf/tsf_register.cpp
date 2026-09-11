@@ -159,8 +159,18 @@ STDAPI DllRegisterServer(void)
             0);
         pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile, TRUE);
 
-        // Disable English profile so it doesn't show a duplicate entry in Win+Space
-        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, FALSE);
+        // Some Windows apps only activate TIPs registered for the current
+        // input language. Keep the Vietnamese profile, and also expose the
+        // same keyboard under en-US for systems/apps that never switch to vi-VN.
+        pProfiles->AddLanguageProfile(CLSID_GtvTextService,
+            GTV_LANG_ENGLISH,
+            GUID_GtvProfile,
+            GTV_TSF_DESC,
+            (ULONG)wcslen(GTV_TSF_DESC),
+            szModule,
+            (ULONG)wcslen(szModule),
+            0);
+        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, TRUE);
         pProfiles->Release();
     }
 

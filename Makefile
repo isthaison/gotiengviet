@@ -5,7 +5,11 @@ CFLAGS ?= -O2 -g
 CFLAGS += -std=gnu11 -Wall -Wextra -Wno-unused-parameter
 CPPFLAGS += -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 BUILD_DIR ?= build
-VERSION ?= 0.8.0-1
+# Shared file list + version (see mk/common.mk). Linux keeps a wildcard for
+# CORE_SRC so new engine/*.c files never need a Makefile edit; VERSION
+# defaults to the single source in ./VERSION.
+include mk/common.mk
+VERSION ?= $(GTV_VERSION)-1
 # Macro/emoji tables for tests (and dev runs without install).
 export GTV_DATA_DIR ?= $(abspath data)
 CORE_SRC := $(wildcard engine/*.c)

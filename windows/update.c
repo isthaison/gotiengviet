@@ -109,20 +109,20 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
         pending_tag = g_strdup(res->tag);
         pending_url = g_strdup(res->url);
         InterlockedExchange(&update_balloon_owned, 1);
-        gchar *msg = g_strdup_printf("Co ban moi %s. Nhan vao day de tai va cai dat.", res->tag);
+        gchar *msg = g_strdup_printf("Có bản mới %s. Nhấn vào đây để tải và cài đặt.", res->tag);
         update_log("balloon shown: update available %s", res->tag);
-        gtv_tray_balloon_force("GoTiengViet cap nhat", msg);
+        gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
         g_free(msg);
     } else if (manual) {
         InterlockedExchange(&update_balloon_owned, 0);
         if (res->status == GTV_UPDATE_CURRENT) {
-            gchar *msg = g_strdup_printf("Ban dang dung ban moi nhat (%s).", GTV_VERSION);
+            gchar *msg = g_strdup_printf("Bạn đang dùng bản mới nhất (%s).", GTV_VERSION);
             update_log("balloon shown: up to date %s", GTV_VERSION);
-            gtv_tray_balloon_force("GoTiengViet cap nhat", msg);
+            gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
             g_free(msg);
         } else {
             update_log("balloon shown: check error");
-            gtv_tray_balloon_force("GoTiengViet cap nhat", "Khong kiem tra duoc ban moi. Thu lai sau.");
+            gtv_tray_balloon_force("GoTiengViet cập nhật", "Không kiểm tra được bản mới. Thử lại sau.");
         }
     }
     g_free(res->tag); g_free(res->url); g_free(res);
@@ -161,9 +161,9 @@ gboolean gtv_update_balloon_clicked(void) {
         return FALSE;
     }
     /* The balloon slot now belongs to the download progress message. */
-    gchar *msg = g_strdup_printf("Dang tai ban %s...", pending_tag);
+    gchar *msg = g_strdup_printf("Đang tải bản %s...", pending_tag);
     update_log("download start tag=%s", pending_tag);
-    gtv_tray_balloon_force("GoTiengViet cap nhat", msg);
+    gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
     g_free(msg);
     gchar *url = pending_url;
     pending_url = NULL;
@@ -187,7 +187,7 @@ void gtv_update_on_downloaded(gchar *installer_path) {
     InterlockedExchange(&update_balloon_owned, 0);
     if (!installer_path || !*installer_path) {
         update_log("download failed");
-        gtv_tray_balloon_force("GoTiengViet cap nhat", "Tai ban moi that bai. Thu lai sau.");
+        gtv_tray_balloon_force("GoTiengViet cập nhật", "Tải bản mới thất bại. Thử lại sau.");
         g_free(installer_path);
         return;
     }

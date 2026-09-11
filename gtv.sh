@@ -242,6 +242,7 @@ cmd_bump() {
     old=$(sed -n 's/^#define GTV_VERSION "\(.*\)"/\1/p' windows/version.h)
     [[ -n "$old" ]] || { echo "bump: cannot read current version from windows/version.h" >&2; exit 1; }
 
+    printf '%s\n' "$ver" > VERSION
     sed -i "s/#define GTV_VERSION \"[^\"]*\"/#define GTV_VERSION \"$ver\"/" windows/version.h
     sed -i "s/Tags like v[0-9.]*/Tags like v$ver/" windows/version.h
     sed -i -E "s/^FILEVERSION[ \t]+[0-9,]+/FILEVERSION     $csv/" windows/resource.rc
@@ -269,11 +270,13 @@ cmd_bump() {
         mv linux/ibus/gotiengviet.metainfo.xml.new linux/ibus/gotiengviet.metainfo.xml
     fi
 
-    sed -i "s/^VERSION ?= .*/VERSION ?= $ver/" Makefile.win
-    sed -i "s/^VERSION ?= .*/VERSION ?= $ver-1/" Makefile
+    sed -i "s/^VERSION ?= .*/VERSION ?= \$(GTV_VERSION)/" Makefile.win
+    sed -i "s/^VERSION ?= .*/VERSION ?= \$(GTV_VERSION)-1/" Makefile
     sed -i 's/^\([ \t]*\)version=${1:-.*}/\1version=${1:-'"$ver"'-1}/' "$0"
     sed -i "s/#define AppVersion \".*\"/#define AppVersion \"$ver\"/" windows/installer.iss
     sed -i "s/#define AppVerNum \".*\"/#define AppVerNum \"$ver.0\"/" windows/installer.iss
+    sed -i "/CFBundleShortVersionString/,+1 s|<string>[^<]*</string>|<string>$ver</string>|" macos/Info.plist
+    sed -i "/CFBundleVersion/,+1 s|<string>[^<]*</string>|<string>$ver</string>|" macos/Info.plist
     # installer.iss carries Vietnamese shortcut names: keep UTF-8 with BOM.
     if [ "$(head -c 3 windows/installer.iss)" != "$(printf '\xef\xbb\xbf')" ]; then
         printf '\xef\xbb\xbf' | cat - windows/installer.iss > windows/installer.iss.new

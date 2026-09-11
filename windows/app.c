@@ -52,5 +52,6 @@ void gtv_app_toggle_mode(void) {
 
 void gtv_app_set_input_method(GtvMode mode) {
     g_app.config.mode = mode;
+    gtv_tray_update_icon(g_app.enabled);
     gtv_app_save_config();
 }

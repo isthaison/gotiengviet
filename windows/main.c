@@ -1,6 +1,8 @@
 #include "app.h"
 #include "tray.h"
+#include "tray_ai.h"
 #include "setup.h"
+#include "tsf_install.h"
 #include "update.h"
 #include "resource.h"
 #include <windows.h>
@@ -80,7 +82,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
-    /* 2. Initialize GoTiengViet config */
+    /* 2. Ensure this installation owns the per-user TSF registration. */
+    gtv_tsf_install_ensure_registered();
+
+    /* 3. Initialize GoTiengViet config */
     gtv_init();
 
     gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
@@ -89,7 +94,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     g_app.enabled = gtv_app_load_enabled(TRUE); /* Restore V/E mode, default [V] */
 
-    /* 3. Register message window class */
+    /* 4. Register message window class */
     WNDCLASSEXA wc = {0};
     wc.cbSize = sizeof(WNDCLASSEXA);
     wc.lpfnWndProc = WndProc;
@@ -101,20 +106,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                                       0, 0, 0, 0, 0,
                                       HWND_MESSAGE, NULL, hInstance, NULL);
 
-    /* 4. Initialize Tray Icon (typing is handled natively by Windows TSF) */
+    /* 5. Initialize Tray Icon (typing is handled natively by Windows TSF) */
     gtv_tray_init(g_app.hwnd_main);
 
     /* Daily self-update check against GitHub releases (throttled). */
     gtv_update_check_async(g_app.hwnd_main, FALSE);
 
-    /* 5. Main Message Loop */
+    /* 6. Main Message Loop */
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
-    /* 6. Cleanup */
+    /* 7. Cleanup */
     gtv_tray_cleanup();
     gtv_config_clear(&g_app.config);
 

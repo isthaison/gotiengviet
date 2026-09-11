@@ -51,7 +51,7 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
     }
     gboolean shortcut_key = engine->mode == GTV_TELEX && (key == '[' || key == ']' || key == '{' || key == '}');
     gboolean is_emoji_seq = FALSE;
-    if (buf->len == 0 && (key == ':' || key == ';' || key == '<')) {
+    if (buf->len == 0 && (key == ':' || key == ';' || key == '<' || key == '(')) {
         is_emoji_seq = TRUE;
     } else if (buf->len > 0 && g_array_index(buf, gunichar, 0) == ':' && key == ':') {
         is_emoji_seq = TRUE;

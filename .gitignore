@@ -5,6 +5,7 @@
 *.dsc
 /tmp/
 *.log
+*.exe
 .cache/
 .ibus-1.5.32*/
 
@@ -13,3 +14,15 @@
 core
 core.*
 .env
+# C build byproducts (both make trees share ./build)
+*.o
+*.d
+*.a
+# Installer outputs (built at repo root by `make -f Makefile.win setup`)
+gotiengviet-*-setup.exe
+# macOS / IDE clutter
+.DS_Store
+*.dSYM/
+xcuserdata/
+Thumbs.db
+desktop.ini

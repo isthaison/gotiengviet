@@ -47,6 +47,63 @@ static inline gboolean is_telex_shortcut(GtvEngine *engine, gunichar ch) {
             (ch == '[' || ch == ']' || ch == '{' || ch == '}'));
 }
 
+static inline gboolean can_start_composition(GtvEngine *engine, gunichar ch) {
+    return g_unichar_isalpha(ch) || is_emoji_starter(ch) || is_telex_shortcut(engine, ch);
+}
+
+static HKL us_layout(void) {
+    static HKL layout = NULL;
+    if (!layout) layout = LoadKeyboardLayoutW(L"00000409", KLF_NOTELLSHELL);
+    return layout ? layout : GetKeyboardLayout(0);
+}
+
+static int key_to_unicode(WPARAM wParam, LPARAM lParam, WCHAR *wchars, int cch) {
+    BYTE key_state[256];
+    GetKeyboardState(key_state);
+    return ToUnicodeEx((UINT)wParam, (UINT)((lParam >> 16) & 0xFF),
+        key_state, wchars, cch, 0, us_layout());
+}
+
+static HRESULT UpdateCompositionUtf8(CGtvTextService *service, ITfContext *pic, const gchar *utf8) {
+    glong wlen = 0;
+    wchar_t *wtext = (wchar_t*)g_utf8_to_utf16(utf8, -1, NULL, &wlen, NULL);
+    if (!wtext) return E_FAIL;
+    HRESULT hr = service->UpdateCompositionText(pic, wtext, (int)wlen);
+    g_free(wtext);
+    return hr;
+}
+
+static HRESULT CommitLiteralChar(CGtvTextService *service, ITfContext *pic, gunichar ch) {
+    gunichar chars[2] = { ch, 0 };
+    gchar *utf8 = g_ucs4_to_utf8(chars, 1, NULL, NULL, NULL);
+    if (!utf8) return E_FAIL;
+    HRESULT hr = UpdateCompositionUtf8(service, pic, utf8);
+    g_free(utf8);
+    if (SUCCEEDED(hr)) hr = service->EndComposition(pic, TRUE);
+    return hr;
+}
+
+static void NotifyWordFromCommit(const gchar *commit) {
+    if (!commit || !*commit) return;
+    const gchar *end = commit + strlen(commit);
+    const gchar *prev = g_utf8_prev_char(end);
+    if (prev > commit) {
+        gchar *wordonly = g_strndup(commit, prev - commit);
+        NotifyTrayWord(wordonly);
+        g_free(wordonly);
+    }
+}
+
+static void UpdateEngineBuffer(CGtvTextService *service, ITfContext *pic,
+                               GtvEngine *engine, gboolean end_when_empty) {
+    gchar *buf = gtv_engine_buffer(engine);
+    if (buf && *buf)
+        UpdateCompositionUtf8(service, pic, buf);
+    else if (end_when_empty)
+        service->EndComposition(pic, FALSE);
+    g_free(buf);
+}
+
 STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPARAM lParam, BOOL *pfEaten)
 {
     if (!pfEaten) return E_INVALIDARG;
@@ -72,22 +129,13 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
         return S_OK;
     }
 
-    // Convert key to Unicode
-    BYTE key_state[256];
-    GetKeyboardState(key_state);
+    // Convert key through US layout: GoTV owns Telex/VNI; Windows' VIE
+    // hardware layout must not turn number-row keys into Vietnamese chars.
     WCHAR wchars[4] = {0};
-    HKL layout = GetKeyboardLayout(0);
-    int count = ToUnicodeEx((UINT)wParam, (UINT)((lParam >> 16) & 0xFF), key_state, wchars, 4, 0, layout);
+    int count = key_to_unicode(wParam, lParam, wchars, 4);
     if (count == 1 && wchars[0] >= 0x20) {
-        gunichar ch = (gunichar)wchars[0];
-        if (IsComposing()) {
-            *pfEaten = TRUE;
-            return S_OK;
-        }
-        if (g_unichar_isalnum(ch) || is_emoji_starter(ch) || is_telex_shortcut(m_pEngine, ch)) {
-            *pfEaten = TRUE;
-            return S_OK;
-        }
+        *pfEaten = TRUE;
+        return S_OK;
     }
 
     return S_OK;
@@ -126,6 +174,12 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
     // Return commits composition
     if (wParam == VK_RETURN) {
         if (IsComposing()) {
+            gchar *commit = gtv_engine_process(m_pEngine, '\n', NULL);
+            if (commit) {
+                UpdateCompositionUtf8(this, pic, commit);
+                NotifyWordFromCommit(commit);
+                g_free(commit);
+            }
             EndComposition(pic, TRUE);
             gtv_engine_reset(m_pEngine);
             *pfEaten = TRUE;
@@ -142,12 +196,7 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
             if (!buf || !*buf) {
                 EndComposition(pic, FALSE);
             } else {
-                glong wlen = 0;
-                wchar_t *wbuf = (wchar_t*)g_utf8_to_utf16(buf, -1, NULL, &wlen, NULL);
-                if (wbuf) {
-                    UpdateCompositionText(pic, wbuf, (int)wlen);
-                    g_free(wbuf);
-                }
+                UpdateCompositionUtf8(this, pic, buf);
             }
             g_free(buf);
             *pfEaten = TRUE;
@@ -156,12 +205,9 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
         return S_OK;
     }
 
-    // Convert virtual key to Unicode character
-    BYTE key_state[256];
-    GetKeyboardState(key_state);
+    // Convert virtual key to Unicode character through US layout.
     WCHAR wchars[4] = {0};
-    HKL layout = GetKeyboardLayout(0);
-    int count = ToUnicodeEx((UINT)wParam, (UINT)((lParam >> 16) & 0xFF), key_state, wchars, 4, 0, layout);
+    int count = key_to_unicode(wParam, lParam, wchars, 4);
 
     if (count != 1 || wchars[0] < 0x20) {
         if (IsComposing()) {
@@ -175,8 +221,10 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
 
     // If not composing, only start composition on alphanumeric, emoji starter, or Telex shortcut
     if (!IsComposing()) {
-        if (!g_unichar_isalnum(ch) && !is_emoji_starter(ch) && !is_telex_shortcut(m_pEngine, ch)) {
-            return S_OK; // Pass through to target application
+        if (!can_start_composition(m_pEngine, ch)) {
+            CommitLiteralChar(this, pic, ch);
+            *pfEaten = TRUE;
+            return S_OK;
         }
     }
 
@@ -184,49 +232,16 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
     guint bs = 0;
     gchar *commit = gtv_engine_process(m_pEngine, ch, &bs);
     if (commit) {
-        glong wlen = 0;
-        wchar_t *wcommit = (wchar_t*)g_utf8_to_utf16(commit, -1, NULL, &wlen, NULL);
-        if (wcommit) {
-            UpdateCompositionText(pic, wcommit, (int)wlen);
-            g_free(wcommit);
-        }
+        UpdateCompositionUtf8(this, pic, commit);
         EndComposition(pic, TRUE);
-
-        /* AI check on the word without its trailing delimiter */
-        const gchar *end = commit + strlen(commit);
-        const gchar *prev = g_utf8_prev_char(end);
-        if (prev > commit) {
-            gchar *wordonly = g_strndup(commit, prev - commit);
-            NotifyTrayWord(wordonly);
-            g_free(wordonly);
-        }
+        NotifyWordFromCommit(commit);
         g_free(commit);
 
         // If engine kept leftover buffer, start fresh composition
-        gchar *buf = gtv_engine_buffer(m_pEngine);
-        if (buf && *buf) {
-            wlen = 0;
-            wchar_t *wbuf = (wchar_t*)g_utf8_to_utf16(buf, -1, NULL, &wlen, NULL);
-            if (wbuf) {
-                UpdateCompositionText(pic, wbuf, (int)wlen);
-                g_free(wbuf);
-            }
-        }
-        g_free(buf);
+        UpdateEngineBuffer(this, pic, m_pEngine, FALSE);
     } else {
         // Update active composition
-        gchar *buf = gtv_engine_buffer(m_pEngine);
-        if (buf && *buf) {
-            glong wlen = 0;
-            wchar_t *wbuf = (wchar_t*)g_utf8_to_utf16(buf, -1, NULL, &wlen, NULL);
-            if (wbuf) {
-                UpdateCompositionText(pic, wbuf, (int)wlen);
-                g_free(wbuf);
-            }
-        } else {
-            EndComposition(pic, FALSE);
-        }
-        g_free(buf);
+        UpdateEngineBuffer(this, pic, m_pEngine, TRUE);
     }
 
     *pfEaten = TRUE;

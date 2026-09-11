@@ -484,6 +484,15 @@ static void test_macro_and_emoji(void) {
     g_assert_cmpstr(commit, ==, "❤️");
     g_free(commit);
 
+    /* Test parenthesized emoji aliases used by chat apps */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, '(', NULL));
+    g_assert_null(gtv_engine_process(eng, 'y', NULL));
+    commit = gtv_engine_process(eng, ')', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "👍");
+    g_free(commit);
+
     /* Test instant commit for :D */
     gtv_engine_reset(eng);
     g_assert_null(gtv_engine_process(eng, ':', NULL));

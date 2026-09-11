@@ -55,22 +55,6 @@ GtvUpdateStatus gtv_update_check(const gchar *repo, const gchar *current_version
 gboolean gtv_update_download(const gchar *url, const gchar *dest_path);
 gboolean gtv_update_should_autocheck(void);
 void gtv_update_mark_checked(void);
-/* Screen mirror for pass-through clients (Windows hook): tracks what the
- * client should be showing for the current word, so commits and resends
- * erase exactly that. IBus uses preedit instead and ignores this. */
-typedef struct { GString *shown; } GtvMirror;
-typedef enum { GTV_MIRROR_PASS, GTV_MIRROR_RESEND, GTV_MIRROR_COMMIT } GtvMirrorAction;
-GtvMirror *gtv_mirror_new(void);
-void gtv_mirror_init(GtvMirror *m);
-void gtv_mirror_clear(GtvMirror *m);
-void gtv_mirror_free(GtvMirror *m);
-void gtv_mirror_passthrough(GtvMirror *m, gunichar raw);
-void gtv_mirror_backspaced(GtvMirror *m);
-GtvMirrorAction gtv_mirror_decide(GtvMirror *m, const gchar *buffer, const gchar *raw_utf8, const gchar *commit);
-guint gtv_mirror_erase_count(GtvMirror *m);
-void gtv_mirror_diff(GtvMirror *m, const gchar *new_text, guint *erase_chars, const gchar **send_from);
-void gtv_mirror_resent(GtvMirror *m, const gchar *buffer);
-void gtv_mirror_committed(GtvMirror *m);
 
 G_END_DECLS
 

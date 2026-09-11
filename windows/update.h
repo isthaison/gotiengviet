@@ -20,8 +20,6 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual);
  * Starts the download; WM_GTV_UPDATE_DOWNLOADED runs the installer. */
 gboolean gtv_update_balloon_clicked(void);
 void gtv_update_on_downloaded(gchar *installer_path);
-/* Timestamped diagnostic log (%APPDATA%/gotiengviet/update.log). */
-void gtv_update_log(const gchar *fmt, ...);
 /* Called when another feature takes over the shared balloon slot. */
 void gtv_update_disown_balloon(void);
 

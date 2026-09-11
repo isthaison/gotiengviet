@@ -13,7 +13,7 @@ void gtv_app_save_config(void) {
     gtv_app_save_enabled();
 }
 
-void gtv_app_save_enabled(void) {
+static void gtv_app_save_enabled(void) {
     gchar *path = gtv_app_config_path();
     GKeyFile *kf = g_key_file_new();
     g_key_file_load_from_file(kf, path, G_KEY_FILE_KEEP_COMMENTS, NULL);

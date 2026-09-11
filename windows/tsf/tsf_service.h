@@ -52,8 +52,8 @@ public:
     // ITfCompositionSink
     STDMETHODIMP OnCompositionTerminated(TfEditCookie ecWrite, ITfComposition *pComposition);
 
-    // Internal composition helpers
-    HRESULT StartComposition(ITfContext *pic);
+    // Internal composition helpers (Update/End create their own sessions;
+    // compositions always start with initial text, never empty).
     HRESULT UpdateCompositionText(ITfContext *pic, const wchar_t *text, int len);
     HRESULT EndComposition(ITfContext *pic, BOOL commit);
     BOOL IsComposing() const { return m_pComposition != NULL; }

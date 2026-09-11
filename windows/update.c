@@ -13,7 +13,7 @@ static volatile DWORD update_flight_tick = 0;
 
 /* Append-only diagnostic log next to the config, so a silent updater can
  * be diagnosed from %APPDATA%/gotiengviet/update.log. Bounded size. */
-void gtv_update_log(const gchar *fmt, ...) {
+static void update_log(const gchar *fmt, ...) {
     gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
     g_mkdir_with_parents(dir, 0755);
     gchar *path = g_build_filename(dir, "update.log", NULL);
@@ -55,7 +55,7 @@ static gpointer check_worker(gpointer data) {
     CheckJob *job = data;
     gchar *tag = NULL, *url = NULL;
     GtvUpdateStatus st = gtv_update_check(NULL, GTV_VERSION, &tag, &url);
-    gtv_update_log("check done manual=%d status=%d tag=%s url=%s",
+    update_log("check done manual=%d status=%d tag=%s url=%s",
                    job->manual, (gint)st, tag ? tag : "-", url ? url : "-");
     GtvUpdateResult *res = g_new(GtvUpdateResult, 1);
     res->status = (gint)st;
@@ -84,12 +84,12 @@ void gtv_update_check_async(HWND notify, gboolean manual) {
          * it has been stuck longer than any check may take, so one wedged
          * run can never silence the updater until restart. */
         if ((DWORD)(GetTickCount() - update_flight_tick) < 120000) return;
-        gtv_update_log("stale check slot reclaimed");
+        update_log("stale check slot reclaimed");
         InterlockedExchange(&update_in_flight, 0);
         if (InterlockedCompareExchange(&update_in_flight, 1, 0) != 0) return;
     }
     update_flight_tick = GetTickCount();
-    gtv_update_log("check start manual=%d version=%s", manual, GTV_VERSION);
+    update_log("check start manual=%d version=%s", manual, GTV_VERSION);
     CheckJob *job = g_new0(CheckJob, 1);
     job->notify = notify;
     job->manual = manual;
@@ -110,18 +110,18 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
         pending_url = g_strdup(res->url);
         InterlockedExchange(&update_balloon_owned, 1);
         gchar *msg = g_strdup_printf("Co ban moi %s. Nhan vao day de tai va cai dat.", res->tag);
-        gtv_update_log("balloon shown: update available %s", res->tag);
+        update_log("balloon shown: update available %s", res->tag);
         gtv_tray_balloon_force("GoTiengViet cap nhat", msg);
         g_free(msg);
     } else if (manual) {
         InterlockedExchange(&update_balloon_owned, 0);
         if (res->status == GTV_UPDATE_CURRENT) {
             gchar *msg = g_strdup_printf("Ban dang dung ban moi nhat (%s).", GTV_VERSION);
-            gtv_update_log("balloon shown: up to date %s", GTV_VERSION);
+            update_log("balloon shown: up to date %s", GTV_VERSION);
             gtv_tray_balloon_force("GoTiengViet cap nhat", msg);
             g_free(msg);
         } else {
-            gtv_update_log("balloon shown: check error");
+            update_log("balloon shown: check error");
             gtv_tray_balloon_force("GoTiengViet cap nhat", "Khong kiem tra duoc ban moi. Thu lai sau.");
         }
     }
@@ -144,7 +144,7 @@ static gpointer download_worker(gpointer data) {
         g_free(wfull);
     }
     g_free(name);
-    gtv_update_log("downloading %s", url);
+    update_log("downloading %s", url);
     gboolean ok = dest && gtv_update_download(url, dest);
     g_free(url);
     if (ok && g_app.hwnd_main)
@@ -162,7 +162,7 @@ gboolean gtv_update_balloon_clicked(void) {
     }
     /* The balloon slot now belongs to the download progress message. */
     gchar *msg = g_strdup_printf("Dang tai ban %s...", pending_tag);
-    gtv_update_log("download start tag=%s", pending_tag);
+    update_log("download start tag=%s", pending_tag);
     gtv_tray_balloon_force("GoTiengViet cap nhat", msg);
     g_free(msg);
     gchar *url = pending_url;
@@ -186,7 +186,7 @@ void gtv_update_disown_balloon(void) {
 void gtv_update_on_downloaded(gchar *installer_path) {
     InterlockedExchange(&update_balloon_owned, 0);
     if (!installer_path || !*installer_path) {
-        gtv_update_log("download failed");
+        update_log("download failed");
         gtv_tray_balloon_force("GoTiengViet cap nhat", "Tai ban moi that bai. Thu lai sau.");
         g_free(installer_path);
         return;
@@ -196,7 +196,7 @@ void gtv_update_on_downloaded(gchar *installer_path) {
      * net in case a second copy is still running. Unicode path: %TEMP%
      * and usernames are often non-ASCII. */
     gunichar2 *winstaller = g_utf8_to_utf16(installer_path, -1, NULL, NULL, NULL);
-    gtv_update_log("installer launched %s", installer_path);
+    update_log("installer launched %s", installer_path);
     ShellExecuteW(NULL, L"open", (LPCWSTR)winstaller, L"/SILENT /CLOSEAPPLICATIONS", NULL, SW_SHOWNORMAL);
     g_free(winstaller);
     g_free(installer_path);

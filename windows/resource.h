@@ -29,7 +29,6 @@
 #define IDC_LBL_MODEL       215
 #define IDC_LBL_URL         216
 
-#define IDM_TRAY_MENU       301
 #define ID_TRAY_SETTINGS    302
 #define ID_TRAY_MODE_TELEX  303
 #define ID_TRAY_MODE_VNI    304

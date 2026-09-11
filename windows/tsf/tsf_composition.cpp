@@ -169,16 +169,6 @@ private:
     }
 };
 
-HRESULT CGtvTextService::StartComposition(ITfContext *pic)
-{
-    if (m_pComposition != NULL) return S_OK;
-    CEditSession *pSession = new CEditSession(this, pic, EDIT_START_COMPOSITION);
-    HRESULT hrSession = E_FAIL;
-    HRESULT hr = pic->RequestEditSession(m_tfClientId, pSession, TF_ES_SYNC | TF_ES_READWRITE, &hrSession);
-    pSession->Release();
-    return SUCCEEDED(hr) ? hrSession : hr;
-}
-
 HRESULT CGtvTextService::UpdateCompositionText(ITfContext *pic, const wchar_t *text, int len)
 {
     if (!pic) return E_INVALIDARG;

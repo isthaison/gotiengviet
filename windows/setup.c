@@ -280,7 +280,7 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             } else if (id == IDC_CHECK_AI && HIWORD(wParam) == BN_CLICKED) {
                 if (IsDlgButtonChecked(hwnd, IDC_CHECK_AI) == BST_CHECKED) {
                     gtv_win_set_dlg_item_text(hwnd, IDC_LBL_AI_STATUS,
-                        "Đang kiểm tra/cài Ollama — xem log bên dưới.");
+                        "Đang kiểm tra/cài Ollama (irm https://ollama.com/install.ps1 | iex)...");
                     gchar *url = gtv_win_get_dlg_item_text(hwnd, IDC_EDIT_URL, 512);
                     gchar *model = model_combo_get(hwnd);
                     gtv_ollama_ensure_all_async(hwnd, url ? url : "", model ? model : "");

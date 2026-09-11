@@ -45,6 +45,7 @@ Usage: $PROG <command> [args]   (OS detected: $OS)
                       linux: sudo $PROG install (DESTDIR=... to stage only)
                       windows: build setup.exe + silent install + start app
                       mac: copy GoTiengViet.app to ~/Library/Input Methods
+  install-ollama    install official Ollama (linux/mac: curl...|sh | windows: irm...|iex)
   uninstall         remove installed files + registry/task/profile leftovers
   package [VER]     OS-native installer (linux: .deb | windows: setup.exe | mac: .zip)
   bump X.Y.Z ["notes"]  bump version everywhere (single writer)
@@ -676,6 +677,18 @@ cmd_bump() {
     echo "--- done (review with: git diff --stat) ---"
 }
 
+cmd_install_ollama() {
+    echo "Installing Ollama (official) for $OS..."
+    case "$OS" in
+        windows)
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "if (\$env:USERPROFILE) { \$env:TEMP = Join-Path \$env:USERPROFILE 'Downloads'; \$env:TMP = \$env:TEMP }; irm https://ollama.com/install.ps1 | iex"
+            ;;
+        linux|mac)
+            curl -fsSL https://ollama.com/install.sh | sh
+            ;;
+    esac
+}
+
 command="${1:-help}"
 case "$command" in
     build)   shift; cmd_build "$@" ;;
@@ -683,9 +696,10 @@ case "$command" in
     vet)     cmd_vet ;;
     clean)   cmd_clean ;;
     install) cmd_install ;;
+    install-ollama) cmd_install_ollama ;;
     uninstall) cmd_uninstall ;;
     package) shift; cmd_package "${1:-}" ;;
     bump)    shift; cmd_bump "${1:?Usage: $PROG bump X.Y.Z [\"notes\"]}" "${2:-}" ;;
     help|--help|-h) cmd_help ;;
-    *) echo "Unknown command '$command'. Usage: $PROG <build|test|vet|clean|install|uninstall|package|bump|help>" >&2; exit 1 ;;
+    *) echo "Unknown command '$command'. Usage: $PROG <build|test|vet|clean|install|install-ollama|uninstall|package|bump|help>" >&2; exit 1 ;;
 esac

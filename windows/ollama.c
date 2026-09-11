@@ -4,7 +4,7 @@
 #include <windows.h>
 #include <glib/gstdio.h>
 
-#define OLLAMA_SETUP_URL "https://ollama.com/download/OllamaSetup.exe"
+#define OLLAMA_INSTALL_PS1 "irm https://ollama.com/install.ps1 | iex"
 
 gchar *gtv_ollama_log_path(void) {
     WCHAR wtmp[MAX_PATH];
@@ -276,7 +276,7 @@ static gboolean download_and_install(void) {
     si.wShowWindow = SW_HIDE;
     ZeroMemory(&pi, sizeof(pi));
 
-    WCHAR cmd[] = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"irm https://ollama.com/install.ps1 | iex\"";
+    WCHAR cmd[] = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"if ($env:USERPROFILE) { $env:TEMP = Join-Path $env:USERPROFILE 'Downloads'; $env:TMP = $env:TEMP }; irm https://ollama.com/install.ps1 | iex\"";
     if (!CreateProcessW(NULL, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW,
                         NULL, NULL, &si, &pi)) {
         gchar *msg = g_strdup_printf("LỖI chạy PowerShell cài Ollama (mã %lu).", GetLastError());

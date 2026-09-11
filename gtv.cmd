@@ -1,6 +1,6 @@
 @echo off
 REM GoTiengViet entry point for cmd.exe: forwards to gtv.sh (needs MSYS2/Git bash).
-REM Usage: gtv <build|test|vet|clean|install|uninstall|package|bump|help>
+REM Usage: gtv <build|test|vet|clean|install|install-ollama|uninstall|package|bump|help>
 REM NOTE: plain `where bash` may resolve to the WSL stub, so real
 REM installations are probed first.
 setlocal

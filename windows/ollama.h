@@ -22,9 +22,7 @@ void gtv_ollama_ensure_serve_async(const gchar *url);
 /* Fire-and-forget /api/tags probe; posts WM_GTV_OLLAMA_STATUS(ok) to hwnd. */
 void gtv_ollama_probe_async(HWND hwnd, const gchar *url);
 
-/* Bytes downloaded of OllamaSetup.exe, or -1 when no download is active
- * (no tmp file, ollama already installed, or tmp file gone stale). The
- * setup dialog polls this for live progress while curl runs silently. */
+/* Download progress query (-1 when already installed). */
 gint64 gtv_ollama_download_bytes(void);
 
 #endif /* GTV_OLLAMA_H */

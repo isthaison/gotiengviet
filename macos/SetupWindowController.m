@@ -1,6 +1,7 @@
 #import "SetupWindowController.h"
 #import <Cocoa/Cocoa.h>
 #include "engine.h"
+#include "internal.h"
 
 /* Preview settings: a single Macro/Emoji data window (no xib, manual
  * retain like the rest of macos/). Engine table API is shared with the
@@ -190,7 +191,8 @@
     (void)tv;
     const gchar *k = NULL, *v = NULL;
     if (!gtv_table_get(emoji, (guint)row, &k, &v)) return @"";
-    const gchar *s = [[[col identifier] isEqualToString:@"key"] ? k : v];
+    BOOL wantKey = [[col identifier] isEqualToString:@"key"];
+    const gchar *s = wantKey ? k : v;
     NSString *ns = s ? [NSString stringWithUTF8String:s] : nil;
     return ns ? ns : @"";
 }

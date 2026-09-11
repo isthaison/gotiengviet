@@ -3,6 +3,7 @@
 Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (`gtv_tsf.dll`, composition chuẩn Windows — đúng trong mọi ô nhập kể cả autocomplete/khó tính); app khay hệ thống lo cấu hình, gợi ý AI, cập nhật. Không còn hook bàn phím.
 
 - Sau khi cài: đăng xuất/đăng nhập lại rồi chọn GoTiengViet bằng `Win+Space`.
+- Nếu chưa thấy bàn phím GoTiengViet: vào **Settings → Time & Language → Language** → chọn `English` (hoặc `Tiếng Việt`) → **Options** → **Add a keyboard** → chọn **GoTiengViet**. Không thấy nữa thì đăng xuất/đăng nhập lại một lần.
 - Nút `GoTV` trên language bar click để chuyển Việt/Anh (đỏ `V` / xám `E`); menu tray **Bật gõ tiếng Việt [V]** làm việc tương tự (đồng bộ qua file cấu hình).
 - Telex/VNI, chuẩn dấu, chính tả đổi trong Bảng điều khiển/menu tray, TSF nhận ngay khi chuyển ô nhập (đọc lại cấu hình mỗi lần kích hoạt).
 

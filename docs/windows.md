@@ -15,11 +15,36 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (`gtv_tsf.dll`, comp
 
 ## Dùng hằng ngày
 
-- **Menu chuột phải**: Bật gõ tiếng Việt, Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu, tự khởi động, Kiểm tra cập nhật, Thoát.
-- **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (Ollama, model, URL) — lưu ở `%APPDATA%\gotiengviet\` như bản Linux.
+- **Menu chuột phải**: Bật gõ tiếng Việt, Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu,
+  tự khởi động (thường/admin), Kiểm tra cập nhật, Thoát.
+- **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (Ollama, model, URL),
+  nút **Dữ liệu...** — lưu ở `%APPDATA%\gotiengviet\` như bản Linux.
 - **Gợi ý AI dạng balloon**: TSF báo mỗi từ vừa commit về app khay; từ sai được hỏi Ollama nền (`"sai" co the ban muon go "dung"?`, chống spam 10 giây). Cần Ollama + `curl` (có sẵn từ Windows 10). **Click balloon** để nhận (chưa gõ tiếp thì thay tại chỗ, rồi thì copy vào clipboard); lựa chọn được học vào `learned-corrections.txt` nên offline vẫn gợi ý.
 - Macro/emoji/prompts/config: chung lõi và file `data/` với bản Linux.
 - Chữ Việt hiển thị đúng mọi locale: toàn bộ UI dùng Unicode API, dialog đặt chữ lúc chạy.
+
+## Khởi động với quyền admin
+
+App thường (Run key) không chạm được vào cửa sổ admin (Task Manager, regedit, cmd admin):
+chọn menu **Khởi động với quyền admin**, đồng ý UAC một lần — app tạo tác vụ logon
+`GoTiengViet` chạy elevated, tắt mục Run thường để không mở 2 bản. Tắt/chuyển chế độ
+cũng cần UAC một lần. Hai mục khởi động loại trừ nhau: chỉ một được check.
+
+## Quản lý dữ liệu (macro/emoji)
+
+Bảng điều khiển → **Dữ liệu...**: chuyển Macro/Emoji, chọn dòng để sửa, **Lưu** để thêm/cập nhật,
+**Xóa** để gỡ, **Mở thư mục** để sửa file text tay. Khóa không chứa dấu cách hay `=`,
+giá trị không rỗng. Lưu ghi đè file riêng của bạn (`macros.txt`/`emojis.txt` trong
+`%APPDATA%\gotiengviet\`, thay thế hoàn toàn file hệ thống) — **app đang mở phải khởi
+động lại mới nhận bảng mới** (TSF đọc bảng lúc app khởi động).
+
+## Gạch đỏ dưới chữ Việt trong trình duyệt/app khác
+
+Không phải của GoTiengViet: TSF của app không bao giờ vẽ gạch đỏ (không set display
+attribute nào), bản Windows cũng không có gạch đỏ inline (chỉ có balloon gợi ý AI).
+Gạch đỏ cả câu như ảnh là **spellchecker của trình duyệt** (từ điển Anh gặp chữ Việt)
+hoặc Windows (Settings → Time & language → Typing → Highlight misspelt words khi đang
+ở ENG). Tắt spellcheck của ô nhập đó, hoặc thêm tiếng Việt vào trình duyệt là hết.
 
 ## Giới hạn đã biết
 

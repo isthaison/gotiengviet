@@ -49,6 +49,15 @@ void ucs4_to_gstring(GArray *arr, GString *s);
 gchar* expand_word(const char *word);
 GPtrArray* get_emoji_suggestions(const char *prefix);
 void gtv_tables_reload(void);
+/* Runtime macro/emoji table management (Settings data UI). Counts/getters
+ * read the merged table; set/remove edit memory; save writes the whole
+ * table to the user file. Pointers from get() are borrowed. */
+guint gtv_table_count(gboolean emoji);
+gboolean gtv_table_get(gboolean emoji, guint i, const gchar **key, const gchar **value);
+gboolean gtv_table_set(gboolean emoji, const gchar *key, const gchar *value);
+gboolean gtv_table_remove(gboolean emoji, const gchar *key);
+gchar *gtv_table_user_path(gboolean emoji);
+gboolean gtv_table_save(gboolean emoji, GError **error);
 
 gchar *gtv_json_quote(const gchar *text);
 gchar *gtv_json_response(const gchar *json);

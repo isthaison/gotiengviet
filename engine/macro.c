@@ -122,3 +122,124 @@ GPtrArray* get_emoji_suggestions(const char *prefix){
     g_free(lower);
     return out;
 }
+
+/* --- Runtime table management (Settings data UI on every platform). ---
+ * Operates on the merged in-memory table; gtv_table_save() writes the whole
+ * table back to the USER file (which then shadows the system file, exactly
+ * like a hand edit). Callers must gtv_tables_reload() in their own process
+ * to pick the file up; other processes (e.g. Windows TSF hosts) reload on
+ * restart. Invalid keys (empty, '=', newline) are rejected. */
+static void table_pick(gboolean emoji, GPtrArray **entries, GHashTable **exact,
+                       GHashTable **fold, const gchar **filename){
+    tables_load();
+    if(emoji){
+        if(entries) *entries = emoji_entries;
+        if(exact) *exact = emoji_exact;
+        if(fold) *fold = emoji_fold;
+        if(filename) *filename = EMOJI_FILE;
+    } else {
+        if(entries) *entries = macro_entries;
+        if(exact) *exact = macro_exact;
+        if(fold) *fold = macro_fold;
+        if(filename) *filename = MACRO_FILE;
+    }
+}
+
+static gboolean key_valid(const gchar *key, const gchar *value){
+    if(!key || !*key || !value || !*value) return FALSE;
+    if(!g_utf8_validate(key, -1, NULL) || !g_utf8_validate(value, -1, NULL)) return FALSE;
+    for(const gchar *p = key; *p; p = g_utf8_next_char(p)){
+        gunichar c = g_utf8_get_char(p);
+        if(c == '=' || c == '\n' || c == '\r' || g_unichar_isspace(c)) return FALSE;
+    }
+    for(const gchar *p = value; *p; p = g_utf8_next_char(p)){
+        gunichar c = g_utf8_get_char(p);
+        if(c == '\n' || c == '\r') return FALSE;
+    }
+    return TRUE;
+}
+
+guint gtv_table_count(gboolean emoji){
+    GPtrArray *entries = NULL;
+    table_pick(emoji, &entries, NULL, NULL, NULL);
+    return entries ? entries->len : 0;
+}
+
+gboolean gtv_table_get(gboolean emoji, guint i, const gchar **key, const gchar **value){
+    GPtrArray *entries = NULL;
+    table_pick(emoji, &entries, NULL, NULL, NULL);
+    if(!entries || i >= entries->len) return FALSE;
+    TableEntry *e = entries->pdata[i];
+    if(key) *key = e->key;
+    if(value) *value = e->value;
+    return TRUE;
+}
+
+gboolean gtv_table_set(gboolean emoji, const gchar *key, const gchar *value){
+    GPtrArray *entries = NULL;
+    GHashTable *exact = NULL, *fold = NULL;
+    table_pick(emoji, &entries, &exact, &fold, NULL);
+    if(!entries || !key_valid(key, value)) return FALSE;
+    TableEntry *found = NULL;
+    for(guint i = 0; i < entries->len; i++){
+        TableEntry *e = entries->pdata[i];
+        if(!strcmp(e->key, key)){ found = e; break; }
+    }
+    if(found){
+        g_hash_table_remove(exact, found->key);
+        g_hash_table_remove(fold, found->fold);
+        g_free(found->fold);
+        g_free(found->value);
+        found->fold = g_utf8_strdown(key, -1);
+        found->value = g_strdup(value);
+        g_hash_table_insert(exact, found->key, found->value);
+        if(!g_hash_table_contains(fold, found->fold))
+            g_hash_table_insert(fold, found->fold, found->value);
+        return TRUE;
+    }
+    if(entries->len >= TABLE_CAP) return FALSE;
+    table_add(entries, exact, fold, key, value);
+    return TRUE;
+}
+
+gboolean gtv_table_remove(gboolean emoji, const gchar *key){
+    GPtrArray *entries = NULL;
+    GHashTable *exact = NULL, *fold = NULL;
+    table_pick(emoji, &entries, &exact, &fold, NULL);
+    if(!entries || !key || !*key) return FALSE;
+    for(guint i = 0; i < entries->len; i++){
+        TableEntry *e = entries->pdata[i];
+        if(!strcmp(e->key, key)){
+            g_hash_table_remove(exact, e->key);
+            g_hash_table_remove(fold, e->fold);
+            g_ptr_array_remove_index(entries, i);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+gchar *gtv_table_user_path(gboolean emoji){
+    const gchar *filename = NULL;
+    table_pick(emoji, NULL, NULL, NULL, &filename);
+    return g_build_filename(g_get_user_config_dir(), "gotiengviet", filename, NULL);
+}
+
+gboolean gtv_table_save(gboolean emoji, GError **error){
+    GPtrArray *entries = NULL;
+    table_pick(emoji, &entries, NULL, NULL, NULL);
+    if(!entries) return FALSE;
+    gchar *path = gtv_table_user_path(emoji);
+    gchar *dir = g_path_get_dirname(path);
+    g_mkdir_with_parents(dir, 0755);
+    g_free(dir);
+    GString *out = g_string_new("# GoTiengViet user table (managed in Settings; edits here win)\n");
+    for(guint i = 0; i < entries->len; i++){
+        TableEntry *e = entries->pdata[i];
+        g_string_append_printf(out, "%s=%s\n", e->key, e->value);
+    }
+    gboolean ok = g_file_set_contents(path, out->str, out->len, error);
+    g_string_free(out, TRUE);
+    g_free(path);
+    return ok;
+}

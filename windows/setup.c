@@ -1,6 +1,8 @@
 #include "setup.h"
 #include "app.h"
+#include "data.h"
 #include "tray.h"
+#include "startup.h"
 #include "resource.h"
 #include "win_utf.h"
 
@@ -50,6 +52,7 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 { IDC_LBL_URL, "URL:" },
                 { IDC_BTN_OK, "Đồng ý" },
                 { IDC_BTN_CANCEL, "Hủy" },
+                { IDC_BTN_DATA, "Dữ liệu..." },
             };
             gtv_win_set_window_text(hwnd, "GoTiengViet - Cài đặt");
             for (guint i = 0; i < G_N_ELEMENTS(labels); i++) {
@@ -64,7 +67,7 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
             CheckDlgButton(hwnd, IDC_CHECK_MODERN, g_app.config.modern ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, IDC_CHECK_SPELL, g_app.config.spellcheck ? BST_CHECKED : BST_UNCHECKED);
-            CheckDlgButton(hwnd, IDC_CHECK_STARTUP, gtv_tray_startup_enabled() ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwnd, IDC_CHECK_STARTUP, gtv_startup_get() != GTV_STARTUP_NONE ? BST_CHECKED : BST_UNCHECKED);
             CheckDlgButton(hwnd, IDC_CHECK_AI, g_app.config.ai_enabled ? BST_CHECKED : BST_UNCHECKED);
             gtv_win_set_dlg_item_text(hwnd, IDC_EDIT_MODEL, g_app.config.model ? g_app.config.model : "");
             gtv_win_set_dlg_item_text(hwnd, IDC_EDIT_URL, g_app.config.url ? g_app.config.url : "");
@@ -107,7 +110,16 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 gtv_config_strings_unlock();
 
                 gboolean want_startup = (IsDlgButtonChecked(hwnd, IDC_CHECK_STARTUP) == BST_CHECKED);
-                gtv_tray_set_startup(want_startup);
+                if (want_startup) {
+                    if (gtv_startup_get() == GTV_STARTUP_NONE)
+                        gtv_startup_set_user(TRUE);
+                } else if (gtv_startup_get() == GTV_STARTUP_USER) {
+                    gtv_startup_set_user(FALSE);
+                } else if (gtv_startup_get() == GTV_STARTUP_ADMIN) {
+                    /* Removing the admin task needs elevation: UAC appears
+                     * from Đồng ý. Cancelling it keeps the task. */
+                    gtv_startup_request(hwnd, "admin-off");
+                }
 
                 gtv_app_save_config();
 
@@ -115,6 +127,9 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 return TRUE;
             } else if (id == IDC_BTN_CANCEL || id == IDCANCEL) {
                 EndDialog(hwnd, IDCANCEL);
+                return TRUE;
+            } else if (id == IDC_BTN_DATA) {
+                gtv_data_show(hwnd);
                 return TRUE;
             }
             break;

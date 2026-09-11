@@ -512,6 +512,57 @@ static void test_macro_and_emoji(void) {
     gtv_engine_free(eng);
 }
 
+static void test_table_manage(void) {
+    gtv_tables_reload();
+    g_assert_cmpuint(gtv_table_count(TRUE), >, 0);
+    gchar *upath = gtv_table_user_path(FALSE);
+    gchar *orig = NULL;
+    gboolean had = g_file_get_contents(upath, &orig, NULL, NULL);
+
+    guint n0 = gtv_table_count(FALSE);
+    /* Invalid entries are rejected, table untouched. */
+    g_assert_false(gtv_table_set(FALSE, "", "x"));
+    g_assert_false(gtv_table_set(FALSE, "a=b", "x"));
+    g_assert_false(gtv_table_set(FALSE, "a b", "x"));
+    g_assert_false(gtv_table_set(FALSE, "k", ""));
+    g_assert_cmpuint(gtv_table_count(FALSE), ==, n0);
+    /* Add, read back, expand. */
+    g_assert_true(gtv_table_set(FALSE, "gtvtest", "Go Test"));
+    g_assert_cmpuint(gtv_table_count(FALSE), ==, n0 + 1);
+    const gchar *k = NULL, *v = NULL;
+    g_assert_true(gtv_table_get(FALSE, gtv_table_count(FALSE) - 1, &k, &v));
+    g_assert_cmpstr(k, ==, "gtvtest");
+    g_assert_cmpstr(v, ==, "Go Test");
+    gchar *exp = expand_word("gtvtest");
+    g_assert_cmpstr(exp, ==, "Go Test");
+    g_free(exp);
+    /* Update in place keeps the count. */
+    g_assert_true(gtv_table_set(FALSE, "gtvtest", "Go Test 2"));
+    g_assert_cmpuint(gtv_table_count(FALSE), ==, n0 + 1);
+    /* Save round-trips through the user file. */
+    GError *err = NULL;
+    g_assert_true(gtv_table_save(FALSE, &err));
+    g_assert_no_error(err);
+    gchar *disk = NULL;
+    g_assert_true(g_file_get_contents(upath, &disk, NULL, NULL));
+    g_assert_nonnull(strstr(disk, "gtvtest=Go Test 2"));
+    g_free(disk);
+    /* Remove restores the literal word. */
+    g_assert_true(gtv_table_remove(FALSE, "gtvtest"));
+    g_assert_false(gtv_table_remove(FALSE, "gtvtest"));
+    exp = expand_word("gtvtest");
+    g_assert_cmpstr(exp, ==, "gtvtest");
+    g_free(exp);
+    g_assert_true(gtv_table_save(FALSE, &err));
+    g_assert_no_error(err);
+    /* Restore the user's file byte-for-byte. */
+    if (had) g_assert_true(g_file_set_contents(upath, orig, -1, NULL));
+    else g_remove(upath);
+    g_free(orig);
+    g_free(upath);
+    gtv_tables_reload();
+}
+
 int main(int argc,char **argv) {
     const gchar *fixture=g_getenv("GTV_TEST_CURL_DIR");
     g_assert_nonnull(fixture);
@@ -526,6 +577,7 @@ int main(int argc,char **argv) {
     g_test_add_func("/support/suggest-combined",test_suggest_combined);
     g_test_add_func("/support/spelling",test_spelling);
     g_test_add_func("/support/macro-and-emoji",test_macro_and_emoji);
+    g_test_add_func("/support/table-manage",test_table_manage);
     g_test_add_func("/support/learn",test_learn);
     g_test_add_func("/support/prompts",test_prompts);
     g_test_add_func("/support/config-defaults",test_config_defaults);

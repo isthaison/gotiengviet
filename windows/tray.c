@@ -2,6 +2,7 @@
 #include "tray_ai.h"
 #include "app.h"
 #include "setup.h"
+#include "startup.h"
 #include "update.h"
 #include "resource.h"
 #include "win_utf.h"
@@ -55,17 +56,6 @@ static HICON create_tray_text_icon(gboolean enabled, GtvMode mode) {
     return hIcon;
 }
 
-gboolean gtv_tray_startup_enabled(void) {
-    HKEY hkey;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_READ, &hkey) != ERROR_SUCCESS)
-        return FALSE;
-    char path[MAX_PATH];
-    DWORD size = sizeof(path);
-    LONG res = RegQueryValueEx(hkey, "GoTiengViet", NULL, NULL, (LPBYTE)path, &size);
-    RegCloseKey(hkey);
-    return res == ERROR_SUCCESS;
-}
-
 /* Guards g_app.config string fields: the setup dialog swaps them on the UI
  * thread while the AI worker may be copying them. */
 static CRITICAL_SECTION config_lock;
@@ -79,22 +69,6 @@ void gtv_config_strings_lock(void) {
 }
 void gtv_config_strings_unlock(void) {
     LeaveCriticalSection(&config_lock);
-}
-
-
-void gtv_tray_set_startup(gboolean enable) {
-    HKEY hkey;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hkey) != ERROR_SUCCESS)
-        return;
-    if (enable) {
-        WCHAR path[MAX_PATH];
-        GetModuleFileNameW(NULL, path, MAX_PATH);
-        RegSetValueExW(hkey, L"GoTiengViet", 0, REG_SZ, (const BYTE *)path,
-                       (DWORD)(lstrlenW(path) + 1) * sizeof(WCHAR));
-    } else {
-        RegDeleteValueW(hkey, L"GoTiengViet");
-    }
-    RegCloseKey(hkey);
 }
 
 gboolean gtv_tray_init(HWND hwnd) {
@@ -167,8 +141,11 @@ void gtv_tray_show_menu(HWND hwnd) {
     UINT modern_flag = g_app.config.modern ? MF_CHECKED : MF_UNCHECKED;
     gtv_win_menu_add_utf8(hmenu, "Đặt dấu chuẩn mới", modern_flag, ID_TRAY_MODERN);
 
-    UINT start_flag = gtv_tray_startup_enabled() ? MF_CHECKED : MF_UNCHECKED;
+    UINT start_flag = (gtv_startup_get() == GTV_STARTUP_USER) ? MF_CHECKED : MF_UNCHECKED;
     gtv_win_menu_add_utf8(hmenu, "Khởi động cùng Windows", start_flag, ID_TRAY_STARTUP);
+
+    UINT admin_flag = (gtv_startup_get() == GTV_STARTUP_ADMIN) ? MF_CHECKED : MF_UNCHECKED;
+    gtv_win_menu_add_utf8(hmenu, "Khởi động với quyền admin", admin_flag, ID_TRAY_STARTUP_ADMIN);
 
     gtv_win_menu_add_utf8(hmenu, "Kiểm tra cập nhật...", 0, ID_TRAY_UPDATE);
     gtv_win_menu_add_utf8(hmenu, NULL, MF_SEPARATOR, 0);
@@ -200,9 +177,26 @@ void gtv_tray_show_menu(HWND hwnd) {
             g_app.config.modern = !g_app.config.modern;
             gtv_app_save_config();
             break;
-        case ID_TRAY_STARTUP:
-            gtv_tray_set_startup(!gtv_tray_startup_enabled());
+        case ID_TRAY_STARTUP: {
+            GtvStartupMode mode = gtv_startup_get();
+            if (mode == GTV_STARTUP_USER) {
+                gtv_startup_set_user(FALSE);
+            } else if (mode == GTV_STARTUP_ADMIN) {
+                /* Dropping the admin task needs elevation too. */
+                gtv_startup_request(hwnd, "user");
+            } else {
+                gtv_startup_set_user(TRUE);
+            }
             break;
+        }
+        case ID_TRAY_STARTUP_ADMIN: {
+            GtvStartupMode mode = gtv_startup_get();
+            if (mode == GTV_STARTUP_ADMIN)
+                gtv_startup_request(hwnd, "admin-off");
+            else
+                gtv_startup_request(hwnd, "admin");
+            break;
+        }
         case ID_TRAY_UPDATE:
             gtv_update_check_async(hwnd, TRUE);
             break;

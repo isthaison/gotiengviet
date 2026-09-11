@@ -38,5 +38,22 @@
 #define ID_TRAY_MODERN      308
 #define ID_TRAY_UPDATE      309
 #define ID_TRAY_TOGGLE      311
+#define ID_TRAY_STARTUP_ADMIN 312
+
+#define IDC_BTN_DATA        217
+
+#define IDD_DATA_DIALOG     220
+#define IDC_DATA_MACRO      221
+#define IDC_DATA_EMOJI      222
+#define IDC_DATA_LIST       223
+#define IDC_DATA_KEY        224
+#define IDC_DATA_VALUE      225
+#define IDC_LBL_KEY         226
+#define IDC_LBL_VALUE       227
+#define IDC_DATA_SAVE       228
+#define IDC_DATA_DELETE     229
+#define IDC_DATA_FOLDER     230
+#define IDC_DATA_CLOSE      231
+#define IDC_DATA_NOTE       232
 
 #endif /* RESOURCE_H */

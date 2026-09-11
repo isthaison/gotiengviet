@@ -34,14 +34,18 @@ engine/           lõi dùng chung (C): compose, charset, phonology, config,
                   spell, macro/emoji, ai+ollama, json, learn, update
                   (check version GitHub), mirror (mirror màn hình cho
                   client pass-through), text, telex/vni adapter
-ibus/             adapter IBus: engine.c, gotiengviet.xml
-cmd/setup         GTK, indicator, CLI  |  cmd/demo  demo terminal
+linux/
+  ibus/           adapter IBus: engine.c, gotiengviet.xml/icons
+  setup/          GTK, indicator, CLI
+tools/
+  demo/           demo terminal dùng chung mọi nền tảng
 tests/            kiểm thử C (+ fake curl)
-windows/          hook, tray, setup, update, tsf_mode (C) + tsf/ (C++ TSF)
+windows/          app khay, setup, update (C) + tsf/ (C++ TSF Text Service)
+macos/            IME InputMethodKit (đang làm)
 data/             macro, emoji, config/ai mẫu, prompts, seed từ điển
 ```
 
-Script shell chỉ build/cài/đóng gói.
+Mọi lệnh shell gom trong `./gtv.sh` duy nhất (`build|test|vet|clean|install|package|bump|help`).
 
 ## API thư viện C
 

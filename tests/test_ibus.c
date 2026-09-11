@@ -1,5 +1,5 @@
 #define main ibus_application_main
-#include "../ibus/engine.c"
+#include "../linux/ibus/engine.c"
 #undef main
 #include <glib/gstdio.h>
 

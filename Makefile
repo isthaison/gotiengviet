@@ -22,11 +22,11 @@ $(BUILD_DIR)/engine/%.o: engine/%.c engine/engine.h engine/internal.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 $(CORE_LIB): $(CORE_OBJ)
 	$(AR) rcs $@ $^
-$(BUILD_DIR)/ibus-engine-gotiengviet: ibus/engine.c $(CORE_LIB)
+$(BUILD_DIR)/ibus-engine-gotiengviet: linux/ibus/engine.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0) $(CORE_LIBS) -o $@
-$(BUILD_DIR)/ibus-setup-gotiengviet: cmd/setup/main.c $(CORE_LIB)
+$(BUILD_DIR)/ibus-setup-gotiengviet: linux/setup/main.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0 ayatana-appindicator3-0.1) $(CORE_LIBS) -o $@
-$(BUILD_DIR)/gotiengviet-demo: cmd/demo/main.c $(CORE_LIB)
+$(BUILD_DIR)/gotiengviet-demo: tools/demo/main.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(CORE_LIBS) -o $@
 $(BUILD_DIR)/test-engine: tests/test_engine.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(CORE_LIBS) -o $@
@@ -54,13 +54,13 @@ bump:
 	./gtv.sh bump "$(V)" "$(NOTES)"
 -include $(CORE_OBJ:.o=.d)
 
-$(BUILD_DIR)/test-setup: tests/test_setup.c cmd/setup/main.c $(CORE_LIB)
+$(BUILD_DIR)/test-setup: tests/test_setup.c linux/setup/main.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs gtk+-3.0 ayatana-appindicator3-0.1) $(CORE_LIBS) -o $@
 .PHONY: test-ui
 test-ui: $(BUILD_DIR)/test-setup
 	$(BUILD_DIR)/test-setup
 
-$(BUILD_DIR)/test-ibus: tests/test_ibus.c ibus/engine.c $(CORE_LIB)
+$(BUILD_DIR)/test-ibus: tests/test_ibus.c linux/ibus/engine.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(shell $(PKG_CONFIG) --cflags --libs ibus-1.0) $(CORE_LIBS) -o $@
 .PHONY: test-ibus
 test-ibus: $(BUILD_DIR)/test-ibus $(BUILD_DIR)/fixtures/curl

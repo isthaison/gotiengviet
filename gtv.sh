@@ -69,12 +69,12 @@ cmd_install() {
     install -Dm755 "$BUILD_DIR/ibus-engine-gotiengviet" "$DESTDIR/usr/libexec/ibus-engine-gotiengviet"
     install -Dm755 "$BUILD_DIR/ibus-setup-gotiengviet" "$DESTDIR/usr/libexec/ibus-setup-gotiengviet"
     install -Dm755 "$BUILD_DIR/gotiengviet-demo" "$DESTDIR/usr/bin/gotiengviet-demo"
-    install -Dm644 ibus/gotiengviet.xml "$DESTDIR/usr/share/ibus/component/gotiengviet.xml"
-    if [[ -f ibus/gotiengviet.metainfo.xml ]]; then
-        install -Dm644 ibus/gotiengviet.metainfo.xml "$DESTDIR/usr/share/metainfo/gotiengviet.metainfo.xml"
+    install -Dm644 linux/ibus/gotiengviet.xml "$DESTDIR/usr/share/ibus/component/gotiengviet.xml"
+    if [[ -f linux/ibus/gotiengviet.metainfo.xml ]]; then
+        install -Dm644 linux/ibus/gotiengviet.metainfo.xml "$DESTDIR/usr/share/metainfo/gotiengviet.metainfo.xml"
     fi
-    install -Dm644 ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet.svg"
-    install -Dm644 ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet.svg"
+    install -Dm644 linux/ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet.svg"
+    install -Dm644 linux/ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet.svg"
     install -Dm644 data/macros.txt "$DESTDIR/usr/share/gotiengviet/macros.txt"
     install -Dm644 data/emojis.txt "$DESTDIR/usr/share/gotiengviet/emojis.txt"
     install -Dm644 data/config "$DESTDIR/usr/share/gotiengviet/config"
@@ -85,12 +85,12 @@ cmd_install() {
     for size in 16 22 24 32 48 64 128 256; do
         directory="$DESTDIR/usr/share/icons/hicolor/${size}x${size}/apps"
         mkdir -p "$directory"
-        rsvg-convert -w "$size" -h "$size" ibus/icons/gotiengviet.svg -o "$directory/gotiengviet.png"
+        rsvg-convert -w "$size" -h "$size" linux/ibus/icons/gotiengviet.svg -o "$directory/gotiengviet.png"
     done
     for size in 48 256; do
         name=gotiengviet.png
         [[ "$size" == 256 ]] && name=gotiengviet-256.png
-        rsvg-convert -w "$size" -h "$size" ibus/icons/gotiengviet.svg -o "$DESTDIR/usr/share/gotiengviet/icons/$name"
+        rsvg-convert -w "$size" -h "$size" linux/ibus/icons/gotiengviet.svg -o "$DESTDIR/usr/share/gotiengviet/icons/$name"
     done
     mkdir -p "$DESTDIR/usr/bin" "$DESTDIR/usr/share/applications" "$DESTDIR/etc/xdg/autostart"
     ln -sfn /usr/libexec/ibus-setup-gotiengviet "$DESTDIR/usr/bin/gotiengviet"
@@ -247,10 +247,10 @@ cmd_bump() {
     sed -i -E "s/^FILEVERSION[ \t]+[0-9,]+/FILEVERSION     $csv/" windows/resource.rc
     sed -i -E "s/^PRODUCTVERSION[ \t]+[0-9,]+/PRODUCTVERSION  $csv/" windows/resource.rc
     sed -i -E "s/(VALUE \"(File|Product)Version\", \")[0-9.]+/\\1$ver.0/" windows/resource.rc
-    sed -i "s|<version>[^<]*</version>|<version>$ver</version>|" ibus/gotiengviet.xml
-    sed -i 's/"[0-9][0-9.]*","GPL"/"'"$ver"'","GPL"/' ibus/engine.c
+    sed -i "s|<version>[^<]*</version>|<version>$ver</version>|" linux/ibus/gotiengviet.xml
+    sed -i 's/"[0-9][0-9.]*","GPL"/"'"$ver"'","GPL"/' linux/ibus/engine.c
 
-    if grep -q "<release version=\"$ver\"" ibus/gotiengviet.metainfo.xml; then
+    if grep -q "<release version=\"$ver\"" linux/ibus/gotiengviet.metainfo.xml; then
         echo "(metainfo already has $ver, keeping existing entry)"
     else
         local esc_notes
@@ -265,8 +265,8 @@ cmd_bump() {
                 print "    </release>"
                 next
             }
-            1' ibus/gotiengviet.metainfo.xml > ibus/gotiengviet.metainfo.xml.new
-        mv ibus/gotiengviet.metainfo.xml.new ibus/gotiengviet.metainfo.xml
+            1' linux/ibus/gotiengviet.metainfo.xml > linux/ibus/gotiengviet.metainfo.xml.new
+        mv linux/ibus/gotiengviet.metainfo.xml.new linux/ibus/gotiengviet.metainfo.xml
     fi
 
     sed -i "s/^VERSION ?= .*/VERSION ?= $ver/" Makefile.win

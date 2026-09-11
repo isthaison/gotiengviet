@@ -1,6 +1,6 @@
 /* Exercise the actual native GTK UI in an isolated Broadway display. */
 #define main setup_application_main
-#include "../cmd/setup/main.c"
+#include "../linux/setup/main.c"
 #undef main
 
 static gboolean verify_setup(gpointer data) {

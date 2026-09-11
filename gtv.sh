@@ -186,7 +186,7 @@ restart_ibus_sessions() {
 }
 
 cmd_package() {
-    version=${1:-0.8.0-1}
+    version=${1:-0.8.1-1}
     architecture=$(dpkg --print-architecture)
     dpkg --validate-version "$version"
     make build test

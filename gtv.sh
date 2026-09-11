@@ -186,7 +186,7 @@ restart_ibus_sessions() {
 }
 
 cmd_package() {
-    version=${1:-0.7.0-1}
+    version=${1:-0.8.0-1}
     architecture=$(dpkg --print-architecture)
     dpkg --validate-version "$version"
     make build test
@@ -271,7 +271,7 @@ cmd_bump() {
 
     sed -i "s/^VERSION ?= .*/VERSION ?= $ver/" Makefile.win
     sed -i "s/^VERSION ?= .*/VERSION ?= $ver-1/" Makefile
-    sed -i 's/^version=${1:-.*}/version=${1:-'"$ver"'-1}/' "$0"
+    sed -i 's/^\([ \t]*\)version=${1:-.*}/\1version=${1:-'"$ver"'-1}/' "$0"
     sed -i "s/#define AppVersion \".*\"/#define AppVersion \"$ver\"/" windows/installer.iss
     sed -i "s/#define AppVerNum \".*\"/#define AppVerNum \"$ver.0\"/" windows/installer.iss
     # installer.iss carries Vietnamese shortcut names: keep UTF-8 with BOM.

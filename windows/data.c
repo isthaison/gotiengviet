@@ -3,26 +3,57 @@
 #include "win_utf.h"
 #include "internal.h"
 #include <windows.h>
+#include <commctrl.h>
 #include <shellapi.h>
 #include <glib.h>
 
 static gboolean show_emoji = FALSE;
 
+static void list_setup_columns(HWND hwnd) {
+    HWND list = GetDlgItem(hwnd, IDC_DATA_LIST);
+    SendMessageW(list, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
+                 LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
+    struct { const char *text; int width; } cols[] = {
+        { "Từ gõ", 100 },
+        { "Nội dung", 140 },
+    };
+    for (int i = 0; i < 2; i++) {
+        gunichar2 *w = g_utf8_to_utf16(cols[i].text, -1, NULL, NULL, NULL);
+        LVCOLUMNW col = {0};
+        col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
+        col.pszText = (LPWSTR)w;
+        col.cx = cols[i].width;
+        col.iSubItem = i;
+        SendMessageW(list, LVM_INSERTCOLUMNW, (WPARAM)i, (LPARAM)&col);
+        g_free(w);
+    }
+}
+
 static void list_refresh(HWND hwnd) {
     HWND list = GetDlgItem(hwnd, IDC_DATA_LIST);
-    SendMessageW(list, LB_RESETCONTENT, 0, 0);
+    SendMessageW(list, LVM_DELETEALLITEMS, 0, 0);
     guint n = gtv_table_count(show_emoji);
     for (guint i = 0; i < n; i++) {
         const gchar *k = NULL, *v = NULL;
         if (!gtv_table_get(show_emoji, i, &k, &v)) continue;
-        gchar *disp = g_strdup_printf("%s → %s", k, v);
-        gunichar2 *w = g_utf8_to_utf16(disp, -1, NULL, NULL, NULL);
-        if (w) {
-            SendMessageW(list, LB_ADDSTRING, 0, (LPARAM)w);
-            g_free(w);
-        }
-        g_free(disp);
+        LVITEMW item = {0};
+        item.mask = LVIF_TEXT;
+        item.iItem = (int)i;
+        gunichar2 *wk = g_utf8_to_utf16(k ? k : "", -1, NULL, NULL, NULL);
+        gunichar2 *wv = g_utf8_to_utf16(v ? v : "", -1, NULL, NULL, NULL);
+        item.pszText = (LPWSTR)(wk ? wk : L"");
+        SendMessageW(list, LVM_INSERTITEMW, 0, (LPARAM)&item);
+        item.iSubItem = 1;
+        item.pszText = (LPWSTR)(wv ? wv : L"");
+        SendMessageW(list, LVM_SETITEMTEXTW, (WPARAM)i, (LPARAM)&item);
+        g_free(wk);
+        g_free(wv);
     }
+}
+
+static int list_selection(HWND hwnd) {
+    return (int)SendMessageW(GetDlgItem(hwnd, IDC_DATA_LIST),
+                             LVM_GETNEXTITEM, (WPARAM)-1, (LPARAM)LVNI_SELECTED);
 }
 
 static void fields_clear(HWND hwnd) {
@@ -31,8 +62,7 @@ static void fields_clear(HWND hwnd) {
 }
 
 static void fields_from_selection(HWND hwnd) {
-    HWND list = GetDlgItem(hwnd, IDC_DATA_LIST);
-    LRESULT idx = SendMessageW(list, LB_GETCURSEL, 0, 0);
+    int idx = list_selection(hwnd);
     if (idx < 0) return;
     const gchar *k = NULL, *v = NULL;
     if (!gtv_table_get(show_emoji, (guint)idx, &k, &v)) return;
@@ -74,8 +104,7 @@ static void on_save(HWND hwnd) {
 }
 
 static void on_delete(HWND hwnd) {
-    HWND list = GetDlgItem(hwnd, IDC_DATA_LIST);
-    LRESULT idx = SendMessageW(list, LB_GETCURSEL, 0, 0);
+    int idx = list_selection(hwnd);
     if (idx < 0) return;
     const gchar *k = NULL;
     if (!gtv_table_get(show_emoji, (guint)idx, &k, NULL) || !k) return;
@@ -118,12 +147,21 @@ static INT_PTR CALLBACK DataDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             CheckRadioButton(hwnd, IDC_DATA_MACRO, IDC_DATA_EMOJI, IDC_DATA_MACRO);
             SendMessageW(GetDlgItem(hwnd, IDC_DATA_KEY), EM_LIMITTEXT, 255, 0);
             SendMessageW(GetDlgItem(hwnd, IDC_DATA_VALUE), EM_LIMITTEXT, 1023, 0);
+            list_setup_columns(hwnd);
             list_refresh(hwnd);
             return TRUE;
         }
+        case WM_NOTIFY: {
+            LPNMHDR hdr = (LPNMHDR)lParam;
+            if (hdr && hdr->idFrom == IDC_DATA_LIST && hdr->code == LVN_ITEMCHANGED) {
+                LPNMLISTVIEW lv = (LPNMLISTVIEW)lParam;
+                if (lv->uNewState & LVIS_SELECTED)
+                    fields_from_selection(hwnd);
+            }
+            break;
+        }
         case WM_COMMAND: {
             int id = LOWORD(wParam);
-            int code = HIWORD(wParam);
             if (id == IDC_DATA_MACRO || id == IDC_DATA_EMOJI) {
                 gboolean emoji = (id == IDC_DATA_EMOJI);
                 if (emoji != show_emoji) {
@@ -133,10 +171,7 @@ static INT_PTR CALLBACK DataDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 }
                 return TRUE;
             }
-            if (id == IDC_DATA_LIST && code == LBN_SELCHANGE) {
-                fields_from_selection(hwnd);
-                return TRUE;
-            }
+            /* Row selection arrives via WM_NOTIFY/LVN_ITEMCHANGED. */
             if (id == IDC_DATA_SAVE) { on_save(hwnd); return TRUE; }
             if (id == IDC_DATA_DELETE) { on_delete(hwnd); return TRUE; }
             if (id == IDC_DATA_FOLDER) { on_folder(); return TRUE; }

@@ -6,7 +6,7 @@ PKG_CONFIG ?= pkg-config
 include mk/common.mk
 
 CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
-LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32 -lole32 -luuid
+LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32 -lole32 -luuid -lcomctl32
 
 TSF_CXXFLAGS ?= -O2 -g -std=c++14 -Wall -Wextra -Wno-unused-parameter -Iengine -Iwindows/tsf $(shell $(PKG_CONFIG) --cflags gio-2.0)
 TSF_LDFLAGS ?= -shared windows/tsf/gtv_tsf.def $(ENGINE_OBJS) $(shell $(PKG_CONFIG) --libs gio-2.0) -lintl -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -lgdi32 -mwindows

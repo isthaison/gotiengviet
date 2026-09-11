@@ -11,6 +11,9 @@
 #define IDC_STATIC (-1)
 #endif
 
+/* Visual Styles (themed controls), asInvoker, DPI-aware. */
+1 RT_MANIFEST "app.manifest"
+
 IDI_APP_ICON    ICON    "icons/gotiengviet.ico"
 IDI_TRAY_V      ICON    "icons/tray_v.ico"
 IDI_TRAY_E      ICON    "icons/tray_e.ico"
@@ -52,7 +55,9 @@ BEGIN
     /* ASCII placeholders only: real strings are set at runtime in UTF-16. */
     AUTORADIOBUTTON "Macro", IDC_DATA_MACRO, 10, 10, 120, 10, WS_GROUP
     AUTORADIOBUTTON "Emoji", IDC_DATA_EMOJI, 135, 10, 120, 10
-    LISTBOX         IDC_DATA_LIST, 10, 25, 260, 100, WS_VSCROLL | WS_BORDER | LBS_NOTIFY
+    CONTROL         "", IDC_DATA_LIST, "SysListView32",
+                    LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP | WS_VSCROLL,
+                    10, 25, 260, 100
     LTEXT           "Key:", IDC_LBL_KEY, 10, 132, 40, 10
     EDITTEXT        IDC_DATA_KEY, 55, 130, 215, 12
     LTEXT           "Value:", IDC_LBL_VALUE, 10, 147, 40, 10

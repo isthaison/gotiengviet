@@ -7,6 +7,7 @@
 #include "update.h"
 #include "resource.h"
 #include <windows.h>
+#include <commctrl.h>
 #include <glib.h>
 
 GtvWindowsApp g_app = {0};
@@ -79,6 +80,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return gtv_startup_apply(op);
     }
     (void)lpCmdLine;
+
+    /* Themed common controls (listview etc.) need explicit init. */
+    {
+        INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_LISTVIEW_CLASSES };
+        InitCommonControlsEx(&icc);
+    }
 
     /* 1. Single-instance check */
     HANDLE hMutex = CreateMutexA(NULL, TRUE, MUTEX_NAME);

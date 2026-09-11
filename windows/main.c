@@ -89,6 +89,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
     (void)lpCmdLine;
 
+    /* Ensure the thread is attached to the interactive desktop "Default",
+     * where Explorer.exe and the system tray notification area reside. */
+    {
+        HDESK hDesk = OpenDesktopA("Default", 0, FALSE, GENERIC_ALL);
+        if (hDesk) {
+            SetThreadDesktop(hDesk);
+            CloseDesktop(hDesk);
+        }
+    }
+
     /* Themed common controls (listview etc.) need explicit init. */
     {
         INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_LISTVIEW_CLASSES };

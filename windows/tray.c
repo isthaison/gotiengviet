@@ -20,11 +20,20 @@ static HICON create_tray_text_icon(GtvMode mode) {
 
     HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HDC hdcMask = CreateCompatibleDC(hdcScreen);
+
     HBITMAP hbmColor = CreateCompatibleBitmap(hdcScreen, cx, cy);
     HBITMAP hbmMask = CreateBitmap(cx, cy, 1, 1, NULL);
-    HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmColor);
+
+    HBITMAP hbmOldColor = (HBITMAP)SelectObject(hdcMem, hbmColor);
+    HBITMAP hbmOldMask = (HBITMAP)SelectObject(hdcMask, hbmMask);
 
     RECT rc = {0, 0, cx, cy};
+
+    /* Monochrome 1-bpp mask: 0 (black) = opaque, 1 (white) = transparent */
+    HBRUSH hbrBlack = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    FillRect(hdcMask, &rc, hbrBlack);
+
     HBRUSH hbr = CreateSolidBrush(RGB(178, 34, 34));
     FillRect(hdcMem, &rc, hbr);
     DeleteObject(hbr);
@@ -40,8 +49,10 @@ static HICON create_tray_text_icon(GtvMode mode) {
 
     SelectObject(hdcMem, hFontOld);
     DeleteObject(hFont);
-    SelectObject(hdcMem, hbmOld);
+    SelectObject(hdcMem, hbmOldColor);
+    SelectObject(hdcMask, hbmOldMask);
     DeleteDC(hdcMem);
+    DeleteDC(hdcMask);
     ReleaseDC(NULL, hdcScreen);
 
     ICONINFO ii;
@@ -67,6 +78,7 @@ void gtv_config_strings_lock(void) {
     }
     EnterCriticalSection(&config_lock);
 }
+
 void gtv_config_strings_unlock(void) {
     LeaveCriticalSection(&config_lock);
 }
@@ -74,6 +86,9 @@ void gtv_config_strings_unlock(void) {
 static void tray_apply_icon_tip(void) {
     if (icon_current) DestroyIcon(icon_current);
     icon_current = create_tray_text_icon(g_app.config.mode);
+    if (!icon_current) {
+        icon_current = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_APP_ICON));
+    }
     nid.hIcon = icon_current;
     gtv_win_copy_utf8(nid.szTip, G_N_ELEMENTS(nid.szTip),
                       g_app.config.mode == GTV_VNI ? "GoTiengViet [VNI]" : "GoTiengViet [Telex]");
@@ -90,7 +105,10 @@ gboolean gtv_tray_init(HWND hwnd) {
     tray_apply_icon_tip();
     if (!nid.hIcon) return FALSE;
 
-    return Shell_NotifyIconW(NIM_ADD, &nid);
+    if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
+        return Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+    return TRUE;
 }
 
 void gtv_tray_cleanup(void) {

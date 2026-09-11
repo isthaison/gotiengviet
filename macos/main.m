@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
 
     /* Second launch opens Settings instead of doubling the agent. */
     NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
-    NSArray *running = [NSRunningApplications runningApplicationsWithBundleIdentifier:bid];
+    NSArray *running = [NSRunningApplication runningApplicationsWithBundleIdentifier:bid];
     if ([running count] > 1) {
         [[NSDistributedNotificationCenter defaultCenter]
             postNotificationName:@"vn.gotiengviet.ShowSettings" object:nil];

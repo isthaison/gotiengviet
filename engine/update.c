@@ -307,11 +307,22 @@ static gchar *github_api_url(void) {
 #ifdef _WIN32
 #include <windows.h>
 
+/* Run curl with stdout/stderr captured to a temp file (never an anonymous
+ * pipe). A pipe deadlocks once the payload exceeds its buffer: curl blocks
+ * on write while we block in WaitForSingleObject, so every check stalls
+ * until --max-time kills curl and looks like a network failure. */
 static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) {
-    HANDLE hStdOutRead = NULL, hStdOutWrite = NULL;
+    WCHAR tmp_dir[MAX_PATH], tmp_file[MAX_PATH];
+    if (!GetTempPathW(MAX_PATH, tmp_dir)) return NULL;
+    if (!GetTempFileNameW(tmp_dir, L"gtv", 0, tmp_file)) return NULL;
+
     SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
-    if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sa, 0)) return NULL;
-    SetHandleInformation(hStdOutRead, HANDLE_FLAG_INHERIT, 0);
+    HANDLE hOut = CreateFileW(tmp_file, GENERIC_WRITE, FILE_SHARE_READ, &sa,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, NULL);
+    if (hOut == INVALID_HANDLE_VALUE) {
+        DeleteFileW(tmp_file);
+        return NULL;
+    }
 
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
@@ -319,13 +330,14 @@ static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) 
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
-    si.hStdOutput = hStdOutWrite;
-    si.hStdError = hStdOutWrite;
+    si.hStdOutput = hOut;
+    si.hStdError = hOut;
     ZeroMemory(&pi, sizeof(pi));
 
     gunichar2 *wurl = g_utf8_to_utf16(url, -1, NULL, NULL, NULL);
     if (!wurl) {
-        CloseHandle(hStdOutRead); CloseHandle(hStdOutWrite);
+        CloseHandle(hOut);
+        DeleteFileW(tmp_file);
         return NULL;
     }
 
@@ -351,31 +363,41 @@ static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) 
 
     BOOL ok = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
     g_free(cmd);
-    CloseHandle(hStdOutWrite);
     if (!ok) {
-        CloseHandle(hStdOutRead);
+        CloseHandle(hOut);
+        DeleteFileW(tmp_file);
         return NULL;
     }
 
     CloseHandle(pi.hThread);
-    WaitForSingleObject(pi.hProcess, (DWORD)(max_secs * 1000 + 5000));
+    DWORD wait_rc = WaitForSingleObject(pi.hProcess, (DWORD)(max_secs * 1000 + 5000));
     DWORD exit_code = 1;
-    GetExitCodeProcess(pi.hProcess, &exit_code);
-    CloseHandle(pi.hProcess);
-
-    GString *out = g_string_new("");
-    char buf[4096];
-    DWORD bytesRead = 0;
-    while (ReadFile(hStdOutRead, buf, sizeof(buf) - 1, &bytesRead, NULL) && bytesRead > 0) {
-        buf[bytesRead] = '\0';
-        g_string_append(out, buf);
+    if (wait_rc == WAIT_TIMEOUT) {
+        TerminateProcess(pi.hProcess, 1);
+        exit_code = 1;
+    } else {
+        GetExitCodeProcess(pi.hProcess, &exit_code);
     }
-    CloseHandle(hStdOutRead);
+    CloseHandle(pi.hProcess);
+    CloseHandle(hOut);
     if (exit_code != 0) {
-        g_string_free(out, TRUE);
+        DeleteFileW(tmp_file);
         return NULL;
     }
-    return g_string_free(out, FALSE);
+
+    gchar *tmp_utf8 = g_utf16_to_utf8(tmp_file, -1, NULL, NULL, NULL);
+    gchar *contents = NULL;
+    if (tmp_utf8) {
+        g_file_get_contents(tmp_utf8, &contents, NULL, NULL);
+        g_free(tmp_utf8);
+    }
+    DeleteFileW(tmp_file);
+    if (!contents) return NULL;
+    if ((glong)strlen(contents) > max_bytes) {
+        g_free(contents);
+        return NULL;
+    }
+    return contents;
 }
 
 static gboolean gtv_update_download_win32(const gchar *url, const gchar *dest_path) {

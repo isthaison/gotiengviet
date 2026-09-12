@@ -175,20 +175,25 @@ STDAPI DllRegisterServer(void)
         pProfiles->Release();
     }
 
-    /* Register TSF Categories: keyboard TIP must register BOTH
-     * GUID_TFCAT_TIP_TEXTSERVICE (general text service) and
-     * GUID_TFCAT_TIP_KEYBOARD (keyboard-specific). Without TEXTSERVICE,
-     * Windows 10 will not list the keyboard in language settings.
+    /* Register TSF Categories: keyboard TIP must register
+     * GUID_TFCAT_TIP_KEYBOARD, GUID_TFCAT_TIP_TEXTSERVICE, and the
+     * {34745C63-B2F0-4784-8B67-5E12C8701A31} keyboard category that
+     * Windows' own TIPs carry (HKLM\SOFTWARE\Microsoft\CTF\TIP) —
+     * without it the keyboard never appears in language settings.
      * Same per-user caveat applies — TSF APIs may fail on HKLM write. */
     ITfCategoryMgr *pCategoryMgr = NULL;
     hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfCategoryMgr, (void**)&pCategoryMgr);
 
     if (SUCCEEDED(hr) && pCategoryMgr) {
+        GUID guidCat4784 = GUID_NULL;
+        CLSIDFromString(L"{34745C63-B2F0-4784-8B67-5E12C8701A31}", &guidCat4784);
         pCategoryMgr->RegisterCategory(
             CLSID_GtvTextService, GUID_TFCAT_TIP_TEXTSERVICE, CLSID_GtvTextService);
         pCategoryMgr->RegisterCategory(
             CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
+        pCategoryMgr->RegisterCategory(
+            CLSID_GtvTextService, guidCat4784, CLSID_GtvTextService);
         pCategoryMgr->Release();
     }
 
@@ -208,8 +213,11 @@ STDAPI DllUnregisterServer(void)
     ITfCategoryMgr *pCategoryMgr = NULL;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfCategoryMgr, (void**)&pCategoryMgr)) && pCategoryMgr) {
+        GUID guidCat4784 = GUID_NULL;
+        CLSIDFromString(L"{34745C63-B2F0-4784-8B67-5E12C8701A31}", &guidCat4784);
         pCategoryMgr->UnregisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_TEXTSERVICE, CLSID_GtvTextService);
         pCategoryMgr->UnregisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
+        pCategoryMgr->UnregisterCategory(CLSID_GtvTextService, guidCat4784, CLSID_GtvTextService);
         pCategoryMgr->Release();
     }
 

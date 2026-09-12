@@ -54,9 +54,22 @@ static gchar *pending_url = NULL;
 static gpointer check_worker(gpointer data) {
     CheckJob *job = data;
     gchar *tag = NULL, *url = NULL;
+    /* Diagnose the usual "check network" cause before hitting GitHub:
+     * missing curl, env override, proxy. All goes to update.log. */
+    gchar *curl_path = g_find_program_in_path("curl.exe");
+    if (!curl_path) curl_path = g_find_program_in_path("curl");
+    update_log("check env url=%s repo=%s https_proxy=%s http_proxy=%s curl=%s",
+               g_getenv("GTV_UPDATE_URL") ? g_getenv("GTV_UPDATE_URL") : "-",
+               g_getenv("GTV_UPDATE_REPO") ? g_getenv("GTV_UPDATE_REPO") : "-",
+               g_getenv("HTTPS_PROXY") ? g_getenv("HTTPS_PROXY") : "-",
+               g_getenv("HTTP_PROXY") ? g_getenv("HTTP_PROXY") : "-",
+               curl_path ? curl_path : "NOT-FOUND");
+    g_free(curl_path);
     GtvUpdateStatus st = gtv_update_check(NULL, GTV_VERSION, &tag, &url);
     update_log("check done manual=%d status=%d tag=%s url=%s",
                    job->manual, (gint)st, tag ? tag : "-", url ? url : "-");
+    if (st == GTV_UPDATE_ERROR)
+        update_log("hint: run curl manually: curl --fail --location https://api.github.com/repos/isthaison/gotiengviet/releases/latest");
     GtvUpdateResult *res = g_new(GtvUpdateResult, 1);
     res->status = (gint)st;
     res->tag = tag;
@@ -133,7 +146,7 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
             MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
         } else {
             update_log("check result: check error");
-            MessageBoxW(g_app.hwnd_main, L"Không kiểm tra được bản mới. Vui lòng kiểm tra lại kết nối mạng.", L"Cập nhật GoTiengViet", MB_OK | MB_ICONWARNING | MB_TOPMOST);
+            MessageBoxW(g_app.hwnd_main, L"Không kiểm tra được bản mới. Vui lòng kiểm tra lại kết nối mạng.\n\nChi tiết trong %APPDATA%\\gotiengviet\\update.log (chạy: curl --fail https://api.github.com/repos/isthaison/gotiengviet/releases/latest để kiểm tra).", L"Cập nhật GoTiengViet", MB_OK | MB_ICONWARNING | MB_TOPMOST);
         }
     }
     g_free(res->tag); g_free(res->url); g_free(res);

@@ -4,6 +4,13 @@
 #include <stdio.h>
 #include <glib.h>
 #include <wchar.h>
+#include <objbase.h>
+#include <msctf.h>
+
+static const wchar_t *GTV_TSF_CLSID_STR =
+    L"{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}";
+static const wchar_t *GTV_TSF_PROFILE_GUID_STR =
+    L"{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}";
 
 static const wchar_t *GTV_TSF_INPROC_KEY =
     L"Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32";
@@ -12,17 +19,19 @@ static const wchar_t *GTV_TSF_INPROC_KEY =
  * If these don't exist, the keyboard won't appear in language settings. */
 static const wchar_t *GTV_TSF_PROFILE_BASE =
     L"Software\\Microsoft\\CTF\\TIP\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\LanguageProfile";
-static const wchar_t *GTV_TSF_PROFILE_EN = L"0x00000409\\{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}";
-static const wchar_t *GTV_TSF_PROFILE_VI = L"0x0000042a\\{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}";
+static const wchar_t *GTV_TSF_LANG_EN = L"0x00000409";
+static const wchar_t *GTV_TSF_LANG_VI = L"0x0000042a";
 
-/* TSF category key: HKCU\Software\Microsoft\CTF\TIP\{CLSID}\Category\{categoryGUID}
- * The ITfCategoryMgr API may write to HKLM which fails for per-user installs.
- * We register the keyboard category manually under HKCU to ensure it works. */
-static const wchar_t *GTV_TSF_CATEGORY_BASE =
-    L"Software\\Microsoft\\CTF\\TIP\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\Category";
-/* GUID_TFCAT_TIP_KEYBOARD = {34745C63-B2F0-11D0-98EF-00AA006D2E36} */
-static const wchar_t *GTV_TSF_CAT_KEYBOARD =
-    L"{34745C63-B2F0-11D0-98EF-00AA006D2E36}\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}";
+/* Category GUIDs: a keyboard TIP must register these, otherwise Win10/11
+ * won't list it in language settings (see windows/tsf/tsf_register.cpp).
+ * 4784… is the keyboard category Windows' own TIPs actually carry
+ * (verified against HKLM\SOFTWARE\Microsoft\CTF\TIP on Win10);
+ * 11D0… is the documented GUID_TFCAT_TIP_KEYBOARD value. */
+static const wchar_t *GTV_TSF_CAT_KEYBOARD = L"{34745C63-B2F0-11D0-98EF-00AA006D2E36}";
+static const wchar_t *GTV_TSF_CAT_KEYBOARD_4784 = L"{34745C63-B2F0-4784-8B67-5E12C8701A31}";
+static const wchar_t *GTV_TSF_CAT_TEXTSERVICE = L"{12A1D29F-A065-440C-9746-EB2002C2B667}";
+static const wchar_t *GTV_TSF_TIP_BASE =
+    L"Software\\Microsoft\\CTF\\TIP\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}";
 
 static gchar *s_log_path = NULL;
 
@@ -82,126 +91,206 @@ static gboolean registered_to(const wchar_t *dll_path) {
         registered[G_N_ELEMENTS(registered) - 1] = L'\0';
         ok = same_path_ci(registered, dll_path);
         if (!ok)
-            log_msg("DLL path mismatch: registered=[%ls] expected=[%ls]", registered, dll_path);
+            log_msg("DLL path mismatch (registered path differs from app dir)");
     }
 
     RegCloseKey(hkey);
     return ok;
 }
 
-static gboolean tsf_profiles_registered(void) {
+static gboolean reg_key_exists(const wchar_t *subkey) {
     HKEY hkey = NULL;
-    wchar_t key[MAX_PATH];
-    gboolean found = FALSE;
-
-    /* Check English profile (0x0409) */
-    swprintf(key, MAX_PATH, L"%ls\\%ls", GTV_TSF_PROFILE_BASE, GTV_TSF_PROFILE_EN);
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, key, 0, KEY_READ, &hkey) == ERROR_SUCCESS) {
+    LONG rc = RegOpenKeyExW(HKEY_CURRENT_USER, subkey, 0, KEY_READ, &hkey);
+    if (rc == ERROR_SUCCESS) {
         RegCloseKey(hkey);
-        found = TRUE;
+        return TRUE;
     }
+    return FALSE;
+}
 
-    /* Check Vietnamese profile (0x042A) */
-    if (!found) {
-        swprintf(key, MAX_PATH, L"%ls\\%ls", GTV_TSF_PROFILE_BASE, GTV_TSF_PROFILE_VI);
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, key, 0, KEY_READ, &hkey) == ERROR_SUCCESS) {
-            RegCloseKey(hkey);
-            found = TRUE;
-        }
+static gboolean tsf_profiles_registered(void) {
+    wchar_t key_en[MAX_PATH];
+    wchar_t key_vi[MAX_PATH];
+    swprintf(key_en, MAX_PATH, L"%ls\\%ls\\%ls",
+             GTV_TSF_PROFILE_BASE, GTV_TSF_LANG_EN, GTV_TSF_PROFILE_GUID_STR);
+    swprintf(key_vi, MAX_PATH, L"%ls\\%ls\\%ls",
+             GTV_TSF_PROFILE_BASE, GTV_TSF_LANG_VI, GTV_TSF_PROFILE_GUID_STR);
+    if (reg_key_exists(key_en) || reg_key_exists(key_vi))
+        return TRUE;
+    log_msg("No TSF language profiles found under HKCU");
+    return FALSE;
+}
+
+static gboolean tsf_category_registered(void) {
+    /* Accept any of the layouts Windows versions use; the manual fallback
+     * writes all of them (see ensure_category_registered). */
+    const wchar_t *cats[3] = { GTV_TSF_CAT_KEYBOARD, GTV_TSF_CAT_KEYBOARD_4784,
+                               GTV_TSF_CAT_TEXTSERVICE };
+    for (int i = 0; i < 3; i++) {
+        wchar_t k1[MAX_PATH], k2[MAX_PATH], k3[MAX_PATH];
+        swprintf(k1, MAX_PATH, L"%ls\\Category\\Category\\%ls\\%ls",
+                 GTV_TSF_TIP_BASE, cats[i], GTV_TSF_CLSID_STR);
+        swprintf(k2, MAX_PATH, L"%ls\\Category\\%ls\\%ls",
+                 GTV_TSF_TIP_BASE, cats[i], GTV_TSF_CLSID_STR);
+        swprintf(k3, MAX_PATH, L"%ls\\Category\\%ls",
+                 GTV_TSF_TIP_BASE, cats[i]);
+        if (reg_key_exists(k1) || reg_key_exists(k2) || reg_key_exists(k3))
+            continue;
+        return FALSE;
     }
-
-    if (!found)
-        log_msg("No TSF language profiles found under HKCU");
-
-    return found;
+    return TRUE;
 }
 
 /* Manually register a TSF language profile under HKCU.
- * The ITfInputProcessorProfiles API may write to HKLM, which fails
- * for per-user installs.  We create the registry entries directly. */
-static void ensure_profile_registered(const wchar_t *langid_path,
+ * Creates ...\LanguageProfile\{langid} then ...\{profileguid} in two
+ * steps: RegCreateKeyEx on an open HKEY must not be given a multi-level
+ * relative path with a backslash (fails on some Windows builds). */
+static void ensure_profile_registered(const wchar_t *langid,
                                       const wchar_t *profile_guid,
                                       const wchar_t *description) {
     HKEY hKeyLang = NULL;
     HKEY hKeyProfile = NULL;
+    wchar_t lang_key[MAX_PATH];
     LONG rc;
 
-    /* Create ...\LanguageProfile\{langid} */
-    rc = RegCreateKeyExW(HKEY_CURRENT_USER, GTV_TSF_PROFILE_BASE,
+    swprintf(lang_key, MAX_PATH, L"%ls\\%ls", GTV_TSF_PROFILE_BASE, langid);
+    rc = RegCreateKeyExW(HKEY_CURRENT_USER, lang_key,
                          0, NULL, 0, KEY_WRITE, NULL, &hKeyLang, NULL);
     if (rc != ERROR_SUCCESS) {
-        log_msg("Failed to create LanguageProfile key: %ld", (long)rc);
+        log_msg("Failed to create profile lang key: %ld", (long)rc);
         return;
     }
 
-    rc = RegCreateKeyExW(hKeyLang, langid_path,
+    rc = RegCreateKeyExW(hKeyLang, profile_guid,
                          0, NULL, 0, KEY_WRITE, NULL, &hKeyProfile, NULL);
     if (rc != ERROR_SUCCESS) {
-        log_msg("Failed to create profile subkey %ls: %ld", langid_path, (long)rc);
+        log_msg("Failed to create profile guid subkey: %ld", (long)rc);
         RegCloseKey(hKeyLang);
         return;
     }
 
-    /* Set default value = description */
     rc = RegSetValueExW(hKeyProfile, NULL, 0, REG_SZ,
                         (const BYTE *)description,
                         (DWORD)((wcslen(description) + 1) * sizeof(wchar_t)));
     if (rc != ERROR_SUCCESS)
         log_msg("Failed to set profile description: %ld", (long)rc);
 
-    /* Set Description = REG_SZ */
     rc = RegSetValueExW(hKeyProfile, L"Description", 0, REG_SZ,
                         (const BYTE *)description,
                         (DWORD)((wcslen(description) + 1) * sizeof(wchar_t)));
+    if (rc != ERROR_SUCCESS)
+        log_msg("Failed to set profile Description value: %ld", (long)rc);
 
     RegCloseKey(hKeyProfile);
     RegCloseKey(hKeyLang);
 
-    log_msg("Profile registered: %ls\\%ls", langid_path, profile_guid);
+    log_msg("Profile registered under HKCU");
 }
 
 static void ensure_profiles_registered(void) {
-    ensure_profile_registered(GTV_TSF_PROFILE_EN, NULL, L"GoTV");
-    ensure_profile_registered(GTV_TSF_PROFILE_VI, NULL, L"GoTV");
+    ensure_profile_registered(GTV_TSF_LANG_EN, GTV_TSF_PROFILE_GUID_STR, L"GoTV");
+    ensure_profile_registered(GTV_TSF_LANG_VI, GTV_TSF_PROFILE_GUID_STR, L"GoTV");
 }
 
-/* Ensure the keyboard category (GUID_TFCAT_TIP_KEYBOARD) is registered
- * under HKCU.  The ITfCategoryMgr API may fail for per-user installs
- * because it tries to write to HKLM.  We write the key manually. */
+/* Ensure BOTH keyboard and textservice categories are registered under
+ * HKCU. Writes every layout Windows has used so at least one matches:
+ *   TIP\{CLSID}\Category\Category\{cat}\{clsid}  (Win10 RegisterCategory)
+ *   TIP\{CLSID}\Category\{cat}\{clsid}
+ *   TIP\{CLSID}\Category\{cat}                   (legacy fallback) */
+static void ensure_one_category(const wchar_t *cat_guid) {
+    const wchar_t *layouts[3];
+    wchar_t k_double[MAX_PATH], k_single[MAX_PATH], k_legacy[MAX_PATH];
+    swprintf(k_double, MAX_PATH, L"%ls\\Category\\Category\\%ls\\%ls",
+             GTV_TSF_TIP_BASE, cat_guid, GTV_TSF_CLSID_STR);
+    swprintf(k_single, MAX_PATH, L"%ls\\Category\\%ls\\%ls",
+             GTV_TSF_TIP_BASE, cat_guid, GTV_TSF_CLSID_STR);
+    swprintf(k_legacy, MAX_PATH, L"%ls\\Category\\%ls",
+             GTV_TSF_TIP_BASE, cat_guid);
+    layouts[0] = k_double;
+    layouts[1] = k_single;
+    layouts[2] = k_legacy;
+    for (int i = 0; i < 3; i++) {
+        HKEY h = NULL;
+        LONG rc = RegCreateKeyExW(HKEY_CURRENT_USER, layouts[i], 0, NULL, 0,
+                                  KEY_WRITE, NULL, &h, NULL);
+        if (rc != ERROR_SUCCESS) {
+            log_msg("Failed to create category key (%d): %ld", i, (long)rc);
+            continue;
+        }
+        rc = RegSetValueExW(h, NULL, 0, REG_SZ,
+                            (const BYTE *)GTV_TSF_CLSID_STR,
+                            (DWORD)((wcslen(GTV_TSF_CLSID_STR) + 1) * sizeof(wchar_t)));
+        if (rc != ERROR_SUCCESS)
+            log_msg("Failed to set category value (%d): %ld", i, (long)rc);
+        RegCloseKey(h);
+    }
+    log_msg("Category registered under HKCU");
+}
+
 static void ensure_category_registered(void) {
-    HKEY hKeyCat = NULL;
-    HKEY hKeyCatKB = NULL;
-    LONG rc;
+    ensure_one_category(GTV_TSF_CAT_KEYBOARD);
+    ensure_one_category(GTV_TSF_CAT_KEYBOARD_4784);
+    ensure_one_category(GTV_TSF_CAT_TEXTSERVICE);
+}
 
-    /* Create ...Category base key */
-    rc = RegCreateKeyExW(HKEY_CURRENT_USER, GTV_TSF_CATEGORY_BASE,
-                         0, NULL, 0, KEY_WRITE, NULL, &hKeyCat, NULL);
-    if (rc != ERROR_SUCCESS) {
-        log_msg("Failed to create Category key: %ld", (long)rc);
+/* Call the official TSF COM APIs at startup to enable the profiles.
+ * Registry keys alone leave the keyboard registered-but-disabled, so it
+ * never becomes selectable in language settings. EnableLanguageProfile
+ * flips the enabled bit under HKCU. Failures are logged, never fatal. */
+static void enable_profiles_via_api(void) {
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    gboolean uninit = SUCCEEDED(hr);
+    if (hr != S_OK && hr != S_FALSE && hr != RPC_E_CHANGED_MODE) {
+        log_msg("CoInitializeEx failed: 0x%08lx", (unsigned long)hr);
         return;
     }
 
-    /* Create ...Category\{GUID_TFCAT_TIP_KEYBOARD} subkey */
-    rc = RegCreateKeyExW(hKeyCat, L"{34745C63-B2F0-11D0-98EF-00AA006D2E36}",
-                         0, NULL, 0, KEY_WRITE, NULL, &hKeyCatKB, NULL);
-    if (rc != ERROR_SUCCESS) {
-        log_msg("Failed to create keyboard category subkey: %ld", (long)rc);
-        RegCloseKey(hKeyCat);
+    ITfInputProcessorProfiles *pProfiles = NULL;
+    hr = CoCreateInstance(&CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_ITfInputProcessorProfiles, (void **)&pProfiles);
+    if (FAILED(hr) || !pProfiles) {
+        log_msg("CoCreate ITfInputProcessorProfiles failed: 0x%08lx", (unsigned long)hr);
+        if (uninit) CoUninitialize();
         return;
     }
 
-    /* Set the default value to the TIP CLSID to register it as a keyboard TIP */
-    const wchar_t *clsid = L"{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}";
-    rc = RegSetValueExW(hKeyCatKB, NULL, 0, REG_SZ,
-                        (const BYTE *)clsid,
-                        (DWORD)((wcslen(clsid) + 1) * sizeof(wchar_t)));
-    if (rc != ERROR_SUCCESS)
-        log_msg("Failed to set keyboard category value: %ld", (long)rc);
-    else
-        log_msg("Keyboard category registered under HKCU");
+    /* Best-effort re-register (usually done by regsvr32 already). */
+    CLSID clsid = GUID_NULL;
+    CLSIDFromString((LPOLESTR)GTV_TSF_CLSID_STR, &clsid);
+    GUID guidProfile = GUID_NULL;
+    CLSIDFromString((LPOLESTR)GTV_TSF_PROFILE_GUID_STR, &guidProfile);
+    pProfiles->lpVtbl->Register(pProfiles, &clsid);
 
-    RegCloseKey(hKeyCatKB);
-    RegCloseKey(hKeyCat);
+    const LANGID langs[2] = { 0x0409, 0x042A };
+    for (int i = 0; i < 2; i++) {
+        hr = pProfiles->lpVtbl->EnableLanguageProfile(pProfiles, &clsid, langs[i],
+                                                      &guidProfile, TRUE);
+        log_msg("EnableLanguageProfile lang=0x%04x hr=0x%08lx", (unsigned)langs[i],
+                (unsigned long)hr);
+    }
+    pProfiles->lpVtbl->Release(pProfiles);
+
+    /* Register both categories via the official API as well. */
+    ITfCategoryMgr *pCat = NULL;
+    hr = CoCreateInstance(&CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_ITfCategoryMgr, (void **)&pCat);
+    if (SUCCEEDED(hr) && pCat) {
+        GUID guidCatKB = GUID_NULL, guidCatKB2 = GUID_NULL, guidCatTS = GUID_NULL, guidClsid = clsid;
+        CLSIDFromString((LPOLESTR)GTV_TSF_CAT_KEYBOARD, &guidCatKB);
+        CLSIDFromString((LPOLESTR)GTV_TSF_CAT_KEYBOARD_4784, &guidCatKB2);
+        CLSIDFromString((LPOLESTR)GTV_TSF_CAT_TEXTSERVICE, &guidCatTS);
+        hr = pCat->lpVtbl->RegisterCategory(pCat, &clsid, &guidCatKB, &guidClsid);
+        log_msg("RegisterCategory KEYBOARD hr=0x%08lx", (unsigned long)hr);
+        hr = pCat->lpVtbl->RegisterCategory(pCat, &clsid, &guidCatKB2, &guidClsid);
+        log_msg("RegisterCategory KEYBOARD-4784 hr=0x%08lx", (unsigned long)hr);
+        hr = pCat->lpVtbl->RegisterCategory(pCat, &clsid, &guidCatTS, &guidClsid);
+        log_msg("RegisterCategory TEXTSERVICE hr=0x%08lx", (unsigned long)hr);
+        pCat->lpVtbl->Release(pCat);
+    } else {
+        log_msg("CoCreate ITfCategoryMgr failed: 0x%08lx", (unsigned long)hr);
+    }
+
+    if (uninit) CoUninitialize();
 }
 
 static wchar_t *prepend_app_dir_to_path(const wchar_t *app_dir) {
@@ -251,7 +340,7 @@ static gboolean app_paths(wchar_t *app_dir, wchar_t *dll_path) {
 
     swprintf(dll_path, MAX_PATH, L"%ls\\gtv_tsf.dll", app_dir);
     if (GetFileAttributesW(dll_path) == INVALID_FILE_ATTRIBUTES) {
-        log_msg("DLL not found: %ls", dll_path);
+        log_msg("DLL gtv_tsf.dll not found next to exe");
         return FALSE;
     }
     return TRUE;
@@ -274,31 +363,32 @@ void gtv_tsf_install_ensure_registered(void) {
         return;
     }
 
-    log_msg("app_dir=%ls  dll_path=%ls", app_dir, dll_path);
+    log_msg("app dir resolved, checking TSF registration");
 
     /* Re-register if: InprocServer32 path mismatch OR TSF profiles missing
-     * OR keyboard category missing. */
+     * OR category missing. NOTE: RegQueryValueExW takes a value name, not
+     * a key path, so the check must use RegOpenKeyEx (see
+     * tsf_category_registered). */
     gboolean inproc_ok = registered_to(dll_path);
     gboolean profiles_ok = tsf_profiles_registered();
+    gboolean category_ok = tsf_category_registered();
 
-    if (inproc_ok && profiles_ok) {
-        /* Quick check: is the keyboard category also present? */
-        HKEY hkey = NULL;
-        DWORD cbData = 0;
-        wchar_t cat_key[MAX_PATH];
-        swprintf(cat_key, MAX_PATH, L"%ls\\%ls", GTV_TSF_CATEGORY_BASE, GTV_TSF_CAT_KEYBOARD);
-        if (RegQueryValueExW(HKEY_CURRENT_USER, cat_key, NULL, NULL, NULL, &cbData) == ERROR_SUCCESS
-            && cbData > 0) {
+    if (inproc_ok && profiles_ok && category_ok) {
+        log_msg("Inproc+profiles+category present - enabling profiles via API");
+        enable_profiles_via_api();
+        if (registered_to(dll_path) && tsf_profiles_registered() &&
+            tsf_category_registered()) {
             log_msg("All TSF registrations OK - skipping regsvr32");
             return;
         }
-        log_msg("Keyboard category missing - will re-register");
+        log_msg("Enable via API incomplete - will re-register");
+    } else {
+        log_msg("Missing registration: inproc=%d profiles=%d category=%d - will re-register",
+                inproc_ok, profiles_ok, category_ok);
     }
 
-    ensure_profiles_registered();
-    ensure_category_registered();
-
-    /* Build regsvr32 command */
+    /* regsvr32 first (registers COM class + calls DllRegisterServer), then
+     * manual HKCU fallback + EnableLanguageProfile (makes it selectable). */
     if (GetSystemDirectoryW(system_dir, MAX_PATH))
         swprintf(regsvr32_path, MAX_PATH, L"%ls\\regsvr32.exe", system_dir);
     else
@@ -307,7 +397,7 @@ void gtv_tsf_install_ensure_registered(void) {
     swprintf(command_line, G_N_ELEMENTS(command_line),
              L"\"%ls\" /s \"%ls\"", regsvr32_path, dll_path);
 
-    log_msg("Running: %ls", command_line);
+    log_msg("Running regsvr32 /s gtv_tsf.dll");
 
     old_path = prepend_app_dir_to_path(app_dir);
     si.cb = sizeof(si);
@@ -319,15 +409,135 @@ void gtv_tsf_install_ensure_registered(void) {
         log_msg("regsvr32 wait=%lu exit_code=%lu", (unsigned long)wait_rc, (unsigned long)exit_code);
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
-
-        /* Verify after registration */
-        if (registered_to(dll_path) && tsf_profiles_registered())
-            log_msg("TSF registration verified OK");
-        else
-            log_msg("WARNING: TSF registration may have failed - check logs");
     } else {
-        log_msg("CreateProcessW failed: %lu", (unsigned long)GetLastError());
+        log_msg("CreateProcessW regsvr32 failed: %lu", (unsigned long)GetLastError());
+    }
+    restore_path(old_path);
+    old_path = NULL;
+
+    ensure_profiles_registered();
+    ensure_category_registered();
+    enable_profiles_via_api();
+
+    /* Verify after registration */
+    if (registered_to(dll_path) && tsf_profiles_registered() && tsf_category_registered())
+        log_msg("TSF registration verified OK");
+    else
+        log_msg("WARNING: TSF registration may have failed - check logs");
+}
+
+/* TRUE when EnumLanguageProfiles(0x042A) returns our profile, i.e. the
+ * OS genuinely recognises GoTV as a Vietnamese keyboard. Registry keys
+ * alone are not enough (per-user Register/AddLanguageProfile fail). */
+static gboolean profile_enumerated(void) {
+    gboolean found = FALSE;
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    gboolean uninit = SUCCEEDED(hr);
+    if (hr != S_OK && hr != S_FALSE && hr != RPC_E_CHANGED_MODE)
+        return FALSE;
+
+    CLSID clsid = GUID_NULL;
+    CLSIDFromString((LPOLESTR)GTV_TSF_CLSID_STR, &clsid);
+
+    ITfInputProcessorProfiles *p = NULL;
+    hr = CoCreateInstance(&CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_ITfInputProcessorProfiles, (void **)&p);
+    if (SUCCEEDED(hr) && p) {
+        IEnumTfLanguageProfiles *e = NULL;
+        if (SUCCEEDED(p->lpVtbl->EnumLanguageProfiles(p, 0x042A, &e)) && e) {
+            TF_LANGUAGEPROFILE pr;
+            while (e->lpVtbl->Next(e, 1, &pr, NULL) == S_OK) {
+                if (IsEqualGUID(&pr.clsid, &clsid)) {
+                    found = TRUE;
+                    break;
+                }
+            }
+            e->lpVtbl->Release(e);
+        }
+        p->lpVtbl->Release(p);
+    }
+    if (uninit) CoUninitialize();
+    return found;
+}
+
+gboolean gtv_tsf_register_elevated(void) {
+    wchar_t app_dir[MAX_PATH];
+    wchar_t dll_path[MAX_PATH];
+    gboolean ok_all = TRUE;
+
+    log_msg("=== gtv_tsf_register_elevated (admin) ===");
+    if (!app_paths(app_dir, dll_path)) {
+        log_msg("app_paths failed - cannot find gtv_tsf.dll");
+        return FALSE;
     }
 
-    restore_path(old_path);
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    gboolean uninit = SUCCEEDED(hr);
+    if (hr != S_OK && hr != S_FALSE && hr != RPC_E_CHANGED_MODE) {
+        log_msg("CoInitializeEx failed: 0x%08lx", (unsigned long)hr);
+        return FALSE;
+    }
+
+    CLSID clsid = GUID_NULL;
+    CLSIDFromString((LPOLESTR)GTV_TSF_CLSID_STR, &clsid);
+    GUID guidProfile = GUID_NULL;
+    CLSIDFromString((LPOLESTR)GTV_TSF_PROFILE_GUID_STR, &guidProfile);
+
+    ITfInputProcessorProfiles *p = NULL;
+    hr = CoCreateInstance(&CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_ITfInputProcessorProfiles, (void **)&p);
+    if (FAILED(hr) || !p) {
+        log_msg("CoCreate Profiles failed: 0x%08lx", (unsigned long)hr);
+        if (uninit) CoUninitialize();
+        return FALSE;
+    }
+
+    hr = p->lpVtbl->Register(p, &clsid);
+    log_msg("Register hr=0x%08lx", (unsigned long)hr);
+    if (FAILED(hr)) ok_all = FALSE;
+
+    const LANGID langs[2] = { 0x042A, 0x0409 };
+    for (int i = 0; i < 2; i++) {
+        hr = p->lpVtbl->AddLanguageProfile(p, &clsid, langs[i], &guidProfile,
+                                           L"GoTV", 4, dll_path,
+                                           (ULONG)wcslen(dll_path), 0);
+        log_msg("AddLanguageProfile 0x%04x hr=0x%08lx", (unsigned)langs[i], (unsigned long)hr);
+        if (FAILED(hr)) ok_all = FALSE;
+        hr = p->lpVtbl->EnableLanguageProfile(p, &clsid, langs[i], &guidProfile, TRUE);
+        log_msg("EnableLanguageProfile 0x%04x hr=0x%08lx", (unsigned)langs[i], (unsigned long)hr);
+    }
+    p->lpVtbl->Release(p);
+
+    ITfCategoryMgr *c = NULL;
+    hr = CoCreateInstance(&CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_ITfCategoryMgr, (void **)&c);
+    if (SUCCEEDED(hr) && c) {
+        const wchar_t *cats[3] = { GTV_TSF_CAT_KEYBOARD_4784, GTV_TSF_CAT_KEYBOARD,
+                                   GTV_TSF_CAT_TEXTSERVICE };
+        for (int i = 0; i < 3; i++) {
+            GUID g = GUID_NULL;
+            CLSIDFromString((LPOLESTR)cats[i], &g);
+            hr = c->lpVtbl->RegisterCategory(c, &clsid, &g, &clsid);
+            log_msg("RegisterCategory #%d hr=0x%08lx", i, (unsigned long)hr);
+            if (FAILED(hr)) ok_all = FALSE;
+        }
+        c->lpVtbl->Release(c);
+    } else {
+        log_msg("CoCreate CategoryMgr failed: 0x%08lx", (unsigned long)hr);
+        ok_all = FALSE;
+    }
+
+    if (uninit) CoUninitialize();
+
+    /* HKCU fallback + enable so the current user gets it immediately. */
+    ensure_profiles_registered();
+    ensure_category_registered();
+    enable_profiles_via_api();
+
+    if (profile_enumerated()) {
+        log_msg("Elevated registration verified: GoTV enumerates for 0x042A");
+        return TRUE;
+    }
+    log_msg("WARNING: GoTV still not enumerated (ok_all=%d)", ok_all);
+    return FALSE;
 }

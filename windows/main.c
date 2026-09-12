@@ -4,6 +4,7 @@
 #include "setup.h"
 #include "startup.h"
 #include "tsf_install.h"
+#include "input_setup.h"
 #include "update.h"
 #include "resource.h"
 #include <windows.h>
@@ -82,6 +83,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     /* Elevated startup worker: apply and exit before any window/mutex.
      * Forms: --configure-startup admin|admin-off|user (from gtv_startup_request). */
+    /* Elevated one-time TSF worker: full machine registration of the
+     * keyboard profiles/categories (HKLM writes need admin).
+     * Launched elevated, e.g.: gotiengviet.exe --register-tsf */
+    if (lpCmdLine && !strncmp(lpCmdLine, "--register-tsf", 14)) {
+        gboolean ok = gtv_tsf_register_elevated();
+        return ok ? 0 : 1;
+    }
     if (lpCmdLine && !strncmp(lpCmdLine, "--configure-startup", 19)) {
         const char *op = lpCmdLine + 19;
         while (*op == ' ') op++;
@@ -118,6 +126,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     /* 2. Ensure this installation owns the per-user TSF registration. */
     gtv_tsf_install_ensure_registered();
+
+    /* 2b. Attach GoTV to the user's languages (Win+Space switcher).
+     * Async worker; version-stamped, additive-only. */
+    gtv_input_setup_ensure_async();
 
     /* 3. Initialize GoTiengViet config */
     gtv_init();

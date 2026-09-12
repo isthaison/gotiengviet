@@ -14,9 +14,6 @@ jobs:
     permissions:
       contents: write
       actions: read
-    defaults:
-      run:
-        shell: msys2 {0 }
 
     steps:
       - name: Checkout repository
@@ -36,14 +33,17 @@ jobs:
             mingw-w64-x86_64-pkg-config
 
       - name: Run Test Suite
+        shell: msys2 {0}
         run: |
           make -f Makefile.win test
 
       - name: Build gotiengviet.exe
+        shell: msys2 {0}
         run: |
           make -f Makefile.win
 
       - name: Compute version
+        shell: msys2 {0}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VER="${GITHUB_REF#refs/tags/v}"
@@ -65,12 +65,12 @@ jobs:
         run: choco install innosetup -y
 
       - name: Stage installer tree
+        shell: msys2 {0}
         run: |
           make -f Makefile.win staging
 
       - name: Build versioned installer (unsigned)
-        # No code signing here — SignPath signs the final artifact.
-        # ISCC receives /Q /D... literally: exclude from msys2 path conversion.
+        shell: msys2 {0}
         env:
           MSYS2_ARG_CONV_EXCL: "*"
         run: |
@@ -78,7 +78,6 @@ jobs:
           ls -la gotiengviet-*-x64-setup.exe
 
       # ── SignPath code signing ──────────────────────────────────────
-      # Upload the unsigned installer so SignPath can access it.
       - name: Upload unsigned installer
         id: upload-unsigned
         uses: actions/upload-artifact@v4
@@ -87,9 +86,6 @@ jobs:
           path: gotiengviet-*-x64-setup.exe
           if-no-files-found: error
 
-      # Sign via SignPath (free for open source).
-      # Requires: SIGNPATH_API_TOKEN secret + SIGNPATH_ORGANIZATION_ID var.
-      # Falls back to uploading unsigned if secrets are not configured.
       - name: Sign via SignPath
         id: signpath
         if: ${{ env.SIGNPATH_API_TOKEN != '' }}

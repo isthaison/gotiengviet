@@ -137,23 +137,24 @@ STDAPI DllRegisterServer(void)
     if (!StringFromGUID2(CLSID_GtvTextService, szClsid, 64))
         return E_FAIL;
 
+    /* Register COM class under HKCU (per-user). */
     if (!RegisterServerKeys(szClsid, szModule))
         return E_FAIL;
 
-    // Register TSF Profiles
+    /* Register TSF Profiles — these APIs may try to write to HKLM.
+     * For per-user installs, failures are expected; the actual
+     * per-user TSF profile/category registration is handled by
+     * gtv_tsf_install_ensure_registered() in tsf_install.c using
+     * direct registry writes under HKCU.  We continue even if the
+     * TSF APIs fail so that the COM class is still usable. */
     ITfInputProcessorProfiles *pProfiles = NULL;
     HRESULT hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfInputProcessorProfiles, (void**)&pProfiles);
 
     if (SUCCEEDED(hr) && pProfiles) {
-        HRESULT hrProfile = pProfiles->Register(CLSID_GtvTextService);
-        if (FAILED(hrProfile)) {
-            pProfiles->Release();
-            return hrProfile;
-        }
+        pProfiles->Register(CLSID_GtvTextService);
 
-        // Register under Vietnamese (0x042A) with description "GoTV"
-        hrProfile = pProfiles->AddLanguageProfile(CLSID_GtvTextService,
+        pProfiles->AddLanguageProfile(CLSID_GtvTextService,
             GTV_LANG_VIETNAMESE,
             GUID_GtvProfile,
             GTV_TSF_DESC,
@@ -161,13 +162,8 @@ STDAPI DllRegisterServer(void)
             szModule,
             (ULONG)wcslen(szModule),
             0);
-        if (SUCCEEDED(hrProfile))
-            pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile, TRUE);
 
-        // Some Windows apps only activate TIPs registered for the current
-        // input language. Keep the Vietnamese profile, and also expose the
-        // same keyboard under en-US for systems/apps that never switch to vi-VN.
-        HRESULT hrEn = pProfiles->AddLanguageProfile(CLSID_GtvTextService,
+        pProfiles->AddLanguageProfile(CLSID_GtvTextService,
             GTV_LANG_ENGLISH,
             GUID_GtvProfile,
             GTV_TSF_DESC,
@@ -175,43 +171,30 @@ STDAPI DllRegisterServer(void)
             szModule,
             (ULONG)wcslen(szModule),
             0);
-        if (SUCCEEDED(hrEn))
-            pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, TRUE);
 
         pProfiles->Release();
-
-        // At least one language profile must succeed
-        if (FAILED(hrProfile) && FAILED(hrEn))
-            return E_FAIL;
-    } else {
-        // Cannot create TSF profiles object - registration will not work
-        return hr ? hr : E_FAIL;
     }
 
-    // Register TSF Categories: keyboard TIP must register BOTH
-    // GUID_TFCAT_TIP_TEXTSERVICE (general text service) and
-    // GUID_TFCAT_TIP_KEYBOARD (keyboard-specific). Without TEXTSERVICE,
-    // Windows 10 will not list the keyboard in language settings.
+    /* Register TSF Categories: keyboard TIP must register BOTH
+     * GUID_TFCAT_TIP_TEXTSERVICE (general text service) and
+     * GUID_TFCAT_TIP_KEYBOARD (keyboard-specific). Without TEXTSERVICE,
+     * Windows 10 will not list the keyboard in language settings.
+     * Same per-user caveat applies — TSF APIs may fail on HKLM write. */
     ITfCategoryMgr *pCategoryMgr = NULL;
     hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfCategoryMgr, (void**)&pCategoryMgr);
 
     if (SUCCEEDED(hr) && pCategoryMgr) {
-        HRESULT hrCat = pCategoryMgr->RegisterCategory(
+        pCategoryMgr->RegisterCategory(
             CLSID_GtvTextService, GUID_TFCAT_TIP_TEXTSERVICE, CLSID_GtvTextService);
-        if (FAILED(hrCat)) {
-            pCategoryMgr->Release();
-            return hrCat;
-        }
-        hrCat = pCategoryMgr->RegisterCategory(
+        pCategoryMgr->RegisterCategory(
             CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
         pCategoryMgr->Release();
-        if (FAILED(hrCat))
-            return hrCat;
-    } else {
-        return hr ? hr : E_FAIL;
     }
 
+    /* Always succeed: even if TSF APIs failed (per-user HKLM write denied),
+     * gtv_tsf_install_ensure_registered() will register profiles/categories
+     * under HKCU directly when the app starts. */
     return S_OK;
 }
 
@@ -221,7 +204,7 @@ STDAPI DllUnregisterServer(void)
     if (!StringFromGUID2(CLSID_GtvTextService, szClsid, 64))
         return E_FAIL;
 
-    // Unregister TSF Categories
+    /* Unregister TSF Categories — ignore failures (may not have HKLM access). */
     ITfCategoryMgr *pCategoryMgr = NULL;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfCategoryMgr, (void**)&pCategoryMgr)) && pCategoryMgr) {
@@ -230,7 +213,7 @@ STDAPI DllUnregisterServer(void)
         pCategoryMgr->Release();
     }
 
-    // Unregister TSF Profiles
+    /* Unregister TSF Profiles — ignore failures. */
     ITfInputProcessorProfiles *pProfiles = NULL;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfInputProcessorProfiles, (void**)&pProfiles)) && pProfiles) {

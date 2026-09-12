@@ -4,11 +4,32 @@
 #include "internal.h"
 #include <gio/gio.h>
 #include <glib/gstdio.h>
+#include <stdarg.h>
 
 #ifndef GTV_GITHUB_REPO
 #define GTV_GITHUB_REPO "isthaison/gotiengviet"
 #endif
 #define GTV_UPDATE_INTERVAL_SECS (24 * 3600)
+
+/* Last failure detail for diagnostics (curl exit code, timeout, empty
+ * body, payload parse stage). Borrowed static string, never NULL.
+ * Written by the check path only; callers log it on GTV_UPDATE_ERROR. */
+static gchar *update_last_detail = NULL;
+
+static void set_update_detail(const gchar *fmt, ...) {
+    g_free(update_last_detail);
+    update_last_detail = NULL;
+    va_list ap;
+    va_start(ap, fmt);
+    update_last_detail = g_strdup_vprintf(fmt, ap);
+    va_end(ap);
+    if (!update_last_detail)
+        update_last_detail = g_strdup("unknown error");
+}
+
+const gchar *gtv_update_last_error(void) {
+    return update_last_detail ? update_last_detail : "no detail";
+}
 
 static const gchar *strip_tag(const gchar *v) {
     if (!v) return "";
@@ -356,7 +377,7 @@ static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) 
 
     size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) + 256;
     WCHAR *cmd = g_new0(WCHAR, cmdlen);
-    wsprintfW(cmd, L"\"%ls\" --silent --show-error --fail --location --proto =https --max-time %ld --max-filesize %ld --header \"Accept: application/vnd.github+json\" --header \"User-Agent: GoTiengViet-Updater\" --url \"%ls\"",
+    wsprintfW(cmd, L"\"%ls\" --silent --show-error --fail --location --proto =https --connect-timeout 10 --max-time %ld --max-filesize %ld --header \"Accept: application/vnd.github+json\" --header \"User-Agent: GoTiengViet-Updater\" --url \"%ls\"",
               prog_cmd, max_secs, max_bytes, (LPCWSTR)wurl);
     g_free(wprog);
     g_free(wurl);
@@ -372,15 +393,37 @@ static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) 
     CloseHandle(pi.hThread);
     DWORD wait_rc = WaitForSingleObject(pi.hProcess, (DWORD)(max_secs * 1000 + 5000));
     DWORD exit_code = 1;
-    if (wait_rc == WAIT_TIMEOUT) {
+    gboolean timed_out = (wait_rc == WAIT_TIMEOUT);
+    if (timed_out) {
         TerminateProcess(pi.hProcess, 1);
-        exit_code = 1;
+        set_update_detail("curl timeout after %ld s", max_secs);
     } else {
         GetExitCodeProcess(pi.hProcess, &exit_code);
     }
     CloseHandle(pi.hProcess);
     CloseHandle(hOut);
     if (exit_code != 0) {
+        if (!timed_out) {
+            /* --show-error went to the same temp file: surface its tail
+             * (e.g. "Could not resolve host", "HTTP 403") for the log. */
+            gchar *tmp_utf8e = g_utf16_to_utf8(tmp_file, -1, NULL, NULL, NULL);
+            gchar *errtext = NULL;
+            if (tmp_utf8e) {
+                g_file_get_contents(tmp_utf8e, &errtext, NULL, NULL);
+                g_free(tmp_utf8e);
+            }
+            if (errtext && *errtext) {
+                g_strstrip(errtext);
+                const gchar *tail = errtext + strlen(errtext);
+                while (tail > errtext && (tail - errtext) < 300 &&
+                       tail[-1] != '\n')
+                    tail--;
+                set_update_detail("curl exit %lu: %.300s", (gulong)exit_code, tail);
+            } else {
+                set_update_detail("curl exit %lu (no output)", (gulong)exit_code);
+            }
+            g_free(errtext);
+        }
         DeleteFileW(tmp_file);
         return NULL;
     }
@@ -392,8 +435,12 @@ static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) 
         g_free(tmp_utf8);
     }
     DeleteFileW(tmp_file);
-    if (!contents) return NULL;
+    if (!contents) {
+        set_update_detail("curl ok but response unreadable");
+        return NULL;
+    }
     if ((glong)strlen(contents) > max_bytes) {
+        set_update_detail("response exceeds %ld bytes", max_bytes);
         g_free(contents);
         return NULL;
     }
@@ -491,7 +538,7 @@ static gchar *curl_get(const gchar *url, glong max_bytes, glong max_secs) {
     gchar *secs = g_strdup_printf("%ld", max_secs);
     gchar *bytes = g_strdup_printf("%ld", max_bytes);
     const gchar *args[] = {"curl", "--silent", "--show-error", "--fail", "--location",
-        "--proto", "=https", "--max-time", secs, "--max-filesize", bytes,
+        "--proto", "=https", "--connect-timeout", "10", "--max-time", secs, "--max-filesize", bytes,
         "--header", "Accept: application/vnd.github+json",
         "--header", "User-Agent: GoTiengViet-Updater",
         "--url", url, NULL};
@@ -499,12 +546,21 @@ static gchar *curl_get(const gchar *url, glong max_bytes, glong max_secs) {
         G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE, NULL);
     g_free(secs);
     g_free(bytes);
-    if (!proc) return NULL;
+    if (!proc) {
+        set_update_detail("curl spawn failed");
+        return NULL;
+    }
     gchar *output = NULL;
     gboolean ok = g_subprocess_communicate_utf8(proc, NULL, NULL, &output, NULL, NULL);
     if (!ok) g_subprocess_force_exit(proc);
     g_subprocess_wait(proc, NULL, NULL);
-    if (!ok || !g_subprocess_get_successful(proc)) g_clear_pointer(&output, g_free);
+    if (!ok || !g_subprocess_get_successful(proc)) {
+        set_update_detail("curl failed (non-zero exit or killed)");
+        g_clear_pointer(&output, g_free);
+    } else if (!output || !*output) {
+        set_update_detail("curl ok but empty response");
+        g_clear_pointer(&output, g_free);
+    }
     g_object_unref(proc);
     return output;
 #endif
@@ -523,10 +579,16 @@ GtvUpdateStatus gtv_update_check_full(const gchar *repo, const gchar *current_ve
         url = github_api_url();
     gchar *body = curl_get(url, 1048576, 15);
     g_free(url);
-    if (!body) return GTV_UPDATE_ERROR;
+    if (!body) {
+        if (!strcmp(gtv_update_last_error(), "no detail"))
+            set_update_detail("no response body");
+        return GTV_UPDATE_ERROR;
+    }
     GtvUpdateStatus st = gtv_update_parse_release_full(body, current_version, match, match_data,
                                                        out_tag, out_asset_url);
     g_free(body);
+    if (st == GTV_UPDATE_ERROR)
+        set_update_detail("release payload unparseable or has no matching asset");
     return st;
 }
 

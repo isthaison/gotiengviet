@@ -69,6 +69,8 @@ static gpointer check_worker(gpointer data) {
     update_log("check done manual=%d status=%d tag=%s url=%s",
                    job->manual, (gint)st, tag ? tag : "-", url ? url : "-");
     if (st == GTV_UPDATE_ERROR)
+        update_log("check error detail: %s", gtv_update_last_error());
+    if (st == GTV_UPDATE_ERROR)
         update_log("hint: run curl manually: curl --fail --location https://api.github.com/repos/isthaison/gotiengviet/releases/latest");
     GtvUpdateResult *res = g_new(GtvUpdateResult, 1);
     res->status = (gint)st;
@@ -146,7 +148,7 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
             MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
         } else {
             update_log("check result: check error");
-            MessageBoxW(g_app.hwnd_main, L"Không kiểm tra được bản mới. Vui lòng kiểm tra lại kết nối mạng.\n\nChi tiết trong %APPDATA%\\gotiengviet\\update.log (chạy: curl --fail https://api.github.com/repos/isthaison/gotiengviet/releases/latest để kiểm tra).", L"Cập nhật GoTiengViet", MB_OK | MB_ICONWARNING | MB_TOPMOST);
+            MessageBoxW(g_app.hwnd_main, L"Không kiểm tra được bản mới. Có thể do mạng, proxy hoặc GitHub API đang giới hạn truy cập.\n\nChi tiết trong %APPDATA%\\gotiengviet\\update.log (chạy: curl --fail https://api.github.com/repos/isthaison/gotiengviet/releases/latest để kiểm tra).", L"Cập nhật GoTiengViet", MB_OK | MB_ICONWARNING | MB_TOPMOST);
         }
     }
     g_free(res->tag); g_free(res->url); g_free(res);

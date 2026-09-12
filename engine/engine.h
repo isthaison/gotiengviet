@@ -53,6 +53,9 @@ GtvUpdateStatus gtv_update_parse_release(const gchar *json, const gchar *current
 GtvUpdateStatus gtv_update_check(const gchar *repo, const gchar *current_version,
                                  gchar **out_tag, gchar **out_asset_url);
 gboolean gtv_update_download(const gchar *url, const gchar *dest_path);
+/* Borrowed static string describing the last check failure (curl exit code,
+ * timeout, empty body, payload stage). Never NULL. For update.log only. */
+const gchar *gtv_update_last_error(void);
 gboolean gtv_update_should_autocheck(void);
 void gtv_update_mark_checked(void);
 

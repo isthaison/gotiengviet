@@ -188,7 +188,6 @@ static void ensure_profile_registered(const wchar_t *langid,
 }
 
 static void ensure_profiles_registered(void) {
-    ensure_profile_registered(GTV_TSF_LANG_EN, GTV_TSF_PROFILE_GUID_STR, L"GoTV");
     ensure_profile_registered(GTV_TSF_LANG_VI, GTV_TSF_PROFILE_GUID_STR, L"GoTV");
 }
 

@@ -20,6 +20,11 @@
   </provides>
   <url type="homepage">https://github.com/isthaison/gotiengviet</url>
   <releases>
+    <release version="0.8.3" date="2026-09-12">
+      <description>
+        <p>Khắc phục cập nhật Windows: thêm hộp thoại xác nhận cập nhật, tải curl Win32 không dùng gspawn, gỡ bỏ skipifsilent để tự khởi động lại sau khi cài đặt.</p>
+      </description>
+    </release>
     <release version="0.8.2" date="2026-09-11">
       <description>
         <p>Sửa lỗi ẩn icon khay hệ thống, click icon chuyển nhanh Telex/VNI, chuẩn hóa lệnh cài Ollama chính thức, đóng gói macOS dmg/pkg.</p>

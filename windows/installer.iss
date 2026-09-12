@@ -1,13 +1,13 @@
-﻿; GoTiengViet versioned installer (Inno Setup 6).
+; GoTiengViet versioned installer (Inno Setup 6).
 ; Built by CI: make -f Makefile.win setup VERSION=<x.y.z>
 ;   iscc.exe /Q "/DAppVersion=<x.y.z>" "/DAppVerNum=<x.y.z.0>" /DSourceDir=..\release-pkg windows/installer.iss
 ; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
 
 #ifndef AppVersion
-  #define AppVersion "0.8.2"
+  #define AppVersion "0.8.3"
 #endif
 #ifndef AppVerNum
-  #define AppVerNum "0.8.2.0"
+  #define AppVerNum "0.8.3.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\release-pkg"

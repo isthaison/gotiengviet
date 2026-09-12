@@ -1,0 +1,16 @@
+# SignPath signing policy for GoTiengViet release builds.
+# Requires: install SignPath GitHub App, create project "GoTiengViet",
+# link this repo, set SIGNPATH_API_TOKEN secret + SIGNPATH_ORGANIZATION_ID var.
+github-policies:
+  runners:
+    require_github_hosted: true
+  build:
+    disallow_reruns: true
+  branch_rulesets:
+    - condition:
+        rules:
+          - block_force_pushes: true
+          - require_pull_request:
+              min_required_approvals: 0
+      allow_bypass_actors: false
+      enforced_from: EARLIEST

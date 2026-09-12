@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration for GoTiengViet Windows installer.
+     The CI uploads the unsigned Inno Setup .exe as a GitHub artifact (ZIP).
+     SignPath signs every PE file inside the archive (the installer itself
+     and all bundled DLLs/EXEs). -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <!-- Sign the Inno Setup installer (outer .exe) -->
+    <pe-file-set>
+      <include path="*.exe" />
+      <include path="*.dll" />
+      <for-each>
+        <authenticode-sign />
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

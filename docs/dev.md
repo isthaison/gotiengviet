@@ -110,8 +110,21 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 
 1. Bump một lệnh (đừng sửa tay từng file — script là nơi duy nhất ghi version): `make bump V=X.Y.Z ["ghi chú"]` (chạy `./gtv.sh bump`). Kiểm tra `git diff`, rồi commit.
 2. Commit, push tag `vX.Y.Z`.
-3. CI Windows build `gotiengviet-X.Y.Z-x64-setup.exe`, CI Linux build `gotiengviet_X.Y.Z-1_<arch>.deb`, cả hai đính kèm release để app tự cập nhật.
+3. CI Windows build `gotiengviet-X.Y.Z-x64-setup.exe` (ký bằng SignPath.io — xem `.signpath/`),
+   CI Linux build `gotiengviet_X.Y.Z-1_<arch>.deb`, CI macOS build `.dmg` + `.pkg`, cả ba đính kèm release để app tự cập nhật.
 4. Linux: khay hệ thống có mục **Kiểm tra cập nhật...** (tự kiểm tra mỗi ngày, báo qua notify khi có bản mới) — tải `.deb` đúng kiến trúc rồi cài qua `pkexec dpkg -i`, xong tự `ibus restart`. Cần `curl`.
+
+### SignPath code signing (Windows)
+
+File cài Windows ký bằng [SignPath.io](https://signpath.io) (miễn phí cho open source). Cần cấu hình một lần:
+
+1. Đăng ký tài khoản ở https://signpath.io → tạo Organization.
+2. Cài [SignPath GitHub App](https://github.com/apps/signpath) → cho phép repo `isthaison/gotiengviet`.
+3. Trong SignPath: tạo Project `GoTiengViet`, linked repo, artifact config `.signpath/artifact-configurations/default.xml`.
+4. Tạo signing policy `release-signing` (origin verification, restricted to `main` + tag `v*`).
+5. Tạo API Token (Submitter role) → thêm vào GitHub repo secrets tên `SIGNPATH_API_TOKEN`.
+6. Thêm GitHub repo variable `SIGNPATH_ORGANIZATION_ID` = organization ID từ SignPath.
+7. Push tag → CI sẽ build unsigned → upload → SignPath ký → release asset là file đã ký.
 
 ---
 Xem thêm: [README](../README.md) · [Cấu hình](config.md) · [Bản Windows](windows.md) ·

@@ -12,7 +12,7 @@
     <engine>
       <name>gotiengviet</name>
       <longname>GoTiengViet</longname>
-      <description>GoTiengViet: Telex/VNI (chuyển Telex/VNI trên indicator của app) - github.com/isthaison/gotiengviet</description>
+      <description>GoTiengViet: Telex/VNI</description>
       <language>vi</language>
       <icon>gotiengviet</icon>
       <layout>us</layout>

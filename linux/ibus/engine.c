@@ -504,38 +504,14 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     }
     return FALSE;
 }
+/* Không đăng ký IBus property: chuyển Telex/VNI chỉ qua tray app, để menu
+ * input source của GNOME gọn (không hiện dòng Telex/VNI thừa). */
 static void update_mode_property(IBusEngine *engine){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
-    IBusProperty *prop=ibus_property_new(
-        "mode",
-        PROP_TYPE_NORMAL,
-        ibus_text_new_from_static_string(e->mode_telex ? "Telex" : "VNI"),
-        NULL,
-        ibus_text_new_from_static_string("Chuyển kiểu gõ (Telex ↔ VNI)"),
-        TRUE,
-        TRUE,
-        PROP_STATE_UNCHECKED,
-        NULL
-    );
-    ibus_engine_update_property(engine, prop);
+    (void)engine;
 }
 
 static void register_engine_properties(IBusEngine *engine){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
-    IBusPropList *prop_list=ibus_prop_list_new();
-    IBusProperty *prop=ibus_property_new(
-        "mode",
-        PROP_TYPE_NORMAL,
-        ibus_text_new_from_static_string(e->mode_telex ? "Telex" : "VNI"),
-        NULL,
-        ibus_text_new_from_static_string("Chuyển kiểu gõ (Telex ↔ VNI)"),
-        TRUE,
-        TRUE,
-        PROP_STATE_UNCHECKED,
-        NULL
-    );
-    ibus_prop_list_append(prop_list, prop);
-    ibus_engine_register_properties(engine, prop_list);
+    (void)engine;
 }
 
 static void ibus_gotiengviet_engine_property_activate(IBusEngine *engine, const gchar *prop_name, guint prop_state){
@@ -558,8 +534,6 @@ static void ibus_gotiengviet_engine_property_activate(IBusEngine *engine, const 
         }
         g_key_file_free(kf);
         g_free(path);
-
-        update_mode_property(engine);
     }
 }
 
@@ -579,7 +553,6 @@ static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
      * consumed the text can never see a ghost duplicate. */
     clear_candidates(e);
     update_mode_property(engine);
-    // Một engine duy nhất "gotiengviet": chuyển Telex/VNI trên indicator của app GoTiengViet
     // Đồng bộ cache mtime để reload_config_if_changed không load lại ngay
     gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
     struct stat st;
@@ -726,8 +699,6 @@ static IBusEngine* create_engine_cb(IBusFactory *f, const gchar *engine_name, gp
     IBusGoTiengVietEngine *ue = (IBusGoTiengVietEngine*)engine;
     // Engine Telex/VNI riêng ghim kiểu gõ theo tên, engine chung theo config
     reload_engine_config(ue);
-    if(g_strcmp0(engine_name, "gotiengviet-vni") == 0){ ue->mode_telex = FALSE; ue->mode_pinned = TRUE; }
-    else if(g_strcmp0(engine_name, "gotiengviet-telex") == 0){ ue->mode_telex = TRUE; ue->mode_pinned = TRUE; }
     return engine;
 }
 /* Crash handling - chỉ dùng glib hệ thống */
@@ -792,9 +763,6 @@ static void bus_connected_cb(IBusBus *b, gpointer user_data){
         factory=ibus_factory_new(ibus_bus_get_connection(bus));
         g_signal_connect(factory, "create-engine", G_CALLBACK(create_engine_cb), NULL);
         ibus_factory_add_engine(factory, "gotiengviet", ibus_gotiengviet_engine_get_type());
-        // Giữ tên cũ để máy đã cài không mất engine khi chưa re-login
-        ibus_factory_add_engine(factory, "gotiengviet-telex", ibus_gotiengviet_engine_get_type());
-        ibus_factory_add_engine(factory, "gotiengviet-vni", ibus_gotiengviet_engine_get_type());
     }
     ibus_bus_request_name(bus,"org.freedesktop.IBus.GoTiengViet",0);
 }

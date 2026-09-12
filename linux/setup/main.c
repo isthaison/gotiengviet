@@ -58,9 +58,6 @@ static void tray_update_indicator_label(gboolean is_telex){
     // Hiển thị kiểu gõ ngay trên statusbar bên cạnh icon
     app_indicator_set_label(tray_indicator, is_telex ? "Telex" : "VNI", is_telex ? "Telex" : "VNI");
     app_indicator_set_title(tray_indicator, is_telex ? "GoTiengViet — Telex" : "GoTiengViet — VNI");
-    // Đổi icon theo mode như bản Windows (T đỏ = Telex, V đỏ = VNI) để
-    // chụp màn hình / GNOME chỉ hiện icon vẫn thấy mode gõ hiện tại.
-    // Máy chưa cài icon mới (bản cũ) thì giữ icon chung để không mất hình.
     const char *mode_icon = is_telex ? "gotiengviet-telex" : "gotiengviet-vni";
     GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
     if(!icon_theme || !gtk_icon_theme_has_icon(icon_theme, mode_icon))

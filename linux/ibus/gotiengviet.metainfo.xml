@@ -19,10 +19,24 @@
     <binary>gotiengviet-demo</binary>
   </provides>
   <url type="homepage">https://github.com/isthaison/gotiengviet</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Gõ tiếng Việt Telex/VNI trên bất kỳ ứng dụng nào</caption>
+      <image>https://raw.githubusercontent.com/isthaison/gotiengviet/main/linux/ibus/screenshots/screenshot-main.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Hộp thoại thiết lậpibus engine GoTiengViet</caption>
+      <image>https://raw.githubusercontent.com/isthaison/gotiengviet/main/linux/ibus/screenshots/screenshot-setup.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Chọn kiểu gõ Telex hoặc VNI</caption>
+      <image>https://raw.githubusercontent.com/isthaison/gotiengviet/main/linux/ibus/screenshots/screenshot-mode.png</image>
+    </screenshot>
+  </screenshots>
   <releases>
     <release version="0.8.5" date="2026-09-12">
       <description>
-        <p>fix(win): replace self-signed cert with SignPath.io code signing to bypass SmartScreen</p>
+        <p>fix(win): self-signed cert code signing for Windows installer</p>
       </description>
     </release>
     <release version="0.8.4" date="2026-09-12">

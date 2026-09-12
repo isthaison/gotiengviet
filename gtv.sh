@@ -424,6 +424,12 @@ cmd_install_linux() {
     if [[ -f linux/ibus/gotiengviet.metainfo.xml ]]; then
         install -Dm644 linux/ibus/gotiengviet.metainfo.xml "$DESTDIR/usr/share/metainfo/gotiengviet.metainfo.xml"
     fi
+    if [[ -d linux/ibus/screenshots ]]; then
+        install -d "$DESTDIR/usr/share/gotiengviet/screenshots"
+        for f in linux/ibus/screenshots/*.png; do
+            [[ -f "$f" ]] && install -Dm644 "$f" "$DESTDIR/usr/share/gotiengviet/screenshots/$(basename "$f")"
+        done
+    fi
     install -Dm644 linux/ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet.svg"
     install -Dm644 linux/ibus/icons/gotiengviet-telex.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet-telex.svg"
     install -Dm644 linux/ibus/icons/gotiengviet-vni.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet-vni.svg"

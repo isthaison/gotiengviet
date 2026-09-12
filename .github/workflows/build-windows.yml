@@ -13,7 +13,6 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-      actions: read
 
     steps:
       - name: Checkout repository
@@ -69,7 +68,7 @@ jobs:
         run: |
           make -f Makefile.win staging
 
-      - name: Build versioned installer (unsigned)
+      - name: Build versioned installer
         shell: msys2 {0}
         env:
           MSYS2_ARG_CONV_EXCL: "*"
@@ -77,89 +76,35 @@ jobs:
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /Q "/DAppVersion=$APP_VERSION" "/DAppVerNum=$APP_VERNUM" "/DSourceDir=..\\release-pkg" windows/installer.iss
           ls -la gotiengviet-*-x64-setup.exe
 
-      # ── SignPath code signing (direct API) ────────────────────────
-      # Direct API bypasses the GitHub connector which requires app install.
-      - name: Sign via SignPath
-        id: signpath
-        if: always() && env.SIGNPATH_API_TOKEN != ''
-        shell: bash
+      # ── Code signing (self-signed cert + osslsigncode) ────────────
+      - name: Sign installer with self-signed cert
+        if: env.WIN_CERT_PFX_B64 != ''
+        shell: msys2 {0}
         env:
-          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-          SIGNPATH_ORG: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          WIN_CERT_PFX_B64: ${{ secrets.WIN_CERT_PFX_B64 }}
         run: |
+          pacman -S --noconfirm osslsigncode 2>/dev/null || true
           SETUP=$(ls gotiengviet-*-x64-setup.exe 2>/dev/null | head -1)
           if [ -z "$SETUP" ]; then echo "No setup exe found"; exit 1; fi
-          echo "Submitting $SETUP to SignPath..."
-          RESP=$(curl -s -X POST \
-            -H "Authorization: Bearer $SIGNPATH_API_TOKEN" \
-            -F "projectSlug=GoTiengViet" \
-            -F "signingPolicySlug=GoTiengViet" \
-            -F "artifactConfigurationSlug=initial" \
-            -F "description=CI build ${{ github.sha }}" \
-            -F "artifact=@$SETUP" \
-            "https://app.signpath.io/api/v1/$SIGNPATH_ORG/SigningRequests/SubmitWithArtifact")
-          echo "$RESP" | python3 -m json.tool 2>/dev/null || echo "$RESP"
-          STATUS=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null)
-          REQ_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('signingRequestId',''))" 2>/dev/null)
-          if [ "$STATUS" = "error" ] || [ -z "$REQ_ID" ]; then
-            echo "Submit failed"
-            exit 1
-          fi
-          echo "SIGNING_REQUEST_ID=$REQ_ID" >> "$GITHUB_ENV"
-          echo "Signing request: $REQ_ID (status: $STATUS)"
-          # Poll until completed (max 10 min)
-          for i in $(seq 1 60); do
-            sleep 10
-            POLL=$(curl -s -H "Authorization: Bearer $SIGNPATH_API_TOKEN" \
-              "https://app.signpath.io/api/v1/$SIGNPATH_ORG/SigningRequests/$REQ_ID")
-            CUR_STATUS=$(echo "$POLL" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null)
-            echo "[$i] Status: $CUR_STATUS"
-            if [ "$CUR_STATUS" = "Completed" ]; then
-              echo "Signing completed!"
-              # Download signed artifact
-              mkdir -p signed-installer
-              curl -s -H "Authorization: Bearer $SIGNPATH_API_TOKEN" \
-                -o signed-installer/"$SETUP" \
-                "https://app.signpath.io/api/v1/$SIGNPATH_ORG/SigningRequests/$REQ_ID/SignedArtifact"
-              echo "Downloaded signed artifact"
-              exit 0
-            elif [ "$CUR_STATUS" = "Failed" ] || [ "$CUR_STATUS" = "Canceled" ]; then
-              echo "Signing failed: $CUR_STATUS"
-              echo "$POLL" | python3 -m json.tool 2>/dev/null
-              exit 1
-            fi
-          done
-          echo "Timeout waiting for signing"
-          exit 1
+          echo "$WIN_CERT_PFX_B64" | base64 -d > /tmp/cert.pfx
+          osslsigncode sign -pkcs12 /tmp/cert.pfx -pass gtv2026 \
+            -n "GoTiengViet" -i "https://github.com/isthaison/gotiengviet" \
+            -in "$SETUP" -out "${SETUP%.exe}-signed.exe" && \
+          mv "${SETUP%.exe}-signed.exe" "$SETUP"
+          echo "Signed: $SETUP"
+          rm -f /tmp/cert.pfx
 
-      # ── Upload final artifacts ─────────────────────────────────────
-      - name: Upload signed artifact (SignPath)
-        if: always() && steps.signpath.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: gotiengviet-windows-setup
-          path: signed-installer/
-          if-no-files-found: error
-
-      - name: Upload unsigned artifact (fallback)
-        if: always() && steps.signpath.outcome != 'success'
+      # ── Upload artifact ───────────────────────────────────────────
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: gotiengviet-windows-setup
           path: gotiengviet-*-x64-setup.exe
           if-no-files-found: error
 
-      # ── Release (on tag) ───────────────────────────────────────────
-      - name: Release Asset (on Tag, signed)
-        if: always() && startsWith(github.ref, 'refs/tags/v') && steps.signpath.outcome == 'success'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: signed-installer/gotiengviet-*-x64-setup.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Release Asset (on Tag, unsigned fallback)
-        if: always() && startsWith(github.ref, 'refs/tags/v') && steps.signpath.outcome != 'success'
+      # ── Release (on tag) ──────────────────────────────────────────
+      - name: Release Asset (on Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: gotiengviet-*-x64-setup.exe

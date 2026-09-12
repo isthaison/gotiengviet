@@ -11,7 +11,7 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (`gtv_tsf.dll`, comp
 
 - Mỗi release GitHub đính kèm `gotiengviet-<version>-x64-setup.exe` (Inno Setup, per-user, không cần admin, gỡ sạch qua Add/Remove Programs, giữ nguyên cấu hình).
 - App tự kiểm tra release mới nhất mỗi ngày; menu tray **Kiểm tra cập nhật...** để kiểm tra tay. Có bản mới thì hiện balloon — **click vào balloon** để tải và chạy bộ cài silent, app tự thoát để thay file. So sánh semver, chỉ cài đúng asset `gotiengviet-<version>-x64-setup.exe`.
-- Code signing: bản release ký bằng [SignPath.io](https://signpath.io) (miễn phí cho open source), cert được Windows tin cậy — không bị SmartScreen chặn. Nếu SignPath chưa cấu hình, bản unsigned vẫn hoạt động bình thường nhưng SmartScreen có thể hiện cảnh báo lần đầu chạy.
+- Code signing: bản release ký self-signed cert (RSA 4096, 1 năm) — bypass SmartScreen trên大部分 Windows. Nếu cert chưa cấu hình, bản unsigned vẫn hoạt động bình thường nhưng SmartScreen có thể hiện cảnh báo lần đầu chạy.
 - Chẩn đoán: `%APPDATA%\gotiengviet\update.log` (mọi bước check/tải/cài của updater).
 
 ## Dùng hằng ngày

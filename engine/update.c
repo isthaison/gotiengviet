@@ -304,7 +304,168 @@ static gchar *github_api_url(void) {
     return g_strdup_printf("https://api.github.com/repos/%s/releases/latest", repo);
 }
 
+#ifdef _WIN32
+#include <windows.h>
+
+static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) {
+    HANDLE hStdOutRead = NULL, hStdOutWrite = NULL;
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
+    if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sa, 0)) return NULL;
+    SetHandleInformation(hStdOutRead, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput = hStdOutWrite;
+    si.hStdError = hStdOutWrite;
+    ZeroMemory(&pi, sizeof(pi));
+
+    gunichar2 *wurl = g_utf8_to_utf16(url, -1, NULL, NULL, NULL);
+    if (!wurl) {
+        CloseHandle(hStdOutRead); CloseHandle(hStdOutWrite);
+        return NULL;
+    }
+
+    gchar *curl_path = NULL;
+    const gchar *test_dir = g_getenv("GTV_TEST_CURL_DIR");
+    if (test_dir && *test_dir) {
+        gchar *cand = g_build_filename(test_dir, "curl.exe", NULL);
+        if (g_file_test(cand, G_FILE_TEST_EXISTS)) curl_path = cand;
+        else g_free(cand);
+    }
+    if (!curl_path) curl_path = g_find_program_in_path("curl.exe");
+    if (!curl_path) curl_path = g_find_program_in_path("curl");
+    gunichar2 *wprog = curl_path ? g_utf8_to_utf16(curl_path, -1, NULL, NULL, NULL) : NULL;
+    g_free(curl_path);
+    const WCHAR *prog_cmd = wprog ? (LPCWSTR)wprog : L"curl.exe";
+
+    size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) + 256;
+    WCHAR *cmd = g_new0(WCHAR, cmdlen);
+    wsprintfW(cmd, L"\"%ls\" --silent --show-error --fail --location --proto =https --max-time %ld --max-filesize %ld --header \"Accept: application/vnd.github+json\" --header \"User-Agent: GoTiengViet-Updater\" --url \"%ls\"",
+              prog_cmd, max_secs, max_bytes, (LPCWSTR)wurl);
+    g_free(wprog);
+    g_free(wurl);
+
+    BOOL ok = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    g_free(cmd);
+    CloseHandle(hStdOutWrite);
+    if (!ok) {
+        CloseHandle(hStdOutRead);
+        return NULL;
+    }
+
+    CloseHandle(pi.hThread);
+    WaitForSingleObject(pi.hProcess, (DWORD)(max_secs * 1000 + 5000));
+    DWORD exit_code = 1;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hProcess);
+
+    GString *out = g_string_new("");
+    char buf[4096];
+    DWORD bytesRead = 0;
+    while (ReadFile(hStdOutRead, buf, sizeof(buf) - 1, &bytesRead, NULL) && bytesRead > 0) {
+        buf[bytesRead] = '\0';
+        g_string_append(out, buf);
+    }
+    CloseHandle(hStdOutRead);
+    if (exit_code != 0) {
+        g_string_free(out, TRUE);
+        return NULL;
+    }
+    return g_string_free(out, FALSE);
+}
+
+static gboolean gtv_update_download_win32(const gchar *url, const gchar *dest_path) {
+    if (!url || !dest_path || strncmp(url, "https://", 8)) return FALSE;
+    gchar *tmp = g_strdup_printf("%s.part", dest_path);
+
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    ZeroMemory(&pi, sizeof(pi));
+
+    gunichar2 *wurl = g_utf8_to_utf16(url, -1, NULL, NULL, NULL);
+    gunichar2 *wtmp = g_utf8_to_utf16(tmp, -1, NULL, NULL, NULL);
+    if (!wurl || !wtmp) {
+        g_free(wurl); g_free(wtmp); g_free(tmp);
+        return FALSE;
+    }
+
+    gchar *curl_path = NULL;
+    const gchar *test_dir = g_getenv("GTV_TEST_CURL_DIR");
+    if (test_dir && *test_dir) {
+        gchar *cand = g_build_filename(test_dir, "curl.exe", NULL);
+        if (g_file_test(cand, G_FILE_TEST_EXISTS)) curl_path = cand;
+        else g_free(cand);
+    }
+    if (!curl_path) curl_path = g_find_program_in_path("curl.exe");
+    if (!curl_path) curl_path = g_find_program_in_path("curl");
+    gunichar2 *wprog = curl_path ? g_utf8_to_utf16(curl_path, -1, NULL, NULL, NULL) : NULL;
+    g_free(curl_path);
+    const WCHAR *prog_cmd = wprog ? (LPCWSTR)wprog : L"curl.exe";
+
+    size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) + wcslen((LPCWSTR)wtmp) + 256;
+    WCHAR *cmd = g_new0(WCHAR, cmdlen);
+    wsprintfW(cmd, L"\"%ls\" --silent --show-error --fail --location --proto =https --max-time 300 --max-filesize 157286400 --header \"User-Agent: GoTiengViet-Updater\" --output \"%ls\" --url \"%ls\"",
+              prog_cmd, (LPCWSTR)wtmp, (LPCWSTR)wurl);
+    g_free(wprog);
+    g_free(wurl);
+
+    BOOL ok = CreateProcessW(NULL, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    g_free(cmd);
+    if (!ok) {
+        g_free(wtmp);
+        g_remove(tmp);
+        g_free(tmp);
+        return FALSE;
+    }
+
+    CloseHandle(pi.hThread);
+    WaitForSingleObject(pi.hProcess, 310000);
+    DWORD exit_code = 1;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hProcess);
+
+    if (exit_code != 0) {
+        g_free(wtmp);
+        g_remove(tmp);
+        g_free(tmp);
+        return FALSE;
+    }
+
+    gunichar2 *wdest = g_utf8_to_utf16(dest_path, -1, NULL, NULL, NULL);
+    DeleteFileW((LPCWSTR)wdest);
+    BOOL moved = FALSE;
+    for (int retry = 0; retry < 10; retry++) {
+        if (MoveFileExW((LPCWSTR)wtmp, (LPCWSTR)wdest, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED)) {
+            moved = TRUE;
+            break;
+        }
+        Sleep(100);
+    }
+    if (!moved) {
+        if (CopyFileW((LPCWSTR)wtmp, (LPCWSTR)wdest, FALSE)) {
+            DeleteFileW((LPCWSTR)wtmp);
+            moved = TRUE;
+        }
+    }
+    g_free(wtmp);
+    g_free(wdest);
+    g_free(tmp);
+    return moved;
+}
+#endif
+
 static gchar *curl_get(const gchar *url, glong max_bytes, glong max_secs) {
+#ifdef _WIN32
+    return curl_get_win32(url, max_bytes, max_secs);
+#else
     gchar *secs = g_strdup_printf("%ld", max_secs);
     gchar *bytes = g_strdup_printf("%ld", max_bytes);
     const gchar *args[] = {"curl", "--silent", "--show-error", "--fail", "--location",
@@ -324,6 +485,7 @@ static gchar *curl_get(const gchar *url, glong max_bytes, glong max_secs) {
     if (!ok || !g_subprocess_get_successful(proc)) g_clear_pointer(&output, g_free);
     g_object_unref(proc);
     return output;
+#endif
 }
 
 GtvUpdateStatus gtv_update_check_full(const gchar *repo, const gchar *current_version,
@@ -353,6 +515,9 @@ GtvUpdateStatus gtv_update_check(const gchar *repo, const gchar *current_version
 }
 
 gboolean gtv_update_download(const gchar *url, const gchar *dest_path) {
+#ifdef _WIN32
+    return gtv_update_download_win32(url, dest_path);
+#else
     if (!url || !dest_path || strncmp(url, "https://", 8)) return FALSE;
     gchar *tmp = g_strdup_printf("%s.part", dest_path);
     const gchar *args[] = {"curl", "--silent", "--show-error", "--fail", "--location",
@@ -369,6 +534,7 @@ gboolean gtv_update_download(const gchar *url, const gchar *dest_path) {
         g_free(tmp);
         return FALSE;
     }
+    g_remove(dest_path);
     if (g_rename(tmp, dest_path) != 0) {
         g_remove(tmp);
         g_free(tmp);
@@ -376,6 +542,7 @@ gboolean gtv_update_download(const gchar *url, const gchar *dest_path) {
     }
     g_free(tmp);
     return TRUE;
+#endif
 }
 
 static gchar *update_stamp_path(void) {

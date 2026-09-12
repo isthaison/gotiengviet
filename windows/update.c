@@ -109,6 +109,17 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
         pending_tag = g_strdup(res->tag);
         pending_url = g_strdup(res->url);
         InterlockedExchange(&update_balloon_owned, 1);
+        update_log("update available: %s", res->tag);
+        if (manual) {
+            WCHAR wmsg[512];
+            swprintf(wmsg, 512, L"Đã có phiên bản mới %hs!\n\nBạn có muốn tải về và cài đặt ngay bây giờ không?", res->tag);
+            int ret = MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_YESNO | MB_ICONQUESTION | MB_TOPMOST);
+            if (ret == IDYES) {
+                gtv_update_balloon_clicked();
+                g_free(res->tag); g_free(res->url); g_free(res);
+                return;
+            }
+        }
         gchar *msg = g_strdup_printf("Có bản mới %s. Nhấn vào đây để tải và cài đặt.", res->tag);
         update_log("balloon shown: update available %s", res->tag);
         gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
@@ -116,13 +127,13 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
     } else if (manual) {
         InterlockedExchange(&update_balloon_owned, 0);
         if (res->status == GTV_UPDATE_CURRENT) {
-            gchar *msg = g_strdup_printf("Bạn đang dùng bản mới nhất (%s).", GTV_VERSION);
-            update_log("balloon shown: up to date %s", GTV_VERSION);
-            gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
-            g_free(msg);
+            update_log("check result: up to date %s", GTV_VERSION);
+            WCHAR wmsg[256];
+            swprintf(wmsg, 256, L"Bạn đang dùng phiên bản mới nhất (%hs).", GTV_VERSION);
+            MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
         } else {
-            update_log("balloon shown: check error");
-            gtv_tray_balloon_force("GoTiengViet cập nhật", "Không kiểm tra được bản mới. Thử lại sau.");
+            update_log("check result: check error");
+            MessageBoxW(g_app.hwnd_main, L"Không kiểm tra được bản mới. Vui lòng kiểm tra lại kết nối mạng.", L"Cập nhật GoTiengViet", MB_OK | MB_ICONWARNING | MB_TOPMOST);
         }
     }
     g_free(res->tag); g_free(res->url); g_free(res);
@@ -144,13 +155,17 @@ static gpointer download_worker(gpointer data) {
         g_free(wfull);
     }
     g_free(name);
-    update_log("downloading %s", url);
+    update_log("downloading %s to %s", url, dest ? dest : "null");
     gboolean ok = dest && gtv_update_download(url, dest);
+    update_log("download finished: ok=%d dest=%s", ok, dest ? dest : "null");
     g_free(url);
-    if (ok && g_app.hwnd_main)
+    if (ok && g_app.hwnd_main) {
         PostMessage(g_app.hwnd_main, WM_GTV_UPDATE_DOWNLOADED, 0, (LPARAM)dest);
-    else
+    } else {
+        update_log("download failed or main window missing");
+        gtv_tray_balloon_force("GoTiengViet cập nhật", "Tải bản mới thất bại. Vui lòng thử lại sau.");
         g_free(dest);
+    }
     return NULL;
 }
 
@@ -191,14 +206,16 @@ void gtv_update_on_downloaded(gchar *installer_path) {
         g_free(installer_path);
         return;
     }
-    /* Run the versioned Inno installer silently, then quit so locked
-     * files (exe/dlls) can be replaced. /CLOSEAPPLICATIONS is a safety
-     * net in case a second copy is still running. Unicode path: %TEMP%
-     * and usernames are often non-ASCII. */
     gunichar2 *winstaller = g_utf8_to_utf16(installer_path, -1, NULL, NULL, NULL);
-    update_log("installer launched %s", installer_path);
-    ShellExecuteW(NULL, L"open", (LPCWSTR)winstaller, L"/SILENT /CLOSEAPPLICATIONS", NULL, SW_SHOWNORMAL);
+    update_log("installer launching %s", installer_path);
+    gtv_tray_balloon_force("GoTiengViet cập nhật", "Đang cài đặt phiên bản mới...");
+    HINSTANCE hInst = ShellExecuteW(NULL, L"open", (LPCWSTR)winstaller, L"/SILENT", NULL, SW_SHOWNORMAL);
+    if ((INT_PTR)hInst <= 32) {
+        update_log("ShellExecuteW failed code=%ld, retrying", (long)(INT_PTR)hInst);
+        ShellExecuteW(NULL, L"open", (LPCWSTR)winstaller, NULL, NULL, SW_SHOWNORMAL);
+    }
     g_free(winstaller);
     g_free(installer_path);
+    Sleep(500);
     PostQuitMessage(0);
 }

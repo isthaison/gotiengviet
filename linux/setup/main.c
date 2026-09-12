@@ -58,6 +58,17 @@ static void tray_update_indicator_label(gboolean is_telex){
     // Hiển thị kiểu gõ ngay trên statusbar bên cạnh icon
     app_indicator_set_label(tray_indicator, is_telex ? "Telex" : "VNI", is_telex ? "Telex" : "VNI");
     app_indicator_set_title(tray_indicator, is_telex ? "GoTiengViet — Telex" : "GoTiengViet — VNI");
+    // Đổi icon theo mode như bản Windows (T đỏ = Telex, V đỏ = VNI) để
+    // chụp màn hình / GNOME chỉ hiện icon vẫn thấy mode gõ hiện tại.
+    // Máy chưa cài icon mới (bản cũ) thì giữ icon chung để không mất hình.
+    const char *mode_icon = is_telex ? "gotiengviet-telex" : "gotiengviet-vni";
+    GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
+    if(!icon_theme || !gtk_icon_theme_has_icon(icon_theme, mode_icon))
+        mode_icon = "gotiengviet";
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    app_indicator_set_icon_full(tray_indicator, mode_icon,
+        is_telex ? "GoTiengViet — Telex" : "GoTiengViet — VNI");
+    G_GNUC_END_IGNORE_DEPRECATIONS
 }
 
 static void tray_refresh_checks(){
@@ -107,8 +118,8 @@ static void tray_on_activate_telex(GtkMenuItem *item, gpointer data){
     (void)data;
     if(!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) return;
     tray_update_config_method("telex");
-    // Một engine duy nhất: đảm bảo input-sources chỉ có gotiengviet rồi kích hoạt nó
-    run_shell("gsettings set org.gnome.desktop.input-sources sources \"[('xkb','us'),('ibus','gotiengviet')]\" 2>/dev/null; ibus engine gotiengviet 2>/dev/null &");
+    // Chỉ đổi method trong config (engine chung tự reload, engine ghim giữ
+    // nguyên); KHÔNG đụng input-sources để khỏi xóa nguồn Telex/VNI của user.
     run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
     tray_refresh_checks();
 }
@@ -116,7 +127,6 @@ static void tray_on_activate_vni(GtkMenuItem *item, gpointer data){
     (void)data;
     if(!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) return;
     tray_update_config_method("vni");
-    run_shell("gsettings set org.gnome.desktop.input-sources sources \"[('xkb','us'),('ibus','gotiengviet')]\" 2>/dev/null; ibus engine gotiengviet 2>/dev/null &");
     run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
     tray_refresh_checks();
 }
@@ -131,7 +141,6 @@ static void tray_toggle_method(void){
         tray_update_config_method("telex");
         run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
     }
-    run_shell("gsettings set org.gnome.desktop.input-sources sources \"[('xkb','us'),('ibus','gotiengviet')]\" 2>/dev/null; ibus engine gotiengviet 2>/dev/null &");
     tray_refresh_checks();
 }
 static void tray_on_activate_toggle(GtkMenuItem *item, gpointer data){

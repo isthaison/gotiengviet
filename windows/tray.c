@@ -91,7 +91,7 @@ static void tray_apply_icon_tip(void) {
     }
     nid.hIcon = icon_current;
     gtv_win_copy_utf8(nid.szTip, G_N_ELEMENTS(nid.szTip),
-                      g_app.config.mode == GTV_VNI ? "GoTiengViet [VNI]" : "GoTiengViet [Telex]");
+                      g_app.config.mode == GTV_VNI ? "GoTiengViet — VNI" : "GoTiengViet — Telex");
 }
 
 gboolean gtv_tray_init(HWND hwnd) {

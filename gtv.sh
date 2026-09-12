@@ -425,7 +425,11 @@ cmd_install_linux() {
         install -Dm644 linux/ibus/gotiengviet.metainfo.xml "$DESTDIR/usr/share/metainfo/gotiengviet.metainfo.xml"
     fi
     install -Dm644 linux/ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet.svg"
+    install -Dm644 linux/ibus/icons/gotiengviet-telex.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet-telex.svg"
+    install -Dm644 linux/ibus/icons/gotiengviet-vni.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet-vni.svg"
     install -Dm644 linux/ibus/icons/gotiengviet.svg "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet.svg"
+    install -Dm644 linux/ibus/icons/gotiengviet-telex.svg "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet-telex.svg"
+    install -Dm644 linux/ibus/icons/gotiengviet-vni.svg "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet-vni.svg"
     install -Dm644 data/macros.txt "$DESTDIR/usr/share/gotiengviet/macros.txt"
     install -Dm644 data/emojis.txt "$DESTDIR/usr/share/gotiengviet/emojis.txt"
     install -Dm644 data/config "$DESTDIR/usr/share/gotiengviet/config"
@@ -437,11 +441,19 @@ cmd_install_linux() {
         directory="$DESTDIR/usr/share/icons/hicolor/${size}x${size}/apps"
         mkdir -p "$directory"
         rsvg-convert -w "$size" -h "$size" linux/ibus/icons/gotiengviet.svg -o "$directory/gotiengviet.png"
+        rsvg-convert -w "$size" -h "$size" linux/ibus/icons/gotiengviet-telex.svg -o "$directory/gotiengviet-telex.png"
+        rsvg-convert -w "$size" -h "$size" linux/ibus/icons/gotiengviet-vni.svg -o "$directory/gotiengviet-vni.png"
     done
     for size in 48 256; do
         name=gotiengviet.png
         [[ "$size" == 256 ]] && name=gotiengviet-256.png
         rsvg-convert -w "$size" -h "$size" linux/ibus/icons/gotiengviet.svg -o "$DESTDIR/usr/share/gotiengviet/icons/$name"
+    done
+    # Icon khay theo mode (T đỏ = Telex, V đỏ = VNI như bản Windows):
+    # GNOME chỉ hiện icon nên nhìn là biết mode, kèm label Telex/VNI bên cạnh.
+    for size in 48 256; do
+        rsvg-convert -w "$size" -h "$size" linux/ibus/icons/gotiengviet-telex.svg -o "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet-telex-$size.png"
+        rsvg-convert -w "$size" -h "$size" linux/ibus/icons/gotiengviet-vni.svg -o "$DESTDIR/usr/share/gotiengviet/icons/gotiengviet-vni-$size.png"
     done
     mkdir -p "$DESTDIR/usr/bin" "$DESTDIR/usr/share/applications" "$DESTDIR/etc/xdg/autostart"
     ln -sfn /usr/libexec/ibus-setup-gotiengviet "$DESTDIR/usr/bin/gotiengviet"
@@ -553,11 +565,15 @@ cmd_uninstall_linux() {
         "$DESTDIR/usr/share/ibus/component/gotiengviet.xml" \
         "$DESTDIR/usr/share/metainfo/gotiengviet.metainfo.xml" \
         "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet.svg" \
+        "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet-telex.svg" \
+        "$DESTDIR/usr/share/icons/hicolor/scalable/apps/gotiengviet-vni.svg" \
         "$DESTDIR/usr/share/applications/gotiengviet.desktop" \
         "$DESTDIR/etc/xdg/autostart/gotiengviet.desktop"
     rm -rf "$DESTDIR/usr/share/gotiengviet"
     for size in 16 22 24 32 48 64 128 256; do
         rm -f "$DESTDIR/usr/share/icons/hicolor/${size}x${size}/apps/gotiengviet.png"
+        rm -f "$DESTDIR/usr/share/icons/hicolor/${size}x${size}/apps/gotiengviet-telex.png"
+        rm -f "$DESTDIR/usr/share/icons/hicolor/${size}x${size}/apps/gotiengviet-vni.png"
     done
     if [[ -z "$DESTDIR" ]]; then
         gtk-update-icon-cache -f -t /usr/share/icons/hicolor || true
@@ -570,7 +586,7 @@ cmd_uninstall_linux() {
 }
 
 cmd_package_linux() {
-    version=${1:-0.8.3-1}
+    version=${1:-0.8.4-1}
     architecture=$(dpkg --print-architecture)
     dpkg --validate-version "$version"
     make build test

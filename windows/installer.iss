@@ -1,13 +1,13 @@
-; GoTiengViet versioned installer (Inno Setup 6).
+﻿; GoTiengViet versioned installer (Inno Setup 6).
 ; Built by CI: make -f Makefile.win setup VERSION=<x.y.z>
 ;   iscc.exe /Q "/DAppVersion=<x.y.z>" "/DAppVerNum=<x.y.z.0>" /DSourceDir=..\release-pkg windows/installer.iss
 ; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
 
 #ifndef AppVersion
-  #define AppVersion "0.8.3"
+  #define AppVersion "0.8.4"
 #endif
 #ifndef AppVerNum
-  #define AppVerNum "0.8.3.0"
+  #define AppVerNum "0.8.4.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\release-pkg"
@@ -89,11 +89,11 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 ; regsvr32 loads from System32, so its DLL search misses our bundled glib
 ; next to gtv_tsf.dll: prepend {app} to PATH or registration silently
 ; fails and no keyboard appears in language settings.
-Filename: "{cmd}"; Parameters: "/c set PATH={app};%PATH%&& regsvr32.exe /s ""{app}\gtv_tsf.dll"""; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c set ""PATH={app};%PATH%"" && regsvr32.exe /s ""{app}\gtv_tsf.dll"""; Flags: runhidden
 Filename: "{app}\gotiengviet.exe"; Description: "{cm:LaunchProgram,GoTiengViet}"; Flags: nowait postinstall
 
 [UninstallRun]
-Filename: "{cmd}"; Parameters: "/c set PATH={app};%PATH%&& regsvr32.exe /s /u ""{app}\gtv_tsf.dll"""; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c set ""PATH={app};%PATH%"" && regsvr32.exe /s /u ""{app}\gtv_tsf.dll"""; Flags: runhidden
 ; The tray menu manages this same value independently of the installer's
 ; [Tasks]/[Registry] entry, so delete it explicitly (stale autostart would
 ; point at the removed {app} after uninstall).

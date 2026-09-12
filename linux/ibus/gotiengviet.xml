@@ -3,7 +3,7 @@
   <name>org.freedesktop.IBus.GoTiengViet</name>
   <description>GoTiengViet - Gõ Telex/VNI thuần hệ thống (không lib ngoài)</description>
   <exec>/usr/libexec/ibus-engine-gotiengviet --ibus</exec>
-  <version>0.8.3</version>
+  <version>0.8.4</version>
   <author>GoTiengViet Project</author>
   <license>GPL</license>
   <homepage>https://github.com/isthaison/gotiengviet</homepage>
@@ -16,28 +16,6 @@
       <language>vi</language>
       <icon>gotiengviet</icon>
       <layout>us</layout>
-      <rank>99</rank>
-      <setup>/usr/libexec/ibus-setup-gotiengviet</setup>
-    </engine>
-    <engine>
-      <name>gotiengviet-telex</name>
-      <longname>GoTiengViet (Telex)</longname>
-      <description>GoTiengViet gõ Telex cố định (chuyển nguồn bằng Super+Space để đổi kiểu khác)</description>
-      <language>vi</language>
-      <icon>gotiengviet</icon>
-      <layout>us</layout>
-      <symbol>Telex</symbol>
-      <rank>99</rank>
-      <setup>/usr/libexec/ibus-setup-gotiengviet</setup>
-    </engine>
-    <engine>
-      <name>gotiengviet-vni</name>
-      <longname>GoTiengViet (VNI)</longname>
-      <description>GoTiengViet gõ VNI cố định (chuyển nguồn bằng Super+Space để đổi kiểu khác)</description>
-      <language>vi</language>
-      <icon>gotiengviet</icon>
-      <layout>us</layout>
-      <symbol>VNI</symbol>
       <rank>99</rank>
       <setup>/usr/libexec/ibus-setup-gotiengviet</setup>
     </engine>

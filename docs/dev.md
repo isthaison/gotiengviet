@@ -61,8 +61,7 @@ linux/
 windows/          app khay + setup + update (C: main/app/tray/tray_ai/
                   setup/update/tsf_install/win_utf) + tsf/ (C++ TSF Text Service)
 macos/            IME InputMethodKit: controller, main, Info.plist (bundle),
-                  SetupWindowController (cửa sổ Dữ liệu Macro/Emoji; bảng
-                  Cài đặt đầy đủ đang làm tiếp)
+                  SetupWindowController (cửa sổ Dữ liệu Macro/Emoji)
 site/             trang chủ GitHub Pages (HTML/CSS tĩnh + SEO meta),
                   deploy bằng .github/workflows/pages.yml
 .github/          CI: build-linux, build-windows, build-macos (test lõi +

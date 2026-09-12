@@ -146,10 +146,14 @@ STDAPI DllRegisterServer(void)
         IID_ITfInputProcessorProfiles, (void**)&pProfiles);
 
     if (SUCCEEDED(hr) && pProfiles) {
-        hr = pProfiles->Register(CLSID_GtvTextService);
+        HRESULT hrProfile = pProfiles->Register(CLSID_GtvTextService);
+        if (FAILED(hrProfile)) {
+            pProfiles->Release();
+            return hrProfile;
+        }
 
         // Register under Vietnamese (0x042A) with description "GoTV"
-        pProfiles->AddLanguageProfile(CLSID_GtvTextService,
+        hrProfile = pProfiles->AddLanguageProfile(CLSID_GtvTextService,
             GTV_LANG_VIETNAMESE,
             GUID_GtvProfile,
             GTV_TSF_DESC,
@@ -157,12 +161,13 @@ STDAPI DllRegisterServer(void)
             szModule,
             (ULONG)wcslen(szModule),
             0);
-        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile, TRUE);
+        if (SUCCEEDED(hrProfile))
+            pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile, TRUE);
 
         // Some Windows apps only activate TIPs registered for the current
         // input language. Keep the Vietnamese profile, and also expose the
         // same keyboard under en-US for systems/apps that never switch to vi-VN.
-        pProfiles->AddLanguageProfile(CLSID_GtvTextService,
+        HRESULT hrEn = pProfiles->AddLanguageProfile(CLSID_GtvTextService,
             GTV_LANG_ENGLISH,
             GUID_GtvProfile,
             GTV_TSF_DESC,
@@ -170,8 +175,17 @@ STDAPI DllRegisterServer(void)
             szModule,
             (ULONG)wcslen(szModule),
             0);
-        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, TRUE);
+        if (SUCCEEDED(hrEn))
+            pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, TRUE);
+
         pProfiles->Release();
+
+        // At least one language profile must succeed
+        if (FAILED(hrProfile) && FAILED(hrEn))
+            return E_FAIL;
+    } else {
+        // Cannot create TSF profiles object - registration will not work
+        return hr ? hr : E_FAIL;
     }
 
     // Register TSF Categories (keyboard TIP only; the display-attribute
@@ -182,8 +196,12 @@ STDAPI DllRegisterServer(void)
         IID_ITfCategoryMgr, (void**)&pCategoryMgr);
 
     if (SUCCEEDED(hr) && pCategoryMgr) {
-        pCategoryMgr->RegisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
+        HRESULT hrCat = pCategoryMgr->RegisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
         pCategoryMgr->Release();
+        if (FAILED(hrCat))
+            return hrCat;
+    } else {
+        return hr ? hr : E_FAIL;
     }
 
     return S_OK;

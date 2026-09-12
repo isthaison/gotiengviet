@@ -24,7 +24,7 @@ $ build/gotiengviet-demo --transform telex duocjwd
 ## Tính năng
 
 - **Một thuật toán chung** cho Telex và VNI — chỉ khác bảng ánh xạ phím; kiểu đặt dấu hiện đại (`hòa`) hoặc truyền thống (`hoà`).
-- **Chính tả ngoại tuyến**: gạch đỏ ngay khi gõ theo quy tắc âm tiết (âm đầu–vần–phụ âm cuối–thanh), không cần mạng.
+- **Chính tả ngoại tuyến (Linux)**: gạch đỏ ngay khi gõ theo quy tắc âm tiết (âm đầu–vần–phụ âm cuối–thanh), không cần mạng. Bản Windows/macOS dùng AI balloon thay thế.
 - **Gợi ý AI cục bộ (tùy chọn)**: Ollama trên máy bạn — debounce 350 ms, hủy khi gõ tiếp, rớt mạng vẫn gợi ý từ dữ liệu đã học.
 - **Macro/emoji bằng file text**: tự thêm `cty=Công ty TNHH`, `:smile:`→😊, `(y)`→👍.
 - **Nhẹ, riêng tư**: lõi C thuần + glib; không keylogger đám mây, AI chạy local.
@@ -49,7 +49,8 @@ sudo apt install build-essential pkg-config libibus-1.0-dev libgtk-3-dev \
 sudo ./gtv.sh install
 ```
 
-Rồi vào **Settings → Keyboard → Input Sources** thêm **GoTiengViet (Telex)** và/hoặc **GoTiengViet (VNI)**,
+Rồi vào **Settings → Keyboard → Input Sources** thêm **GoTiengViet**
+(một nguồn duy nhất; chuyển Telex/VNI trong app indicator hoặc Setup),
 chuyển bằng `Super+Space`. Chi tiết: [docs/dev.md](docs/dev.md).
 
 **Windows 10/11**: tải `gotiengviet-<version>-x64-setup.exe` ở trang
@@ -57,8 +58,9 @@ chuyển bằng `Super+Space`. Chi tiết: [docs/dev.md](docs/dev.md).
 (cài per-user, không cần admin) → đăng xuất/đăng nhập lại → chọn **GoTV** bằng `Win+Space`.
 Chi tiết: [docs/windows.md](docs/windows.md).
 
-**macOS**: tải `gotiengviet-<version>-macos.zip` ở trang Releases (bản preview),
-giải nén vào `~/Library/Input Methods`, đăng xuất/đăng nhập lại. Chi tiết: [docs/macos.md](docs/macos.md).
+**macOS**: tải `gotiengviet-<version>-macos.dmg` hoặc `.pkg` ở trang Releases (bản preview),
+cài vào `~/Library/Input Methods` (`.pkg` tự cài, `.dmg` kéo thả), đăng xuất/đăng nhập lại.
+Chuyển bằng `Fn/Caps Lock` hoặc `Control+Space`. Chi tiết: [docs/macos.md](docs/macos.md).
 
 ## Quy tắc gõ (Telex/VNI)
 
@@ -79,7 +81,7 @@ Ví dụ: `bawst` → `bắt`, `duocjwd` → `được`, `hoaf` → `hoà`/`hòa
 |---|---|---|---|
 | Telex + VNI | ✅ | ✅ | ✅ |
 | Linux (IBus) / Windows / macOS | ✅ cả 3 | Win + Linux | Win + macOS |
-| Chính tả gạch đỏ khi gõ | ✅ | ❌ | ❌/✅ |
+| Chính tả khi gõ | ✅ gạch đỏ (Linux) | ❌ | ❌ (AI balloon thay thế) |
 | Gợi ý AI local (Ollama) | ✅ | ❌ | ❌ |
 | Mã nguồn mở | ✅ MIT | ✅ | ✅ |
 
@@ -87,6 +89,7 @@ Ví dụ: `bawst` → `bắt`, `duocjwd` → `được`, `hoaf` → `hoà`/`hòa
 
 - [Cấu hình & macro/emoji/AI](docs/config.md) · [Bản Windows](docs/windows.md) ·
   [Bản macOS](docs/macos.md) · [Phát triển & đóng gói](docs/dev.md) ·
+  [Đối chiếu tính năng theo nền tảng](docs/parity.md) ·
   [Trang chủ](https://isthaison.github.io/gotiengviet/)
 
 ## Lệnh thường dùng

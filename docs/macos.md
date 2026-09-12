@@ -26,8 +26,9 @@ cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotiengviet/`.
   `~/.config/gotiengviet/config` — xem [Cấu hình](config.md)).
 - Mở app lần nữa để mở cửa sổ **Dữ liệu** (bảng Macro/Emoji: xem, thêm/sửa/xóa,
   mở thư mục — chung API với bản Windows/Linux; lưu xong khởi động lại app để nhận).
-  Bảng Cài đặt đầy đủ (kiểu gõ/chuẩn dấu/AI) đang làm tiếp.
-- Tự kiểm tra cập nhật mỗi ngày như bản Windows (tự tải bản cập nhật mới nhất về `/tmp` và mở để cài đặt).
+  Chưa có tùy chỉnh kiểu gõ/chuẩn dấu/AI trong UI — hiện chỉ sửa được qua file `~/.config/gotiengviet/config`.
+- Tự kiểm tra cập nhật mỗi ngày; bản mới tải về `/tmp` rồi mở Finder để cài thủ công
+  (khác Windows/Linux: tự cài silent).
 - Macro/emoji/prompts/config: chung lõi và file `data/` với mọi nền tảng.
 - Hỗ trợ AI (Ollama): cài đặt Ollama trên macOS bằng lệnh chính thức:
   ```sh

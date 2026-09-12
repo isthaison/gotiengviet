@@ -111,7 +111,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload unsigned artifact (fallback)
-        if: steps.signpath.outcome != 'success'
+        if: always() && steps.signpath.outcome != 'success'
         uses: actions/upload-artifact@v4
         with:
           name: gotiengviet-windows-setup
@@ -120,7 +120,7 @@ jobs:
 
       # ── Release (on tag) ───────────────────────────────────────────
       - name: Release Asset (on Tag, signed)
-        if: startsWith(github.ref, 'refs/tags/v') && steps.signpath.outcome == 'success'
+        if: always() && startsWith(github.ref, 'refs/tags/v') && steps.signpath.outcome == 'success'
         uses: softprops/action-gh-release@v2
         with:
           files: signed-installer/gotiengviet-*-x64-setup.exe
@@ -128,7 +128,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release Asset (on Tag, unsigned fallback)
-        if: startsWith(github.ref, 'refs/tags/v') && steps.signpath.outcome != 'success'
+        if: always() && startsWith(github.ref, 'refs/tags/v') && steps.signpath.outcome != 'success'
         uses: softprops/action-gh-release@v2
         with:
           files: gotiengviet-*-x64-setup.exe

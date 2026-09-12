@@ -1,6 +1,7 @@
 #include "tsf_install.h"
 
 #include <windows.h>
+#include <stdio.h>
 #include <glib.h>
 #include <wchar.h>
 

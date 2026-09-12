@@ -93,7 +93,7 @@ Filename: "{cmd}"; Parameters: "/c set ""PATH={app};%PATH%"" && regsvr32.exe /s 
 ; One-time MACHINE registration of the TSF profiles/categories (HKLM):
 ; per-user Register/AddLanguageProfile always fail, leaving the keyboard
 ; invisible to Windows. Verb "runas" prompts for admin once.
-Filename: "{app}\gotiengviet.exe"; Parameters: "--register-tsf"; Verb: "runas"; Flags: runhidden waituntilterminated; StatusMsg: "Dang ky keyboard GoTV voi he thong..."
+Filename: "{app}\gotiengviet.exe"; Parameters: "--register-tsf"; Verb: "runas"; Flags: runhidden waituntilterminated shellexec; StatusMsg: "Dang ky keyboard GoTV voi he thong..."
 Filename: "{app}\gotiengviet.exe"; Description: "{cm:LaunchProgram,GoTiengViet}"; Flags: nowait postinstall
 
 [UninstallRun]

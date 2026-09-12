@@ -77,34 +77,64 @@ jobs:
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /Q "/DAppVersion=$APP_VERSION" "/DAppVerNum=$APP_VERNUM" "/DSourceDir=..\\release-pkg" windows/installer.iss
           ls -la gotiengviet-*-x64-setup.exe
 
-      # ── SignPath code signing ──────────────────────────────────────
-      - name: Upload unsigned installer
-        id: upload-unsigned
-        uses: actions/upload-artifact@v4
-        with:
-          name: gotiengviet-windows-unsigned
-          path: gotiengviet-*-x64-setup.exe
-          if-no-files-found: error
-
+      # ── SignPath code signing (direct API) ────────────────────────
+      # Direct API bypasses the GitHub connector which requires app install.
       - name: Sign via SignPath
         id: signpath
-        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
-          organization-id: '${{ vars.SIGNPATH_ORGANIZATION_ID }}'
-          project-slug: 'GoTiengViet'
-          signing-policy-slug: 'GoTiengViet'
-          artifact-configuration-slug: 'initial'
-          github-artifact-id: '${{ steps.upload-unsigned.outputs.artifact-id }}'
-          wait-for-completion: true
-          output-artifact-directory: 'signed-installer'
+        if: always() && env.SIGNPATH_API_TOKEN != ''
+        shell: bash
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORG: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        run: |
+          SETUP=$(ls gotiengviet-*-x64-setup.exe 2>/dev/null | head -1)
+          if [ -z "$SETUP" ]; then echo "No setup exe found"; exit 1; fi
+          echo "Submitting $SETUP to SignPath..."
+          RESP=$(curl -s -X POST \
+            -H "Authorization: Bearer $SIGNPATH_API_TOKEN" \
+            -F "projectSlug=GoTiengViet" \
+            -F "signingPolicySlug=GoTiengViet" \
+            -F "artifactConfigurationSlug=initial" \
+            -F "description=CI build ${{ github.sha }}" \
+            -F "artifact=@$SETUP" \
+            "https://app.signpath.io/api/v1/$SIGNPATH_ORG/SigningRequests/SubmitWithArtifact")
+          echo "$RESP" | python3 -m json.tool 2>/dev/null || echo "$RESP"
+          STATUS=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null)
+          REQ_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('signingRequestId',''))" 2>/dev/null)
+          if [ "$STATUS" = "error" ] || [ -z "$REQ_ID" ]; then
+            echo "Submit failed"
+            exit 1
+          fi
+          echo "SIGNING_REQUEST_ID=$REQ_ID" >> "$GITHUB_ENV"
+          echo "Signing request: $REQ_ID (status: $STATUS)"
+          # Poll until completed (max 10 min)
+          for i in $(seq 1 60); do
+            sleep 10
+            POLL=$(curl -s -H "Authorization: Bearer $SIGNPATH_API_TOKEN" \
+              "https://app.signpath.io/api/v1/$SIGNPATH_ORG/SigningRequests/$REQ_ID")
+            CUR_STATUS=$(echo "$POLL" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','error'))" 2>/dev/null)
+            echo "[$i] Status: $CUR_STATUS"
+            if [ "$CUR_STATUS" = "Completed" ]; then
+              echo "Signing completed!"
+              # Download signed artifact
+              mkdir -p signed-installer
+              curl -s -H "Authorization: Bearer $SIGNPATH_API_TOKEN" \
+                -o signed-installer/"$SETUP" \
+                "https://app.signpath.io/api/v1/$SIGNPATH_ORG/SigningRequests/$REQ_ID/SignedArtifact"
+              echo "Downloaded signed artifact"
+              exit 0
+            elif [ "$CUR_STATUS" = "Failed" ] || [ "$CUR_STATUS" = "Canceled" ]; then
+              echo "Signing failed: $CUR_STATUS"
+              echo "$POLL" | python3 -m json.tool 2>/dev/null
+              exit 1
+            fi
+          done
+          echo "Timeout waiting for signing"
+          exit 1
 
       # ── Upload final artifacts ─────────────────────────────────────
       - name: Upload signed artifact (SignPath)
-        if: steps.signpath.outcome == 'success'
+        if: always() && steps.signpath.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: gotiengviet-windows-setup

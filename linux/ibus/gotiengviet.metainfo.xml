@@ -34,6 +34,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.6" date="2026-09-12">
+      <description>
+        <p>fix(linux): single ibus engine no Telex/VNI in GNOME menu, pkexec TTY wrap; fix(win): TSF registration</p>
+      </description>
+    </release>
     <release version="0.8.5" date="2026-09-12">
       <description>
         <p>fix(win): self-signed cert code signing for Windows installer</p>

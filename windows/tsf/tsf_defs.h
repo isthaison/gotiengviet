@@ -23,4 +23,12 @@ DEFINE_GUID(GUID_GtvProfile,
 /* English (US) Language ID: 0x0409 (standard for systems without VN language pack) */
 #define GTV_LANG_ENGLISH    MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US)
 
+/* GUID_TFCAT_TIP_TEXTSERVICE is not defined in MinGW's msctf.h.
+ * A keyboard TIP must register for BOTH GUID_TFCAT_TIP_TEXTSERVICE and
+ * GUID_TFCAT_TIP_KEYBOARD to appear in Windows language settings. */
+#ifndef GUID_TFCAT_TIP_TEXTSERVICE
+DEFINE_GUID(GUID_TFCAT_TIP_TEXTSERVICE,
+    0x12A1D29F, 0xA065, 0x440C, 0x97, 0x46, 0xEB, 0x20, 0x02, 0xC2, 0xB6, 0x67);
+#endif
+
 #endif /* GTV_TSF_DEFS_H */

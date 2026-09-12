@@ -188,15 +188,23 @@ STDAPI DllRegisterServer(void)
         return hr ? hr : E_FAIL;
     }
 
-    // Register TSF Categories (keyboard TIP only; the display-attribute
-    // provider category is intentionally not claimed: QueryInterface does
-    // not implement ITfDisplayAttributeProvider).
+    // Register TSF Categories: keyboard TIP must register BOTH
+    // GUID_TFCAT_TIP_TEXTSERVICE (general text service) and
+    // GUID_TFCAT_TIP_KEYBOARD (keyboard-specific). Without TEXTSERVICE,
+    // Windows 10 will not list the keyboard in language settings.
     ITfCategoryMgr *pCategoryMgr = NULL;
     hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfCategoryMgr, (void**)&pCategoryMgr);
 
     if (SUCCEEDED(hr) && pCategoryMgr) {
-        HRESULT hrCat = pCategoryMgr->RegisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
+        HRESULT hrCat = pCategoryMgr->RegisterCategory(
+            CLSID_GtvTextService, GUID_TFCAT_TIP_TEXTSERVICE, CLSID_GtvTextService);
+        if (FAILED(hrCat)) {
+            pCategoryMgr->Release();
+            return hrCat;
+        }
+        hrCat = pCategoryMgr->RegisterCategory(
+            CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
         pCategoryMgr->Release();
         if (FAILED(hrCat))
             return hrCat;
@@ -217,6 +225,7 @@ STDAPI DllUnregisterServer(void)
     ITfCategoryMgr *pCategoryMgr = NULL;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER,
         IID_ITfCategoryMgr, (void**)&pCategoryMgr)) && pCategoryMgr) {
+        pCategoryMgr->UnregisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_TEXTSERVICE, CLSID_GtvTextService);
         pCategoryMgr->UnregisterCategory(CLSID_GtvTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_GtvTextService);
         pCategoryMgr->Release();
     }

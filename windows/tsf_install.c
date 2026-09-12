@@ -7,13 +7,6 @@
 static const wchar_t *GTV_TSF_INPROC_KEY =
     L"Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32";
 
-// TSF profile keys: HKCU\Software\Microsoft\CTF\TIP\{CLSID}\LanguageProfile\{langid}\{profileguid}
-// If these don't exist, the keyboard won't appear in language settings.
-static const wchar_t *GTV_TSF_PROFILE_BASE =
-    L"Software\\Microsoft\\CTF\\TIP\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\LanguageProfile";
-static const wchar_t *GTV_TSF_PROFILE_EN = L"0x00000409\\{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}";
-static const wchar_t *GTV_TSF_PROFILE_VI = L"0x0000042a\\{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}";
-
 static gboolean same_path_ci(const wchar_t *a, const wchar_t *b) {
     wchar_t full_a[MAX_PATH];
     wchar_t full_b[MAX_PATH];
@@ -42,30 +35,6 @@ static gboolean registered_to(const wchar_t *dll_path) {
 
     RegCloseKey(hkey);
     return ok;
-}
-
-static gboolean tsf_profiles_registered(void) {
-    HKEY hkey = NULL;
-    wchar_t key[MAX_PATH];
-    gboolean found = FALSE;
-
-    // Check English profile (0x0409) - should exist on most systems
-    swprintf(key, MAX_PATH, L"%ls\\%ls", GTV_TSF_PROFILE_BASE, GTV_TSF_PROFILE_EN);
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, key, 0, KEY_READ, &hkey) == ERROR_SUCCESS) {
-        RegCloseKey(hkey);
-        found = TRUE;
-    }
-
-    // Also check Vietnamese profile (0x042A)
-    if (!found) {
-        swprintf(key, MAX_PATH, L"%ls\\%ls", GTV_TSF_PROFILE_BASE, GTV_TSF_PROFILE_VI);
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, key, 0, KEY_READ, &hkey) == ERROR_SUCCESS) {
-            RegCloseKey(hkey);
-            found = TRUE;
-        }
-    }
-
-    return found;
 }
 
 static wchar_t *prepend_app_dir_to_path(const wchar_t *app_dir) {
@@ -125,8 +94,8 @@ void gtv_tsf_install_ensure_registered(void) {
     if (!app_paths(app_dir, dll_path))
         return;
 
-    // Re-register if: InprocServer32 path mismatch OR TSF profiles missing
-    if (registered_to(dll_path) && tsf_profiles_registered())
+    // Re-register if InprocServer32 path mismatch
+    if (registered_to(dll_path))
         return;
 
     if (GetSystemDirectoryW(system_dir, MAX_PATH))

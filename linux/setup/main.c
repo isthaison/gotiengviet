@@ -161,6 +161,43 @@ typedef struct {
     gboolean manual;
     GtvUpdateStatus status;
 } TrayUpdate;
+
+/* Run pkexec via terminal emulator when /dev/tty is unavailable (GUI launch). */
+static gboolean run_pkexec_argv(gchar **argv, gint *out_status, gchar **out_err, gchar **errmsg){
+    GError *error = NULL;
+    FILE *tty = fopen("/dev/tty", "r");
+    if(tty){
+        fclose(tty);
+        if(!g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH,
+                         NULL, NULL, out_err, NULL, out_status, &error)){
+            *errmsg = g_strdup_printf("Không chạy được pkexec: %s",
+                                      error ? error->message : "lỗi không rõ");
+            g_clear_error(&error);
+            return FALSE;
+        }
+        return TRUE;
+    }
+    const char *terms[] = {"x-terminal-emulator","gnome-terminal","konsole","xfce4-terminal","xterm",NULL};
+    gchar *term = NULL;
+    for(int i = 0; terms[i]; i++){
+        if(g_find_program_in_path(terms[i])){ term = g_strdup(terms[i]); break; }
+    }
+    if(!term){ *errmsg = g_strdup("Không tìm thấy terminal emulator."); return FALSE; }
+    GString *cmd = g_string_new("");
+    for(int i = 0; argv[i]; i++){ if(i) g_string_append_c(cmd,' '); g_string_append(cmd, argv[i]); }
+    gchar *wrapped[] = {term, "-e", cmd->str, NULL};
+    if(!g_spawn_sync(NULL, wrapped, NULL, G_SPAWN_SEARCH_PATH,
+                     NULL, NULL, out_err, NULL, out_status, &error)){
+        *errmsg = g_strdup_printf("Không chạy được terminal: %s",
+                                  error ? error->message : "lỗi không rõ");
+        g_clear_error(&error);
+        g_string_free(cmd, TRUE); g_free(term);
+        return FALSE;
+    }
+    g_string_free(cmd, TRUE); g_free(term);
+    return TRUE;
+}
+
 static void tray_update_free(TrayUpdate *u){
     if(!u) return;
     g_free(u->tag); g_free(u->url); g_free(u->note); g_free(u);
@@ -219,12 +256,10 @@ static gpointer tray_update_install_thread(gpointer data){
         gchar *argv[] = {"pkexec", "dpkg", "-i", dest, NULL};
         gchar *out = NULL, *err = NULL;
         gint status = -1;
-        GError *error = NULL;
-        if(!g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
-                         &out, &err, &status, &error)){
-            u->note = g_strdup_printf("Không chạy được pkexec: %s",
-                                      error ? error->message : "lỗi không rõ");
-            g_clear_error(&error);
+        gchar *errmsg = NULL;
+        if(!run_pkexec_argv(argv, &status, &err, &errmsg)){
+            u->note = g_strdup(errmsg);
+            g_free(errmsg);
         }else if(status != 0){
             gchar *detail = (err && *err) ? g_strstrip(g_strdup(err)) : NULL;
             u->note = g_strdup_printf("dpkg báo lỗi (mã %d)%s%s",
@@ -594,14 +629,32 @@ static void auto_install_ollama(void){
     gchar *argv[] = {"pkexec", "sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh >>/tmp/ollama_install.log 2>&1", NULL};
     GError *err = NULL;
     GPid pid = 0;
-    if(!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, &err)){
+    gchar **final_argv = argv;
+    gchar *term = NULL;
+    FILE *tty = fopen("/dev/tty", "r");
+    if(!tty){
+        const char *terms[] = {"x-terminal-emulator","gnome-terminal","konsole","xfce4-terminal","xterm",NULL};
+        for(int i = 0; terms[i]; i++){
+            if(g_find_program_in_path(terms[i])){ term = g_strdup(terms[i]); break; }
+        }
+        if(term){
+            GString *cmd = g_string_new("");
+            for(int i = 0; argv[i]; i++){ if(i) g_string_append_c(cmd,' '); g_string_append(cmd, argv[i]); }
+            static gchar *wrapped[4];
+            wrapped[0] = term; wrapped[1] = "-e"; wrapped[2] = cmd->str; wrapped[3] = NULL;
+            final_argv = wrapped;
+        }
+    }else{ fclose(tty); }
+    if(!g_spawn_async(NULL, final_argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, &err)){
         char em[256];
         snprintf(em, sizeof(em), "LỖI gọi pkexec: %s", err ? err->message : "unknown");
         gtk_label_set_text(GTK_LABEL(lbl_ai_status), em);
         ai_log(em);
         if(err) g_error_free(err);
+        if(term) g_free(term);
         return;
     }
+    if(term) g_free(term);
     install_pid = pid;
     g_child_watch_add(pid, on_install_exit, NULL);
 }

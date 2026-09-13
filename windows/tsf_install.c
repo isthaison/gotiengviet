@@ -19,7 +19,6 @@ static const wchar_t *GTV_TSF_INPROC_KEY =
  * If these don't exist, the keyboard won't appear in language settings. */
 static const wchar_t *GTV_TSF_PROFILE_BASE =
     L"Software\\Microsoft\\CTF\\TIP\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\LanguageProfile";
-static const wchar_t *GTV_TSF_LANG_EN = L"0x00000409";
 static const wchar_t *GTV_TSF_LANG_VI = L"0x0000042a";
 
 /* Category GUIDs: a keyboard TIP must register these, otherwise Win10/11

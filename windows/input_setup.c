@@ -1,5 +1,5 @@
 /* Automatic per-user input setup: attach the GoTV keyboard to the user's
- * existing languages so it shows up in the Win+Space / taskbar switcher
+ * Vietnamese language so it shows up in the Win+Space / taskbar switcher
  * without manual Settings work.
  *
  * Everything here is additive-only (never removes the user's keyboards)
@@ -18,7 +18,6 @@
  * 042a:{CLSID}{ProfileGUID}. GoTV lives under Vietnamese so the taskbar
  * badge shows "VIE" — distinguishing it from the plain US keyboard ("ENG"). */
 #define GTV_TIP_VI "042a:{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}"
-#define GTV_TIP_EN "0409:{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}"
 
 static void setup_log(const gchar *fmt, ...) {
     gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
@@ -73,10 +72,6 @@ static const char *setup_script(void) {
            "foreach($x in $l){"
            "  if($x.LanguageTag -match '^vi' -and ($x.InputMethodTips -notcontains '" GTV_TIP_VI "')){"
            "    $x.InputMethodTips.Add('" GTV_TIP_VI "');$c=$true}}"
-           /* Remove GoTV from en-US if present (keep only US keyboard) */
-           "foreach($x in $l){"
-           "  if($x.LanguageTag -eq 'en-US' -and ($x.InputMethodTips -contains '" GTV_TIP_EN "')){"
-           "    $x.InputMethodTips.Remove('" GTV_TIP_EN "');$c=$true}}"
            "if($c){Set-WinUserLanguageList $l -Force};"
            /* Verify */
            "$l2=Get-WinUserLanguageList;"
@@ -84,8 +79,7 @@ static const char *setup_script(void) {
            "$hasVi2=$null -ne ($l2 | Where-Object{$_.LanguageTag -match '^vi'});"
            "if(-not $hasVi2){$ok=$false}"
            "foreach($x in $l2){"
-           "  if($x.LanguageTag -match '^vi' -and ($x.InputMethodTips -notcontains '" GTV_TIP_VI "')){$ok=$false}"
-           "  if($x.LanguageTag -eq 'en-US' -and ($x.InputMethodTips -contains '" GTV_TIP_EN "')){$ok=$false}}"
+           "  if($x.LanguageTag -match '^vi' -and ($x.InputMethodTips -notcontains '" GTV_TIP_VI "')){$ok=$false}}"
            "exit(($ok)?0:1)";
 }
 

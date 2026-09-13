@@ -15,8 +15,8 @@
 #include <glib/gstdio.h>
 
 /* TIP strings, same format Windows itself uses, e.g.
- * 042A:{CLSID}{ProfileGUID}. -notcontains is case-insensitive, so the
- * cmdlet's 042a->042A normalization is harmless. */
+ * 042a:{CLSID}{ProfileGUID}. GoTV lives under Vietnamese so the taskbar
+ * badge shows "VIE" — distinguishing it from the plain US keyboard ("ENG"). */
 #define GTV_TIP_VI "042a:{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}"
 #define GTV_TIP_EN "0409:{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}"
 
@@ -57,30 +57,35 @@ static void stamp_write(void) {
     g_free(path);
 }
 
-/* One powershell invocation: add missing GoTV TIPs, apply if changed,
- * re-read and exit 0 only when every applicable TIP is present.
- * Rule (avoid duplicate switcher entries): if Vietnamese exists, GoTV
- * lives there only; otherwise attach it to en-US so it still shows up. */
+/* One powershell invocation: add Vietnamese+GoTV, strip GoTV from en-US.
+ * Result: badge shows "VIE" for GoTV, "ENG" for plain US keyboard. */
 static const char *setup_script(void) {
     return "$ErrorActionPreference='SilentlyContinue';"
            "$l=Get-WinUserLanguageList;"
-           "$hasVi=$null -ne ($l | Where-Object{$_.LanguageTag -eq 'vi'});"
            "$c=$false;"
+           /* Add Vietnamese with GoTV TIP if missing */
+           "$hasVi=$null -ne ($l | Where-Object{$_.LanguageTag -match '^vi'});"
+           "if(-not $hasVi){"
+           "  $vi=New-WinUserLanguageList 'vi-VN';"
+           "  $vi[0].InputMethodTips.Add('" GTV_TIP_VI "');"
+           "  $l+=$vi;$c=$true}"
+           /* Ensure existing vi* has GoTV TIP */
            "foreach($x in $l){"
-           "  $t=$null;"
-           "  if($x.LanguageTag -eq 'vi'){$t='" GTV_TIP_VI "'}"
-           "  elseif(-not $hasVi -and $x.LanguageTag -eq 'en-US'){$t='" GTV_TIP_EN "'}"
-           "  if($t -and ($x.InputMethodTips -notcontains $t)){"
-           "    $x.InputMethodTips.Add($t);$c=$true}}"
+           "  if($x.LanguageTag -match '^vi' -and ($x.InputMethodTips -notcontains '" GTV_TIP_VI "')){"
+           "    $x.InputMethodTips.Add('" GTV_TIP_VI "');$c=$true}}"
+           /* Remove GoTV from en-US if present (keep only US keyboard) */
+           "foreach($x in $l){"
+           "  if($x.LanguageTag -eq 'en-US' -and ($x.InputMethodTips -contains '" GTV_TIP_EN "')){"
+           "    $x.InputMethodTips.Remove('" GTV_TIP_EN "');$c=$true}}"
            "if($c){Set-WinUserLanguageList $l -Force};"
+           /* Verify */
            "$l2=Get-WinUserLanguageList;"
-           "$hasVi2=$null -ne ($l2 | Where-Object{$_.LanguageTag -eq 'vi'});"
            "$ok=$true;"
+           "$hasVi2=$null -ne ($l2 | Where-Object{$_.LanguageTag -match '^vi'});"
+           "if(-not $hasVi2){$ok=$false}"
            "foreach($x in $l2){"
-           "  $t=$null;"
-           "  if($x.LanguageTag -eq 'vi'){$t='" GTV_TIP_VI "'}"
-           "  elseif(-not $hasVi2 -and $x.LanguageTag -eq 'en-US'){$t='" GTV_TIP_EN "'}"
-           "  if($t -and ($x.InputMethodTips -notcontains $t)){$ok=$false}}"
+           "  if($x.LanguageTag -match '^vi' -and ($x.InputMethodTips -notcontains '" GTV_TIP_VI "')){$ok=$false}"
+           "  if($x.LanguageTag -eq 'en-US' -and ($x.InputMethodTips -contains '" GTV_TIP_EN "')){$ok=$false}}"
            "exit(($ok)?0:1)";
 }
 

@@ -109,13 +109,10 @@ static gboolean reg_key_exists(const wchar_t *subkey) {
 }
 
 static gboolean tsf_profiles_registered(void) {
-    wchar_t key_en[MAX_PATH];
     wchar_t key_vi[MAX_PATH];
-    swprintf(key_en, MAX_PATH, L"%ls\\%ls\\%ls",
-             GTV_TSF_PROFILE_BASE, GTV_TSF_LANG_EN, GTV_TSF_PROFILE_GUID_STR);
     swprintf(key_vi, MAX_PATH, L"%ls\\%ls\\%ls",
              GTV_TSF_PROFILE_BASE, GTV_TSF_LANG_VI, GTV_TSF_PROFILE_GUID_STR);
-    if (reg_key_exists(key_en) || reg_key_exists(key_vi))
+    if (reg_key_exists(key_vi))
         return TRUE;
     log_msg("No TSF language profiles found under HKCU");
     return FALSE;
@@ -260,10 +257,10 @@ static void enable_profiles_via_api(void) {
     CLSIDFromString((LPOLESTR)GTV_TSF_PROFILE_GUID_STR, &guidProfile);
     pProfiles->lpVtbl->Register(pProfiles, &clsid);
 
-    const LANGID langs[2] = { 0x0409, 0x042A };
-    for (int i = 0; i < 2; i++) {
+    const LANGID langs[1] = { 0x042A };
+    for (int i = 0; i < 1; i++) {
         hr = pProfiles->lpVtbl->EnableLanguageProfile(pProfiles, &clsid, langs[i],
-                                                      &guidProfile, TRUE);
+                                                       &guidProfile, TRUE);
         log_msg("EnableLanguageProfile lang=0x%04x hr=0x%08lx", (unsigned)langs[i],
                 (unsigned long)hr);
     }
@@ -495,8 +492,8 @@ gboolean gtv_tsf_register_elevated(void) {
     log_msg("Register hr=0x%08lx", (unsigned long)hr);
     if (FAILED(hr)) ok_all = FALSE;
 
-    const LANGID langs[2] = { 0x042A, 0x0409 };
-    for (int i = 0; i < 2; i++) {
+    const LANGID langs[1] = { 0x042A };
+    for (int i = 0; i < 1; i++) {
         hr = p->lpVtbl->AddLanguageProfile(p, &clsid, langs[i], &guidProfile,
                                            L"GoTV", 4, dll_path,
                                            (ULONG)wcslen(dll_path), 0);

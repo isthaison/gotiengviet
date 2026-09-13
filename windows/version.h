@@ -4,6 +4,6 @@
 /* Current Windows build version. Bump together with windows/resource.rc
  * (FILEVERSION/FileVersion/ProductVersion) and ibus/gotiengviet.xml.
  * Tags like v0.8.7 are compared against this by the self-updater. */
-#define GTV_VERSION "0.8.7"
+#define GTV_VERSION "0.8.8"
 
 #endif /* GTV_VERSION_H */

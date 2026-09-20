@@ -34,6 +34,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.10" date="2026-09-20">
+      <description>
+        <p>GoTV VI-only: strip built-in Telex so VIE shows a single keyboard</p>
+      </description>
+    </release>
     <release version="0.8.7" date="2026-09-12">
       <description>
         <p>fix(linux): single ibus engine no Telex/VNI in GNOME menu, pkexec TTY wrap; fix(win): TSF registration</p>

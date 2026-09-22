@@ -34,6 +34,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.11" date="2026-09-22">
+      <description>
+        <p>feat: kích hoạt macro bằng phím Tab thay vì tự động</p>
+      </description>
+    </release>
     <release version="0.8.10" date="2026-09-20">
       <description>
         <p>GoTV VI-only: strip built-in Telex so VIE shows a single keyboard</p>

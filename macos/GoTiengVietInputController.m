@@ -213,6 +213,26 @@
         return YES;
     }
 
+    /* Tab key: expands macro if composing and buffer matches a macro.
+     * Otherwise commits buffer and lets Tab pass through to the app. */
+    if ([sel isEqualToString:@"insertTab:"]) {
+        if (!composing) return NO;
+        guint backspaces = 0;
+        gchar *macro = gtv_engine_process(engine, '\t', &backspaces);
+        if (macro) {
+            NSString *ns = [self utf8String:macro];
+            g_free(macro);
+            if (ns) {
+                [sender insertText:ns replacementRange:NSMakeRange(NSNotFound, NSNotFound)];
+            }
+            gtv_engine_reset(engine);
+            composing = NO;
+            return YES;
+        }
+        [self commitBuffer:sender];
+        return NO;
+    }
+
     /* Anything else that touches text (newline, tab, arrows, forward
      * delete, insert commands): commit first, then let it through. */
     if ([sel hasPrefix:@"insert"] || [sel hasPrefix:@"delete"] ||

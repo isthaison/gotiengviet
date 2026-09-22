@@ -46,6 +46,8 @@ gboolean telex_transform(GArray *buf, gunichar key, gboolean modern);
 gboolean vni_transform(GArray *buf, gunichar key, gboolean modern);
 GArray* gstring_to_ucs4(GString *s);
 void ucs4_to_gstring(GArray *arr, GString *s);
+gchar* expand_macro(const char *word);
+gchar* expand_emoji(const char *word);
 gchar* expand_word(const char *word);
 GPtrArray* get_emoji_suggestions(const char *prefix);
 void gtv_tables_reload(void);

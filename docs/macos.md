@@ -29,7 +29,7 @@ cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotiengviet/`.
   Chưa có tùy chỉnh kiểu gõ/chuẩn dấu/AI trong UI — hiện chỉ sửa được qua file `~/.config/gotiengviet/config`.
 - Tự kiểm tra cập nhật mỗi ngày; bản mới tải về `/tmp` rồi mở Finder để cài thủ công
   (khác Windows/Linux: tự cài silent).
-- Macro/emoji/prompts/config: chung lõi và file `data/` với mọi nền tảng.
+- Macro/emoji/prompts/config: chung lõi và file `data/` với mọi nền tảng (macro kích hoạt bằng phím Tab; Space giữ nguyên từ tắt).
 - Hỗ trợ AI (Ollama): cài đặt Ollama trên macOS bằng lệnh chính thức:
   ```sh
   curl -fsSL https://ollama.com/install.sh | sh

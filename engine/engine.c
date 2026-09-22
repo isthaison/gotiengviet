@@ -49,6 +49,21 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
         }
         return NULL;
     }
+    if (key == '\t') {
+        if (buf->len > 0) {
+            gchar *word = gtv_engine_buffer(engine);
+            gchar *macro = expand_macro(word);
+            if (macro) {
+                guint old_len = buf->len;
+                g_free(word);
+                gtv_engine_reset(engine);
+                if (backspaces) *backspaces = old_len;
+                return macro;
+            }
+            g_free(word);
+        }
+        return NULL;
+    }
     gboolean shortcut_key = engine->mode == GTV_TELEX && (key == '[' || key == ']' || key == '{' || key == '}');
     gboolean is_emoji_seq = FALSE;
     if (buf->len == 0 && (key == ':' || key == ';' || key == '<' || key == '(')) {
@@ -62,8 +77,8 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
         gchar *word = gtv_engine_buffer(engine);
         GString *combo = g_string_new(word);
         g_string_append_unichar(combo, key);
-        gchar *combo_expanded = expand_word(combo->str);
-        if (strcmp(combo->str, combo_expanded) != 0) {
+        gchar *combo_expanded = expand_emoji(combo->str);
+        if (combo_expanded) {
             guint old_len = buf->len;
             g_free(word);
             g_string_free(combo, TRUE);
@@ -71,14 +86,13 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
             if (backspaces) *backspaces = old_len;
             return combo_expanded;
         }
-        g_free(combo_expanded);
         g_string_free(combo, TRUE);
 
-        gchar *expanded = expand_word(word);
-        g_free(word);
-        GString *commit = g_string_new(expanded);
+        gchar *expanded = expand_emoji(word);
+        GString *commit = g_string_new(expanded ? expanded : word);
         g_string_append_unichar(commit, key);
         g_free(expanded);
+        g_free(word);
         gtv_engine_reset(engine);
         return g_string_free(commit, FALSE);
     }
@@ -86,8 +100,8 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
     gchar *before = gtv_engine_buffer(engine);
     gtv_compose(buf, key, engine->mode, engine->modern);
     gchar *current = gtv_engine_buffer(engine);
-    gchar *expanded = expand_word(current);
-    if (strcmp(current, expanded) != 0 && (key == ':' || key == ')' || key == 'D' || key == 'P' || key == 'p' || key == '3' || key == '>')) {
+    gchar *expanded = expand_emoji(current);
+    if (expanded && (key == ':' || key == ')' || key == 'D' || key == 'P' || key == 'p' || key == '3' || key == '>')) {
         g_free(current);
         gtv_engine_reset(engine);
         if (backspaces) *backspaces = old_len;

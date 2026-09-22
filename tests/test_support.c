@@ -13,13 +13,18 @@ static void test_stateful(void) {
     g_assert_cmpuint(backspaces,==,1);
     gchar *commit=gtv_engine_process(engine,' ',NULL);
     g_assert_cmpstr(commit,==,"đượ ");g_free(commit);
-    const gchar *phrases[]={"vn ",":SMILE:","ko!",NULL};
-    const gchar *expected[]={"Việt Nam ","😊","không!"};
+    const gchar *phrases[]={"vn\t",":SMILE:","ko\t",NULL};
+    const gchar *expected[]={"Việt Nam","😊","không"};
     for(guint i=0;phrases[i];i++) {
         for(const gchar *p=phrases[i];*p;p++) {
             commit=gtv_engine_process(engine,*p,NULL);
             if(commit) {g_assert_cmpstr(commit,==,expected[i]);g_free(commit);}
         }
+    }
+    /* Space does not expand macro */
+    for(const gchar *p="vn ";*p;p++) {
+        commit=gtv_engine_process(engine,*p,NULL);
+        if(commit) {g_assert_cmpstr(commit,==,"vn ");g_free(commit);}
     }
     gtv_engine_process(engine,'[',NULL);
     buffer=gtv_engine_buffer(engine);g_assert_cmpstr(buffer,==,"ươ");g_free(buffer);
@@ -508,6 +513,53 @@ static void test_macro_and_emoji(void) {
     g_assert_nonnull(commit);
     g_assert_cmpstr(commit, ==, "chao:");
     g_free(commit);
+
+    /* Test expand_macro and expand_emoji distinct functions */
+    gchar *mac = expand_macro("vn");
+    g_assert_cmpstr(mac, ==, "Việt Nam");
+    g_free(mac);
+    g_assert_null(expand_macro("not_a_macro"));
+    g_assert_null(expand_macro(":smile:"));
+    gchar *emj = expand_emoji(":smile:");
+    g_assert_cmpstr(emj, ==, "😊");
+    g_free(emj);
+    g_assert_null(expand_emoji("vn"));
+
+    /* Test macro does NOT expand automatically on Space */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, 'v', NULL));
+    g_assert_null(gtv_engine_process(eng, 'n', NULL));
+    commit = gtv_engine_process(eng, ' ', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "vn ");
+    g_free(commit);
+
+    /* Test macro does NOT expand automatically on punctuation */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, 'v', NULL));
+    g_assert_null(gtv_engine_process(eng, 'n', NULL));
+    commit = gtv_engine_process(eng, '.', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "vn.");
+    g_free(commit);
+
+    /* Test macro expands on Tab */
+    gtv_engine_reset(eng);
+    guint bs = 0;
+    g_assert_null(gtv_engine_process(eng, 'v', &bs));
+    g_assert_null(gtv_engine_process(eng, 'n', &bs));
+    commit = gtv_engine_process(eng, '\t', &bs);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "Việt Nam");
+    g_assert_cmpuint(bs, ==, 2);
+    g_free(commit);
+
+    /* Test non-macro returns NULL on Tab */
+    gtv_engine_reset(eng);
+    bs = 0;
+    for(const char *p = "chao"; *p; p++) g_assert_null(gtv_engine_process(eng, *p, &bs));
+    commit = gtv_engine_process(eng, '\t', &bs);
+    g_assert_null(commit);
 
     gtv_engine_free(eng);
 }

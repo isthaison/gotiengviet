@@ -16,7 +16,7 @@ Khi chưa có file người dùng, bộ gõ dùng mặc định trong `data/` (c
 
 ## Macro và emoji
 
-Macro mở rộng khi kết thúc từ: `vn`→`Việt Nam`, `hn`→`Hà Nội`, `dc`→`được`, `ko`→`không`, … Emoji: `:smile:`→😊, `:)`→😊, `<3`→❤️, … Đang gõ tiền tố `:` (ví dụ `:sm`) thì IBus gợi ý tối đa 5 emoji.
+Macro (gõ tắt) mở rộng khi bấm **Tab**: gõ `vn` rồi nhấn **Tab** → `Việt Nam`, `hn`+[Tab] → `Hà Nội`, `dc`+[Tab] → `được`, `ko`+[Tab] → `không`, … Bấm phím Space hoặc dấu câu sẽ giữ nguyên chữ viết tắt (không tự động bung gõ tắt, thuận tiện khi bạn cần gõ đúng ký tự đó). Emoji: `:smile:`→😊, `:)`→😊, `<3`→❤️, … Đang gõ tiền tố `:` (ví dụ `:sm`) thì IBus gợi ý tối đa 5 emoji.
 
 Định dạng file text: `key=value` mỗi dòng, tách ở dấu `=` đầu, `#` là chú thích, UTF-8, trùng key lấy dòng đầu, giữ thứ tự file. Ví dụ thêm macro riêng (`~/.config/gotiengviet/macros.txt`):
 

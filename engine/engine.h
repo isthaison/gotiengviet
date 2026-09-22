@@ -26,6 +26,8 @@ void gtv_engine_reset(GtvEngine *engine);
 gchar *gtv_engine_buffer(const GtvEngine *engine);
 /* NULL means composing; otherwise returns committed text and clears the buffer. */
 gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces);
+gchar *expand_macro(const char *word);
+gchar *expand_emoji(const char *word);
 void gtv_config_load(GtvConfig *config, const gchar *directory);
 gboolean gtv_config_save(const GtvConfig *config, const gchar *directory, GError **error);
 void gtv_config_clear(GtvConfig *config);

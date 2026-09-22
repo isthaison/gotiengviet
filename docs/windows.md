@@ -43,6 +43,8 @@ giá trị không rỗng. Lưu ghi đè file riêng của bạn (`macros.txt`/`e
 `%APPDATA%\gotiengviet\`, thay thế hoàn toàn file hệ thống) — **app đang mở phải khởi
 động lại mới nhận bảng mới** (TSF đọc bảng lúc app khởi động).
 
+Macro (gõ tắt) được kích hoạt bằng phím **Tab** (gõ từ tắt rồi nhấn Tab để bung từ đầy đủ; bấm Space hoặc dấu câu sẽ giữ nguyên từ viết tắt, không tự động bung ngoài ý muốn). Emoji bung tự động.
+
 ## Gạch đỏ dưới chữ Việt trong trình duyệt/app khác
 
 Không phải của GoTiengViet: TSF của app không bao giờ vẽ gạch đỏ (không set display

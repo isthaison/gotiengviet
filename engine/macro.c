@@ -88,9 +88,9 @@ void gtv_tables_reload(void){
     tables_load();
 }
 
-/* Trả về chuỗi mới (caller g_free) — đã expand macro/emoji, hoặc bản sao nguyên văn */
-gchar* expand_word(const char *word){
-    if(!word) return g_strdup("");
+/* Trả về chuỗi mới (caller g_free) nếu là macro, hoặc NULL nếu không khớp */
+gchar* expand_macro(const char *word){
+    if(!word || !*word) return NULL;
     tables_load();
     gpointer v = g_hash_table_lookup(macro_exact, word);
     if(!v){
@@ -98,15 +98,30 @@ gchar* expand_word(const char *word){
         v = g_hash_table_lookup(macro_fold, lower);
         g_free(lower);
     }
+    return v ? g_strdup((const gchar *)v) : NULL;
+}
+
+/* Trả về chuỗi mới (caller g_free) nếu là emoji, hoặc NULL nếu không khớp */
+gchar* expand_emoji(const char *word){
+    if(!word || !*word) return NULL;
+    tables_load();
+    gpointer v = g_hash_table_lookup(emoji_exact, word);
     if(!v){
-        v = g_hash_table_lookup(emoji_exact, word);
-        if(!v){
-            gchar *lower = g_utf8_strdown(word, -1);
-            v = g_hash_table_lookup(emoji_fold, lower);
-            g_free(lower);
-        }
+        gchar *lower = g_utf8_strdown(word, -1);
+        v = g_hash_table_lookup(emoji_fold, lower);
+        g_free(lower);
     }
-    return g_strdup(v ? v : word);
+    return v ? g_strdup((const gchar *)v) : NULL;
+}
+
+/* Trả về chuỗi mới (caller g_free) — đã expand macro/emoji, hoặc bản sao nguyên văn */
+gchar* expand_word(const char *word){
+    if(!word) return g_strdup("");
+    gchar *m = expand_macro(word);
+    if(m) return m;
+    gchar *e = expand_emoji(word);
+    if(e) return e;
+    return g_strdup(word);
 }
 
 GPtrArray* get_emoji_suggestions(const char *prefix){

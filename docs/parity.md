@@ -11,7 +11,7 @@ Ký hiệu: ✅ có · ⚠️ một phần · ❌ chưa có · ➖ hệ điều 
 |---|---|---|---|
 | Telex / VNI / dấu hiện đại-truyền thống | ✅ | ✅ | ✅ |
 | Hoàn tác phím tắt (`ww`→`w`) | ✅ | ✅ | ✅ |
-| Macro/emoji mở rộng khi commit | ✅ | ✅ | ✅ |
+| Macro mở rộng bằng Tab, emoji tự động | ✅ | ✅ | ✅ |
 | Giữ phần gõ dở khi click sang chỗ khác | ✅ | ✅ (composition TSF) | ✅ (marked text) |
 
 ## Hiển thị và gợi ý

@@ -412,7 +412,7 @@ cmd_install_linux() {
         exit 1
     fi
     for binary in ibus-engine-gotiengviet ibus-setup-gotiengviet gotiengviet-demo; do
-        if [[ ! -x "$BUILD_DIR/$binary" ]]; then
+        if [[ ! -f "$BUILD_DIR/$binary" ]]; then
             echo "Thiếu $BUILD_DIR/$binary. Chạy $PROG build trước." >&2
             exit 1
         fi

@@ -151,6 +151,22 @@ int main(int argc,char **argv) {
     gtv_tables_reload();
     custom=expand_word("vn");
     g_assert_cmpstr(custom,==,"Việt Nam");g_free(custom);
+    /* Test macro expansion on Tab vs Space in IBus */
+    ibus_gotiengviet_engine_reset(e);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_v,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_n,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"vn");
+    /* Tab expands macro and consumes event */
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Tab,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"");
+
+    /* Space does not expand macro */
+    ibus_gotiengviet_engine_reset(e);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_v,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_n,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"vn");
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_space,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"");
     g_clear_pointer(&e->learned_words,g_hash_table_unref);
     g_assert_true(word_valid(e,"kông"));
     /* Modifier/lock keys must pass through without committing the syllable. */

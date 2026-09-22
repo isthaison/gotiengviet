@@ -26,7 +26,7 @@ $ build/gotiengviet-demo --transform telex duocjwd
 - **Một thuật toán chung** cho Telex và VNI — chỉ khác bảng ánh xạ phím; kiểu đặt dấu hiện đại (`hòa`) hoặc truyền thống (`hoà`).
 - **Chính tả ngoại tuyến (Linux)**: gạch đỏ ngay khi gõ theo quy tắc âm tiết (âm đầu–vần–phụ âm cuối–thanh), không cần mạng. Bản Windows/macOS dùng AI balloon thay thế.
 - **Gợi ý AI cục bộ (tùy chọn)**: Ollama trên máy bạn — debounce 350 ms, hủy khi gõ tiếp, rớt mạng vẫn gợi ý từ dữ liệu đã học.
-- **Macro/emoji bằng file text**: tự thêm `cty=Công ty TNHH`, `:smile:`→😊, `(y)`→👍.
+- **Macro/emoji bằng file text**: tự thêm `cty=Công ty TNHH` (gõ `cty` rồi nhấn **Tab** để bung từ viết tắt, phím Space giữ nguyên chữ), `:smile:`→😊, `(y)`→👍.
 - **Nhẹ, riêng tư**: lõi C thuần + glib; không keylogger đám mây, AI chạy local.
 - **Tự cập nhật**: kiểm tra release GitHub mỗi ngày, cài đè giữ nguyên cấu hình.
 
@@ -124,5 +124,19 @@ Chuẩn code: `engine/` thuần C đa nền tảng, adapter riêng từng OS tro
 
 > 💡 **Gợi ý topics cho repo** (mục About → ⚙️): `vietnamese` `tieng-viet` `telex` `vni`
 > `input-method` `ime` `ibus` `tsf` `unikey` `linux` `windows` `macos` `ollama` `c`
+
+## Star History & Stargazers
+
+<a href="https://star-history.com/#isthaison/gotiengviet&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=isthaison/gotiengviet&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=isthaison/gotiengviet&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=isthaison/gotiengviet&type=Date" />
+ </picture>
+</a>
+
+Cảm ơn các bạn đã ủng hộ dự án! Xem danh sách chi tiết những người đã star tại **[GitHub Stargazers](https://github.com/isthaison/gotiengviet/stargazers)**.
+
+
 
 Giấy phép: [MIT](LICENSE).

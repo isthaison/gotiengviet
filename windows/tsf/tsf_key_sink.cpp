@@ -130,6 +130,20 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
         return S_OK;
     }
 
+    if (wParam == VK_TAB) {
+        if (IsComposing()) {
+            gchar *buf = gtv_engine_buffer(m_pEngine);
+            gchar *macro = expand_macro(buf);
+            g_free(buf);
+            if (macro) {
+                g_free(macro);
+                *pfEaten = TRUE;
+                return S_OK;
+            }
+        }
+        return S_OK;
+    }
+
     // Convert key through US layout: GoTV owns Telex/VNI; Windows' VIE
     // hardware layout must not turn number-row keys into Vietnamese chars.
     WCHAR wchars[4] = {0};
@@ -183,6 +197,28 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
             EndComposition(pic, TRUE);
             gtv_engine_reset(m_pEngine);
             *pfEaten = TRUE;
+        }
+        return S_OK;
+    }
+
+    // Tab expands macro; if not a macro, commits buffer and passes Tab through
+    if (wParam == VK_TAB) {
+        if (IsComposing()) {
+            guint bs = 0;
+            gchar *macro = gtv_engine_process(m_pEngine, '\t', &bs);
+            if (macro) {
+                UpdateCompositionUtf8(this, pic, macro);
+                EndComposition(pic, TRUE);
+                NotifyWordFromCommit(macro);
+                g_free(macro);
+                *pfEaten = TRUE;
+                return S_OK;
+            } else {
+                EndComposition(pic, TRUE);
+                gtv_engine_reset(m_pEngine);
+                *pfEaten = FALSE;
+                return S_OK;
+            }
         }
         return S_OK;
     }

@@ -85,7 +85,7 @@ gchar *gtv_forward_target(const gchar *appdir, const gchar *own_ver) {
     if (gtv_ver_cmp(current, own_ver ? own_ver : "") > 0) {
         gchar *dir = gtv_ver_dir(appdir, current);
         gchar *exe = g_build_filename(dir, "gotiengviet.exe", NULL);
-        if (g_file_test(exe, G_FILE_TEST_IS_EXECUTABLE))
+        if (g_file_test(exe, G_FILE_TEST_IS_REGULAR))
             target = exe;
         else
             g_free(exe);

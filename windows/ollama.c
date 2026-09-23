@@ -439,7 +439,7 @@ void gtv_ollama_ensure_all_async(HWND hwnd, const gchar *url, const gchar *model
     }
     EnsureJob *job = g_new0(EnsureJob, 1);
     job->url = g_strdup(url && *url ? url : "http://localhost:55602");
-    job->model = g_strdup(model && *model ? model : "qwen2:0.5b");
+    job->model = g_strdup(model && *model ? model : "qwen2.5:0.5b");
     job->hwnd = hwnd;
     GThread *th = g_thread_new("gtv-ollama-ensure", ensure_worker, job);
     if (th) g_thread_unref(th);

@@ -4,10 +4,10 @@
 ; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
 
 #ifndef AppVersion
-  #define AppVersion "0.8.16"
+  #define AppVersion "0.8.17"
 #endif
 #ifndef AppVerNum
-  #define AppVerNum "0.8.16.0"
+  #define AppVerNum "0.8.17.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\release-pkg"

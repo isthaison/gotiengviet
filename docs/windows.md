@@ -20,7 +20,7 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (stub `gtv_tsf.dll` 
 - **Menu khay**: Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu,
   tự khởi động (thường/admin), Kiểm tra cập nhật, Thoát.
 - **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (Ollama, model chọn
-  trong dropdown như bản Linux — `qwen2:0.5b`/`qwen2:1.5b`/`rule`, gõ tay model khác vẫn được — URL,
+  trong dropdown như bản Linux — `qwen2.5:0.5b`/`qwen2.5:1.5b`/`rule`, gõ tay model khác vẫn được — URL,
   dòng trạng thái + log `ollama serve` như bản Linux),
   nút **Dữ liệu...** — lưu ở `%APPDATA%\gotiengviet\` như bản Linux. Log serve nằm ở `%TEMP%\ollama_serve.log`;
   khi bật AI (tick checkbox hoặc lưu), app tự kiểm tra → tự động cài Ollama bằng lệnh chính thức (`irm https://ollama.com/install.ps1 | iex`) chạy nền hoàn toàn im lặng nếu thiếu →

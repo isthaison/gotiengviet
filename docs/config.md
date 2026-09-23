@@ -10,7 +10,7 @@ Thư mục cấu hình: `$XDG_CONFIG_HOME/gotiengviet/` (Linux, mặc định `~
 | `learned-words.txt`, `learned-corrections.txt` | Từ điển học (tự tạo, sửa/xóa được) |
 | `prompts.conf` | Mẫu prompt Ollama riêng |
 
-Mặc định khi chạy: Telex, `modern=true`, `spellcheck=true`, AI tắt (`rule`), model `qwen2:0.5b`.
+Mặc định khi chạy: Telex, `modern=true`, `spellcheck=true`, AI tắt (`rule`), model `qwen2.5:0.5b`.
 
 Khi chưa có file người dùng, bộ gõ dùng mặc định trong `data/` (cài vào `/usr/share/gotiengviet/`, trên Windows là `data/` cạnh exe). Muốn tùy biến: copy file từ đó về thư mục cấu hình rồi sửa. Thứ tự tìm file: `GTV_DATA_DIR` (test/dev) → file người dùng → thư mục hệ thống → `./data`.
 

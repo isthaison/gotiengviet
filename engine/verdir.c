@@ -13,15 +13,30 @@ static const gchar *base_name(const gchar *path) {
     return b;
 }
 
+/* g_path_get_dirname() follows the host platform's separator rules.  These
+ * helpers also inspect Windows paths while running Linux CI, so accept both
+ * separators everywhere and preserve the input spelling. */
+static gchar *dir_name_any(const gchar *path) {
+    if (!path || !*path) return g_strdup(".");
+    const gchar *last = NULL;
+    for (const gchar *p = path; *p; p = g_utf8_next_char(p)) {
+        gunichar c = g_utf8_get_char(p);
+        if (c == '/' || c == '\\') last = p;
+    }
+    if (!last) return g_strdup(".");
+    if (last == path) return g_strndup(path, 1);
+    return g_strndup(path, (gsize)(last - path));
+}
+
 gchar *gtv_app_dir_for_module(const gchar *modpath) {
     if (!modpath || !*modpath) return g_strdup(".");
-    gchar *dir = g_path_get_dirname(modpath);
-    gchar *parent = g_path_get_dirname(dir);
+    gchar *dir = dir_name_any(modpath);
+    gchar *parent = dir_name_any(dir);
     const gchar *grandbase = base_name(parent);
     gboolean versioned = g_ascii_strcasecmp(grandbase, "ver") == 0;
     gchar *appdir;
     if (versioned) {
-        appdir = g_path_get_dirname(parent);
+        appdir = dir_name_any(parent);
     } else {
         appdir = dir;
         dir = NULL;

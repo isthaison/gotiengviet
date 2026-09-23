@@ -13,8 +13,8 @@
 /* Model dropdown (IDC_EDIT_MODEL is a CBS_DROPDOWN ComboBox, like the Linux
  * model combo): predefined IDs with size hints, custom IDs still typable. */
 static const char *const ai_models[] = {
-    "qwen2:0.5b (~400MB)",
-    "qwen2:1.5b (~900MB)",
+    "qwen2.5:0.5b (~400MB)",
+    "qwen2.5:1.5b (~1GB)",
     "rule (không model)",
 };
 
@@ -43,7 +43,7 @@ static void model_combo_set(HWND hwnd, const gchar *current) {
         glong wlen = 0;
         gunichar2 *w = g_utf8_to_utf16(id, -1, NULL, &wlen, NULL);
         if (w) {
-            /* Match "qwen2:0.5b" against "qwen2:0.5b (~400MB)". */
+            /* Match "qwen2.5:0.5b" against its display label. */
             idx = SendMessageW(combo, CB_FINDSTRING, (WPARAM)-1, (LPARAM)w);
             g_free(w);
         }

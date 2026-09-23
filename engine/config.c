@@ -180,7 +180,7 @@ static void overlay_path(GtvConfig *config, const gchar *path, gboolean input, g
 }
 void gtv_config_load(GtvConfig *config, const gchar *directory) {
     *config = (GtvConfig){.mode = GTV_TELEX, .modern = TRUE, .spellcheck = TRUE,
-        .model = g_strdup("qwen2:0.5b"), .url = g_strdup("http://localhost:55602"), .port = g_strdup("55602")};
+        .model = g_strdup("qwen2.5:0.5b"), .url = g_strdup("http://localhost:55602"), .port = g_strdup("55602")};
     /* Shipped defaults first (data/config, data/ai.conf), then user files.
      * ai.conf values take precedence over the [ai] section of config. */
     gchar *path = gtv_data_path("config");

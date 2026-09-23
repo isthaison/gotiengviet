@@ -9,6 +9,6 @@ charset=unicode
 
 [ai]
 enable=false
-model=qwen2:0.5b
+model=qwen2.5:0.5b
 url=http://localhost:55602
 port=55602

@@ -36,7 +36,7 @@ BEGIN
     GROUPBOX        "AI suggestions (Ollama, optional)", IDC_GROUP_AI, 10, 130, 220, 60
     AUTOCHECKBOX    "Enable AI suggestions", IDC_CHECK_AI, 20, 144, 200, 10
     LTEXT           "Model:", IDC_LBL_MODEL, 20, 160, 40, 10
-    /* Dropdown (editable): same choices as Linux (qwen2:0.5b/1.5b/rule),
+    /* Dropdown (editable): same choices as Linux (qwen2.5:0.5b/1.5b/rule),
      * custom model IDs can still be typed. Height 60 = dropped list. */
     COMBOBOX        IDC_EDIT_MODEL, 65, 158, 155, 60,
                     CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP
@@ -79,8 +79,8 @@ BEGIN
 END
 
 1 VERSIONINFO
-FILEVERSION     0,8,16,0
-PRODUCTVERSION  0,8,16,0
+FILEVERSION     0,8,17,0
+PRODUCTVERSION  0,8,17,0
 FILEFLAGSMASK   0x3fL
 FILEFLAGS       0x0L
 FILEOS          0x40004L
@@ -93,12 +93,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "GoTiengViet Open Source Project\0"
             VALUE "FileDescription", "GoTiengViet - Vietnamese Input (Native)\0"
-            VALUE "FileVersion", "0.8.16.0\0"
+            VALUE "FileVersion", "0.8.17.0\0"
             VALUE "InternalName", "gotiengviet\0"
             VALUE "LegalCopyright", "Copyright (C) 2026\0"
             VALUE "OriginalFilename", "gotiengviet.exe\0"
             VALUE "ProductName", "GoTiengViet\0"
-            VALUE "ProductVersion", "0.8.16.0\0"
+            VALUE "ProductVersion", "0.8.17.0\0"
         END
     END
     BLOCK "VarFileInfo"

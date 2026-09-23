@@ -656,10 +656,10 @@ static void auto_install_ollama(void){
     g_child_watch_add(pid, on_install_exit, NULL);
 }
 
-/* Model id đang chọn, cắt nhãn hiển thị sau dấu cách ("qwen2:0.5b (~400MB)" -> "qwen2:0.5b"). */
+/* Model id đang chọn, cắt nhãn hiển thị sau dấu cách. */
 static gchar *current_model_id(void){
     const char *id = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)));
-    if(!id || !*id){ g_free((gpointer)id); return g_strdup("qwen2:0.5b"); }
+    if(!id || !*id){ g_free((gpointer)id); return g_strdup("qwen2.5:0.5b"); }
     char *sp = strchr(id, ' ');
     if(sp) *sp = 0;
     return (gchar *)id;
@@ -796,7 +796,7 @@ static void on_save(GtkWidget *w, gpointer data){
     const char *spell = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_spell)) ? "true" : "false";
     const char *ai_enabled = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai)) ? "true" : "false";
     const char *model = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)));
-    if(!model) model = g_strdup("qwen2:0.5b");
+    if(!model) model = g_strdup("qwen2.5:0.5b");
     int port = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port));
     const char *url = gtk_entry_get_text(GTK_ENTRY(entry_url));
     // Nếu bật AI: đảm bảo ollama serve đang chạy rồi mới lưu
@@ -915,8 +915,8 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     gtk_box_pack_start(GTK_BOX(box_ai), hbox_ai, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hbox_ai), gtk_label_new("Model:"), FALSE, FALSE, 0);
     combo_model = gtk_combo_box_text_new();
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "qwen2:0.5b", "qwen2:0.5b (~400MB)");
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "qwen2:1.5b", "qwen2:1.5b (~900MB)");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "qwen2.5:0.5b", "qwen2.5:0.5b (~400MB)");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "qwen2.5:1.5b", "qwen2.5:1.5b (~1GB)");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "rule", "rule (không model)");
     gtk_combo_box_set_active(GTK_COMBO_BOX(combo_model), 0);
     gtk_box_pack_start(GTK_BOX(hbox_ai), combo_model, FALSE, FALSE, 0);

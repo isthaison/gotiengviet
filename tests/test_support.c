@@ -254,7 +254,7 @@ static void test_config_defaults(void) {
     g_assert_cmpint(cfg.mode,==,GTV_TELEX);
     g_assert_true(cfg.modern);g_assert_true(cfg.spellcheck);
     g_assert_false(cfg.ai_enabled);
-    g_assert_cmpstr(cfg.model,==,"qwen2:0.5b");
+    g_assert_cmpstr(cfg.model,==,"qwen2.5:0.5b");
     g_assert_cmpstr(cfg.url,==,"http://localhost:55602");
     g_assert_cmpstr(cfg.port,==,"55602");
     gtv_config_clear(&cfg);
@@ -263,7 +263,7 @@ static void test_config_defaults(void) {
     g_free(uc);
     gtv_config_load(&cfg,empty);
     g_assert_cmpint(cfg.mode,==,GTV_VNI);
-    g_assert_cmpstr(cfg.model,==,"qwen2:0.5b");
+    g_assert_cmpstr(cfg.model,==,"qwen2.5:0.5b");
     gtv_config_clear(&cfg);
     gchar *ua=g_build_filename(empty,"ai.conf",NULL);
     g_assert_true(g_file_set_contents(ua,"[ai]\nprovider=ollama\nmodel=custom-model\n",-1,NULL));
@@ -365,7 +365,7 @@ static void test_random_input(void) {
     g_rand_free(rng);
 }
 static void test_ollama(void) {
-    GtvConfig config={.ai_enabled=TRUE,.url="http://localhost:55602",.model="qwen2:0.5b"};
+    GtvConfig config={.ai_enabled=TRUE,.url="http://localhost:55602",.model="qwen2.5:0.5b"};
     g_assert_true(gtv_ai_available(&config));
     GPtrArray *out=gtv_ai_suggest(&config,"kông","a\"b");
     g_assert_cmpuint(out->len,==,1);g_assert_cmpstr(g_ptr_array_index(out,0),==,"không");g_ptr_array_unref(out);
@@ -389,7 +389,7 @@ static void on_async_suggest_done(GObject *src, GAsyncResult *res, gpointer data
 }
 
 static void test_suggest_combined(void) {
-    GtvConfig config = {.ai_enabled = TRUE,.url="http://localhost:55602",.model="qwen2:0.5b"};
+    GtvConfig config = {.ai_enabled = TRUE,.url="http://localhost:55602",.model="qwen2.5:0.5b"};
     GPtrArray *s1 = gtv_suggest_combined(&config, "Tôi ", "kông", TRUE);
     g_assert_nonnull(s1);
     g_assert_cmpuint(s1->len, >, 0);

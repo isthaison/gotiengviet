@@ -1,6 +1,7 @@
 #ifndef GTV_INTERNAL_H
 #define GTV_INTERNAL_H
 #include "engine.h"
+#include "verdir.h"
 #include <string.h>
 #include <stdio.h>
 

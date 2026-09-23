@@ -14,6 +14,9 @@ GtvStartupMode gtv_startup_get(void);
 /* Elevation-free. Turning USER on while ADMIN is active is a no-op here:
  * use gtv_startup_request() so the worker can drop the admin task first. */
 void gtv_startup_set_user(gboolean enable);
+/* Heal a stale Run value (older payload) to the running exe. Only touches
+ * the value when it already exists and points inside our own app dir. */
+void gtv_startup_repoint(void);
 /* Ask Windows for elevation (UAC) and let the elevated worker apply it:
  * "admin" enables the admin task, "admin-off" removes it, "user" switches
  * back to user-level startup. hwnd is only used for error UI, may be NULL. */

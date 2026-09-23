@@ -50,15 +50,18 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
         return NULL;
     }
     if (key == '\t') {
+        /* Tab-only expansion: macro first, then emoji. Anything else keeps
+         * the buffer so the caller can commit it literally and pass Tab on. */
         if (buf->len > 0) {
             gchar *word = gtv_engine_buffer(engine);
-            gchar *macro = expand_macro(word);
-            if (macro) {
+            gchar *expansion = expand_macro(word);
+            if (!expansion) expansion = expand_emoji(word);
+            if (expansion) {
                 guint old_len = buf->len;
                 g_free(word);
                 gtv_engine_reset(engine);
                 if (backspaces) *backspaces = old_len;
-                return macro;
+                return expansion;
             }
             g_free(word);
         }
@@ -74,24 +77,24 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
         is_emoji_seq = TRUE;
     }
     if (!shortcut_key && !is_emoji_seq && (g_unichar_isspace(key) || g_unichar_ispunct(key) || (g_unichar_isdefined(key) && !g_unichar_isalnum(key) && !g_unichar_ismark(key)))) {
+        /* Tab-only expansion: a boundary char that completes an emoji trigger
+         * (e.g. the ')' in ":)") stays in the buffer so Tab can expand it.
+         * Everything else commits literally; Space/punctuation never expand. */
         gchar *word = gtv_engine_buffer(engine);
         GString *combo = g_string_new(word);
         g_string_append_unichar(combo, key);
-        gchar *combo_expanded = expand_emoji(combo->str);
-        if (combo_expanded) {
-            guint old_len = buf->len;
+        gchar *combo_hit = expand_emoji(combo->str);
+        if (combo_hit) {
+            g_free(combo_hit);
             g_free(word);
             g_string_free(combo, TRUE);
-            gtv_engine_reset(engine);
-            if (backspaces) *backspaces = old_len;
-            return combo_expanded;
+            g_array_append_val(buf, key);
+            return NULL;
         }
         g_string_free(combo, TRUE);
 
-        gchar *expanded = expand_emoji(word);
-        GString *commit = g_string_new(expanded ? expanded : word);
+        GString *commit = g_string_new(word);
         g_string_append_unichar(commit, key);
-        g_free(expanded);
         g_free(word);
         gtv_engine_reset(engine);
         return g_string_free(commit, FALSE);
@@ -99,17 +102,6 @@ gchar *gtv_engine_process(GtvEngine *engine, gunichar key, guint *backspaces) {
     guint old_len = buf->len;
     gchar *before = gtv_engine_buffer(engine);
     gtv_compose(buf, key, engine->mode, engine->modern);
-    gchar *current = gtv_engine_buffer(engine);
-    gchar *expanded = expand_emoji(current);
-    if (expanded && (key == ':' || key == ')' || key == 'D' || key == 'P' || key == 'p' || key == '3' || key == '>')) {
-        g_free(current);
-        gtv_engine_reset(engine);
-        if (backspaces) *backspaces = old_len;
-        g_free(before);
-        return expanded;
-    }
-    g_free(current);
-    g_free(expanded);
     if (backspaces) {
         gchar *after = gtv_engine_buffer(engine);
         GString *literal = g_string_new(before);

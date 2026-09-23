@@ -1,12 +1,16 @@
 #include "app.h"
 #include "tray.h"
 #include "tray_ai.h"
+#include "suggest_ipc.h"
+#include "suggest_overlay.h"
 #include "setup.h"
 #include "startup.h"
 #include "tsf_install.h"
 #include "input_setup.h"
 #include "update.h"
 #include "resource.h"
+#include "version.h"
+#include "internal.h"
 #include <windows.h>
 #include <commctrl.h>
 #include <glib.h>
@@ -15,6 +19,30 @@ GtvWindowsApp g_app = {0};
 
 static const char *WINDOW_CLASS_NAME = GTV_TRAY_WINDOW_CLASS;
 static const char *MUTEX_NAME = "GoTiengViet_Single_Instance_Mutex";
+static const WCHAR *TAKEOVER_EVENT_NAME = L"GoTiengViet_Takeover_Event";
+
+/* Updates never replace running files: a new payload only asks the running
+ * tray to exit through this event, then takes over the single-instance
+ * mutex. No app is ever force-closed for an update. */
+static void gtv_takeover_signal(void) {
+    HANDLE ev = OpenEventW(EVENT_MODIFY_STATE, FALSE, TAKEOVER_EVENT_NAME);
+    if (ev) {
+        SetEvent(ev);
+        CloseHandle(ev);
+    }
+}
+
+static DWORD WINAPI takeover_watcher(LPVOID param) {
+    HWND hwnd = (HWND)param;
+    HANDLE ev = CreateEventW(NULL, FALSE, FALSE, TAKEOVER_EVENT_NAME);
+    if (!ev) return 1;
+    for (;;) {
+        if (WaitForSingleObject(ev, INFINITE) != WAIT_OBJECT_0) break;
+        PostMessageA(hwnd, WM_CLOSE, 0, 0);
+    }
+    CloseHandle(ev);
+    return 0;
+}
 
 static UINT s_uTaskbarRestartMsg = 0;
 
@@ -57,8 +85,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             break;
         }
         case WM_COPYDATA: {
-            /* Committed word from gtv_tsf.dll for the AI typo check. */
             PCOPYDATASTRUCT pcds = (PCOPYDATASTRUCT)lParam;
+            if (pcds && pcds->dwData == GTV_SUGGEST_COPYDATA_ID)
+                return gtv_suggest_overlay_handle_copydata(pcds);
+            /* Committed word from gtv_tsf.dll for the AI typo check. */
             if (pcds && pcds->dwData == GTV_AI_COPYDATA_ID && pcds->cbData > 1
                 && pcds->cbData <= 256 && pcds->lpData
                 && ((const char *)pcds->lpData)[pcds->cbData - 1] == '\0') {
@@ -113,9 +143,71 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         InitCommonControlsEx(&icc);
     }
 
-    /* 1. Single-instance check */
+    /* 1. Single-instance check (+ takeover for updates) */
+    gboolean takeover = lpCmdLine && strstr(lpCmdLine, "--takeover") != NULL;
+    gboolean quit_only = lpCmdLine && strstr(lpCmdLine, "--quit") != NULL;
+    if (takeover || quit_only) gtv_takeover_signal();
+    if (quit_only) return 0;
+
+    /* 0. Stale-entry self-heal: shortcuts/Run/tasks may point at an older
+     * payload. When current.txt names a newer version, spawn it (with
+     * takeover so a running older tray hands over) and exit. The
+     * --forwarded marker guarantees at most one hop (a botched payload
+     * whose binary disagrees with current.txt can never fork-bomb). */
+    {
+        WCHAR wself[MAX_PATH];
+        gboolean forwarded = lpCmdLine && strstr(lpCmdLine, "--forwarded") != NULL;
+        if (!forwarded && GetModuleFileNameW(NULL, wself, MAX_PATH)) {
+            gchar *self = g_utf16_to_utf8((const gunichar2 *)wself, -1, NULL, NULL, NULL);
+            gchar *appdir = gtv_app_dir_for_module(self);
+            gchar *target = gtv_forward_target(appdir, GTV_VERSION);
+            g_free(appdir);
+            g_free(self);
+            if (target) {
+                gunichar2 *wtarget = g_utf8_to_utf16(target, -1, NULL, NULL, NULL);
+                gunichar2 *wtail = g_utf8_to_utf16(lpCmdLine ? lpCmdLine : "", -1, NULL, NULL, NULL);
+                const gunichar2 *t = wtail;
+                while (t && (*t == ' ' || *t == '\t')) t++;
+                gboolean has_takeover = lpCmdLine && strstr(lpCmdLine, "--takeover") != NULL;
+                size_t cmdlen = (wtarget ? wcslen((const WCHAR *)wtarget) : 0)
+                              + (t ? wcslen((const WCHAR *)t) : 0) + 64;
+                WCHAR *cmd = g_new0(WCHAR, cmdlen);
+                swprintf(cmd, cmdlen, L"\"%ls\" --forwarded%ls%ls%ls",
+                         wtarget ? (const WCHAR *)wtarget : L"",
+                         has_takeover ? L"" : L" --takeover",
+                         (t && *t) ? L" " : L"",
+                         t ? (const WCHAR *)t : L"");
+                STARTUPINFOW si;
+                PROCESS_INFORMATION pi;
+                ZeroMemory(&si, sizeof(si));
+                si.cb = sizeof(si);
+                ZeroMemory(&pi, sizeof(pi));
+                if (CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0,
+                                   NULL, NULL, &si, &pi)) {
+                    CloseHandle(pi.hThread);
+                    CloseHandle(pi.hProcess);
+                }
+                g_free(cmd);
+                g_free(wtarget);
+                g_free(wtail);
+                g_free(target);
+                return 0;
+            }
+        }
+    }
+
     HANDLE hMutex = CreateMutexA(NULL, TRUE, MUTEX_NAME);
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    gboolean primary = GetLastError() != ERROR_ALREADY_EXISTS;
+    if (takeover && !primary) {
+        /* Give the previous payload a moment to honour the signal. */
+        for (int i = 0; i < 100 && !primary; i++) {
+            Sleep(100);
+            if (hMutex) CloseHandle(hMutex);
+            hMutex = CreateMutexA(NULL, TRUE, MUTEX_NAME);
+            primary = GetLastError() != ERROR_ALREADY_EXISTS;
+        }
+    }
+    if (!primary) {
         HWND existing = FindWindowA(WINDOW_CLASS_NAME, NULL);
         if (existing) {
             gtv_setup_show(existing);
@@ -123,6 +215,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         if (hMutex) CloseHandle(hMutex);
         return 0;
     }
+
+    /* 1b. Drop superseded ver\ payloads (keeps current + newest rollback)
+     * and heal a stale Run value to this exe. Only the instance holding
+     * the mutex does this, and only inside versioned layouts. */
+    {
+        WCHAR wself[MAX_PATH];
+        if (GetModuleFileNameW(NULL, wself, MAX_PATH)) {
+            gchar *self = g_utf16_to_utf8((const gunichar2 *)wself, -1, NULL, NULL, NULL);
+            gchar *appdir = gtv_app_dir_for_module(self);
+            gtv_ver_cleanup(appdir);
+            gtv_legacy_cleanup(appdir);
+            g_free(appdir);
+            g_free(self);
+        }
+    }
+    gtv_startup_repoint();
 
     /* 2. Ensure this installation owns the per-user TSF registration. */
     gtv_tsf_install_ensure_registered();
@@ -149,8 +257,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     RegisterClassExA(&wc);
 
     g_app.hwnd_main = CreateWindowExA(0, WINDOW_CLASS_NAME, "GoTiengViet Hidden Window",
-                                      WS_POPUP, 0, 0, 0, 0,
-                                      NULL, NULL, hInstance, NULL);
+                                       WS_POPUP, 0, 0, 0, 0,
+                                       NULL, NULL, hInstance, NULL);
+
+    /* Allow WM_COPYDATA from lower-integrity processes (e.g. sandboxed Chromium/Electron renderers) */
+    {
+#ifndef MSGFLT_ALLOW
+#define MSGFLT_ALLOW 1
+#endif
+        typedef BOOL (WINAPI *pfnChangeWindowMessageFilterEx)(HWND, UINT, DWORD, PCHANGEFILTERSTRUCT);
+        HMODULE hUser32 = GetModuleHandleA("user32.dll");
+        pfnChangeWindowMessageFilterEx pChangeFilter =
+            hUser32 ? (pfnChangeWindowMessageFilterEx)(void *)GetProcAddress(hUser32, "ChangeWindowMessageFilterEx") : NULL;
+        if (pChangeFilter) {
+            pChangeFilter(g_app.hwnd_main, WM_COPYDATA, MSGFLT_ALLOW, NULL);
+        }
+    }
+
+    gtv_suggest_overlay_init(hInstance, g_app.hwnd_main);
+
+    /* Takeover requests from newer payloads arrive on this event. */
+    {
+        HANDLE hWatcher = CreateThread(NULL, 0, takeover_watcher,
+                                       g_app.hwnd_main, 0, NULL);
+        if (hWatcher) CloseHandle(hWatcher);
+    }
 
     /* 5. Initialize Tray Icon (typing is handled natively by Windows TSF) */
     gtv_tray_init(g_app.hwnd_main);
@@ -166,6 +297,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     /* 7. Cleanup */
+    gtv_suggest_overlay_cleanup();
     gtv_tray_cleanup();
     gtv_config_clear(&g_app.config);
 

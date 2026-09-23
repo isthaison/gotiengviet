@@ -57,6 +57,9 @@ public:
     HRESULT UpdateCompositionText(ITfContext *pic, const wchar_t *text, int len);
     HRESULT EndComposition(ITfContext *pic, BOOL commit);
     BOOL IsComposing() const { return m_pComposition != NULL; }
+    GtvEngine *GetEngine() { return m_pEngine; }
+    TfClientId GetClientId() const { return m_tfClientId; }
+    BOOL GetCaretRect(ITfContext *pic, RECT *rc);
 
     void ReloadConfig();
 

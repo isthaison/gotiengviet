@@ -50,7 +50,7 @@ int main(int argc,char **argv) {
     ibus_gotiengviet_engine_focus_in(engine);
     const struct {const gchar *input,*want;gboolean telex;} cases[]={
         {"bawst","bắt",TRUE},{"duocjwd","được",TRUE},{"DUOCJWD","ĐƯỢC",TRUE},
-        {"ass","as",TRUE},{"duoc579","được",FALSE},{"[[","[",TRUE},{":smile:","",TRUE}
+        {"ass","as",TRUE},{"duoc579","được",FALSE},{"[[","[",TRUE},{":smile:",":smile:",TRUE}
     };
     for(guint i=0;i<G_N_ELEMENTS(cases);i++) {
         ibus_gotiengviet_engine_reset(e);e->mode_telex=cases[i].telex;
@@ -63,7 +63,7 @@ int main(int argc,char **argv) {
         }
         g_assert_cmpstr(e->preedit->str,==,cases[i].want);
     }
-    g_assert_cmpstr(e->sentence_context->str,==,"😊");
+    g_assert_cmpstr(e->sentence_context->str,==,"");
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_a,0,0));
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_space,0,0));
     g_assert_cmpstr(e->preedit->str,==,"");
@@ -165,6 +165,20 @@ int main(int argc,char **argv) {
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_v,0,0));
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_n,0,0));
     g_assert_cmpstr(e->preedit->str,==,"vn");
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_space,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"");
+    /* Tab expands emoji trigger as well */
+    ibus_gotiengviet_engine_reset(e);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_colon,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_D,0,0));
+    g_assert_cmpstr(e->preedit->str,==,":D");
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Tab,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"");
+    /* Space keeps an emoji trigger literally */
+    ibus_gotiengviet_engine_reset(e);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_colon,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_parenright,0,0));
+    g_assert_cmpstr(e->preedit->str,==,":)");
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_space,0,0));
     g_assert_cmpstr(e->preedit->str,==,"");
     g_clear_pointer(&e->learned_words,g_hash_table_unref);

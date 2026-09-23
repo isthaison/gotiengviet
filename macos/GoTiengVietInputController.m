@@ -213,7 +213,7 @@
         return YES;
     }
 
-    /* Tab key: expands macro if composing and buffer matches a macro.
+    /* Tab key: expands macro/emoji if composing and buffer matches.
      * Otherwise commits buffer and lets Tab pass through to the app. */
     if ([sel isEqualToString:@"insertTab:"]) {
         if (!composing) return NO;

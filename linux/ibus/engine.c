@@ -237,7 +237,7 @@ static gboolean request_suggestions(gpointer data){
 static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cursor, gboolean visible){
     glong plen=g_utf8_strlen(e->preedit->str, -1);
     debug_log("[push_preedit] str='%s' plen=%ld visible=%d\n", e->preedit->str, plen, visible);
-    gboolean is_emoji=(e->preedit->str[0]==':' || e->preedit->str[0]==';' || e->preedit->str[0]=='<');
+    gboolean is_emoji=(e->preedit->str[0]==':' || e->preedit->str[0]==';' || e->preedit->str[0]=='<' || e->preedit->str[0]=='(');
     gboolean bad=(!is_emoji && e->spellcheck && plen>=2 && !word_valid(e,e->preedit->str));
     IBusText *t=ibus_text_new_from_string(e->preedit->str);
     if(bad) ibus_text_append_attribute(t, IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_ERROR, 0, (gint)plen);
@@ -369,14 +369,15 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     if(keyval == '.' || keyval == '?' || keyval == '!' || keyval == ';' || keyval == '\n'){
         if(e->sentence_context) g_string_assign(e->sentence_context, "");
     }
-    // Tab mở rộng macro nếu khớp; hoặc chọn gợi ý nếu bảng gợi ý đang hiện
+    // Tab mở rộng macro/emoji nếu khớp; hoặc chọn gợi ý nếu bảng gợi ý đang hiện
     if(keyval==IBUS_Tab || keyval==IBUS_KP_Tab || keyval==IBUS_ISO_Left_Tab){
         if(e->preedit->len>0){
-            gchar *macro = expand_macro(e->preedit->str);
-            if(macro){
-                update_context(e, macro);
-                IBusText *t=ibus_text_new_from_string(macro);
-                g_free(macro);
+            gchar *expansion = expand_macro(e->preedit->str);
+            if(!expansion) expansion = expand_emoji(e->preedit->str);
+            if(expansion){
+                update_context(e, expansion);
+                IBusText *t=ibus_text_new_from_string(expansion);
+                g_free(expansion);
                 commit_and_remember(engine,t);
                 ibus_gotiengviet_engine_reset(e);
                 IBusText *empty=ibus_text_new_from_string("");
@@ -467,8 +468,8 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     }
     if(keyval==IBUS_space){
         if(e->preedit->len>0){
-            gchar *commit = expand_emoji(e->preedit->str);
-            if(!commit) commit = g_strdup(e->preedit->str);
+            /* Tab-only expansion: Space commits literally, never expands. */
+            gchar *commit = g_strdup(e->preedit->str);
             update_context(e, commit);
             gchar *with_space = g_strdup_printf("%s ",commit);
             IBusText *t=ibus_text_new_from_string(with_space);
@@ -505,11 +506,10 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         gtv_engine_free(composer);
         return TRUE;
     }
-    // Enter -> commit
+    // Enter -> commit literally (Tab-only expansion)
     if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
         if(e->preedit->len>0){
-            gchar *word=expand_emoji(e->preedit->str);
-            if(!word) word=g_strdup(e->preedit->str);
+            gchar *word=g_strdup(e->preedit->str);
             update_context(e, word);
             IBusText *t=ibus_text_new_from_string(word);
             g_free(word);
@@ -522,10 +522,9 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         }
         return FALSE;
     }
-    // Other keys: commit preedit and forward
+    // Other keys: commit preedit literally and forward (Tab-only expansion)
     if(e->preedit->len>0){
-        gchar *word=expand_emoji(e->preedit->str);
-        if(!word) word=g_strdup(e->preedit->str);
+        gchar *word=g_strdup(e->preedit->str);
         update_context(e, word);
         IBusText *t=ibus_text_new_from_string(word);
         g_free(word);
@@ -778,7 +777,7 @@ static void bus_connected_cb(IBusBus *b, gpointer user_data){
         c = ibus_component_new_from_file("/usr/share/ibus/component/gotiengviet.xml");
     }
     if(!c){
-        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.8.11","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
+        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.8.16","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
         IBusEngineDesc *d = ibus_engine_desc_new_varargs(
             "name", "gotiengviet",
             "longname", "GoTiengViet",

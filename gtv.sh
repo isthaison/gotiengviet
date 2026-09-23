@@ -178,13 +178,31 @@ win_dll_holders() {
         | sort -u | grep -v -i -E '^(setup|unins|powershell|pwsh|conhost|cmd|bash|mintty|windowsterminal)' || true
 }
 
-cmd_install_windows() {
-    local setup; setup="$(win_setup_exe)"
-    [[ -f "$setup" ]] || cmd_package_windows
-    # Tray holds gotiengviet.exe itself; stop it so files can be replaced.
-    taskkill //F //IM gotiengviet.exe 2>/dev/null || true
-    local appdir0 dllpath holders
-    appdir0="$(win_localappdata)/Programs/GoTiengViet"
+# One-time migration helper: rename the held flat-layout gtv_tsf.dll aside
+# (loaded images can be renamed even when they cannot be deleted/replaced),
+# so the installer lays a fresh stub without closing anything. Running apps
+# keep the old mapping under the new name; the tray deletes the spare when
+# free (engine/verdir.c). Falls back to the holder gate when rename fails.
+legacy_friendly_swap() {
+    local appdir0="$1" dll old
+    dll="$appdir0/gtv_tsf.dll"
+    old="$appdir0/gtv_tsf.prev.dll"
+    if [[ ! -f "$dll" ]]; then return 0; fi
+    rm -f "$old" 2>/dev/null || true
+    if mv -f "$dll" "$old" 2>/dev/null; then
+        echo "Đã dời gtv_tsf.dll cũ sang gtv_tsf.prev.dll (app đang mở giữ bản cũ, bản mới cài cạnh)."
+        return 0
+    fi
+    legacy_holder_gate "$appdir0" || return 1
+    return 0
+}
+
+# Legacy migration gate: the flat layout's gtv_tsf.dll (full engine) gets
+# replaced by the stable stub once, so holders must be gone first.
+# Prints holder names; returns 0 when free (or check impossible).
+# $1 = app dir (MSYS path). Only used when current.txt is absent.
+legacy_holder_gate() {
+    local appdir0="$1" dllpath holders
     dllpath="${appdir0//\//\\}\\gtv_tsf.dll"
     holders="$(win_dll_holders "$dllpath")"
     # Only explorer left: a fresh explorer hasn't loaded the TIP yet, so
@@ -210,6 +228,21 @@ cmd_install_windows() {
             return 1
         fi
     fi
+    return 0
+}
+
+cmd_install_windows() {
+    local setup; setup="$(win_setup_exe)"
+    [[ -f "$setup" ]] || cmd_package_windows
+    local appdir0; appdir0="$(win_localappdata)/Programs/GoTiengViet"
+    # New-world layout (current.txt present) only ADDs a ver\<V>\ payload dir,
+    # so loaded files can never block the installer: no holder gate, no
+    # forced closes, no logoff. The gate below stays for the one-time
+    # migration from the legacy flat layout (old gtv_tsf.dll gets replaced
+    # by the stable stub).
+    if [[ ! -f "$appdir0/current.txt" && -d "$appdir0" ]]; then
+        legacy_friendly_swap "$appdir0" || return 1
+    fi
     win_env
     # NOTE: launch via Start-Process, never direct exec: Inno run from an
     # MSYS console handle hangs before log init; detached start works.
@@ -221,16 +254,26 @@ cmd_install_windows() {
         echo "gtv.sh: không khởi động được $setup" >&2; exit 1; }
     win_wait_pattern "$(basename "$setup" .exe)" 600
     local appdir; appdir="$appdir0"
-    if [[ ! -x "$appdir/gotiengviet.exe" ]]; then
-        echo "gtv.sh: install thất bại (thiếu $appdir/gotiengviet.exe)" >&2
+    local verv; verv="$(version)"
+    if [[ ! -x "$appdir/ver/$verv/gotiengviet.exe" && ! -x "$appdir/gotiengviet.exe" ]]; then
+        echo "gtv.sh: install thất bại (thiếu payload $verv trong $appdir)" >&2
         echo "--- setup log tail ---" >&2
         tail -n 15 "$log" >&2 || true
         exit 1
     fi
     echo "Đã cài: $appdir"
-    local winapp; winapp="${appdir//\//\\}\\gotiengviet.exe"
-    powershell.exe -NoProfile -NonInteractive -Command "Start-Process '$winapp'" || true
-    echo "App khay đã chạy. Đăng xuất/đăng nhập lại để TSF/DLL mới ăn hẳn (docs/windows.md)."
+    # Startup entries point at the versioned tray (stale ones self-forward);
+    # fall back to the legacy flat path when upgrading an old install.
+    local winapp
+    if [[ -f "$appdir/ver/$verv/gotiengviet.exe" ]]; then
+        winapp="${appdir//\//\\}\\ver\\${verv}\\gotiengviet.exe"
+    else
+        winapp="${appdir//\//\\}\\gotiengviet.exe"
+    fi
+    # Takeover (not a second instance): if the postinstall entry already
+    # started the tray, this just signals it and exits without any window.
+    powershell.exe -NoProfile -NonInteractive -Command "Start-Process '$winapp' -ArgumentList '--takeover'" || true
+    echo "App khay đã chạy (bản mới tự tiếp quản, không cần đăng xuất)."
 }
 
 cmd_uninstall_windows() {
@@ -592,7 +635,7 @@ cmd_uninstall_linux() {
 }
 
 cmd_package_linux() {
-    version=${1:-0.8.11-1}
+    version=${1:-0.8.16-1}
     architecture=$(dpkg --print-architecture)
     dpkg --validate-version "$version"
     make build test

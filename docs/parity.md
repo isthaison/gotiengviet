@@ -11,7 +11,7 @@ Ký hiệu: ✅ có · ⚠️ một phần · ❌ chưa có · ➖ hệ điều 
 |---|---|---|---|
 | Telex / VNI / dấu hiện đại-truyền thống | ✅ | ✅ | ✅ |
 | Hoàn tác phím tắt (`ww`→`w`) | ✅ | ✅ | ✅ |
-| Macro mở rộng bằng Tab, emoji tự động | ✅ | ✅ | ✅ |
+| Macro/emoji mở rộng bằng Tab | ✅ | ✅ | ✅ |
 | Giữ phần gõ dở khi click sang chỗ khác | ✅ | ✅ (composition TSF) | ✅ (marked text) |
 
 ## Hiển thị và gợi ý
@@ -19,9 +19,9 @@ Ký hiệu: ✅ có · ⚠️ một phần · ❌ chưa có · ➖ hệ điều 
 | Tính năng | Linux | Windows | macOS |
 |---|---|---|---|
 | Gạch đỏ chính tả khi gõ | ✅ | ❌ | ❌ |
-| Bảng gợi ý AI inline | ✅ | ❌ (balloon thay thế) | ❌ |
-| Nhận gợi ý + học từ đã chọn | ✅ (Tab/số/Enter) | ✅ (click balloon) | ❌ |
-| Gợi ý emoji khi gõ `:sm` | ✅ | ❌ | ❌ |
+| Bảng gợi ý AI inline | ✅ | ✅ (overlay tray) | ❌ |
+| Nhận gợi ý + học từ đã chọn | ✅ (Tab/số/Enter) | ✅ (Tab/số/Enter + click balloon) | ❌ |
+| Gợi ý emoji khi gõ `:sm` | ✅ | ✅ (overlay tray) | ❌ |
 
 ## Cấu hình (cùng định dạng file cả 3 nền tảng)
 
@@ -54,7 +54,7 @@ Ký hiệu: ✅ có · ⚠️ một phần · ❌ chưa có · ➖ hệ điều 
 
 1. **macOS: chọn Telex/VNI + cấu hình AI trong Setup** — engine đã đọc config, chỉ thiếu UI ghi (editor macro đã có sẵn pattern).
 2. **macOS: nút Kiểm tra cập nhật** — hàm `GoTiengVietCheckForUpdates` đã có, chỉ thiếu chỗ bấm.
-3. **Gạch đỏ + gợi ý inline cho TSF/macOS** — việc lớn (display attributes / marked-text attrs).
+3. **Gạch đỏ + gợi ý inline cho macOS** — việc lớn (display attributes / marked-text attrs; Windows dùng overlay tray ngoài process).
 4. **macOS: autostart + gỡ cài đặt** (docs trước, code sau nếu cần).
-5. Gợi ý emoji `:sm` cho Windows/macOS.
+5. Gợi ý emoji `:sm` cho macOS.
 6. Bật/tắt TSF rõ ràng khi hồ sơ ngôn ngữ bị tắt tay trong Settings (đọc README phần Windows).

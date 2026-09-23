@@ -1,4 +1,5 @@
 #include "tsf_service.h"
+#include "tsf_suggest.h"
 
 CGtvTextService::CGtvTextService() :
     m_cRef(1),
@@ -111,6 +112,7 @@ STDMETHODIMP CGtvTextService::Deactivate(void)
         pComp->Release();
     }
 
+    gtv_suggest_hide();
     UninitKeyEventSink();
     UninitThreadMgrEventSink();
 
@@ -138,6 +140,7 @@ STDMETHODIMP CGtvTextService::OnSetFocus(ITfDocumentMgr *pdimFocus, ITfDocumentM
         pComp->EndComposition(0);
         pComp->Release();
     }
+    gtv_suggest_hide();
     ReloadConfig();
     if (m_pEngine) {
         gtv_engine_reset(m_pEngine);
@@ -154,6 +157,7 @@ STDMETHODIMP CGtvTextService::OnCompositionTerminated(TfEditCookie ecWrite, ITfC
         m_pComposition->Release();
         m_pComposition = NULL;
     }
+    gtv_suggest_hide();
     if (m_pEngine) {
         gtv_engine_reset(m_pEngine);
     }

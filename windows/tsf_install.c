@@ -334,11 +334,32 @@ static gboolean app_paths(wchar_t *app_dir, wchar_t *dll_path) {
     *slash = L'\0';
 
     swprintf(dll_path, MAX_PATH, L"%ls\\gtv_tsf.dll", app_dir);
-    if (GetFileAttributesW(dll_path) == INVALID_FILE_ATTRIBUTES) {
-        log_msg("DLL gtv_tsf.dll not found next to exe");
-        return FALSE;
+    if (GetFileAttributesW(dll_path) != INVALID_FILE_ATTRIBUTES)
+        return TRUE;
+    /* Versioned payload: the stable stub lives two levels up
+     * ({app}\ver\<V>\exe -> {app}\gtv_tsf.dll). */
+    {
+        wchar_t *parent = wcsrchr(app_dir, L'\\');
+        if (parent) {
+            wchar_t grand[MAX_PATH];
+            size_t plen = (size_t)(parent - app_dir);
+            if (plen >= MAX_PATH) plen = MAX_PATH - 1;
+            wcsncpy(grand, app_dir, plen);
+            grand[plen] = L'\0';
+            wchar_t *gbase = wcsrchr(grand, L'\\');
+            gbase = gbase ? gbase + 1 : grand;
+            if (!_wcsicmp(gbase, L"ver")) {
+                wchar_t *up = wcsrchr(grand, L'\\');
+                if (up) *up = L'\0';
+                wcscpy(app_dir, grand);
+                swprintf(dll_path, MAX_PATH, L"%ls\\gtv_tsf.dll", app_dir);
+                if (GetFileAttributesW(dll_path) != INVALID_FILE_ATTRIBUTES)
+                    return TRUE;
+            }
+        }
     }
-    return TRUE;
+    log_msg("DLL gtv_tsf.dll not found next to exe or app root");
+    return FALSE;
 }
 
 void gtv_tsf_install_ensure_registered(void) {

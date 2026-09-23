@@ -9,7 +9,11 @@ CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell
 LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32 -lole32 -luuid -lcomctl32
 
 TSF_CXXFLAGS ?= -O2 -g -std=c++14 -Wall -Wextra -Wno-unused-parameter -Iengine -Iwindows/tsf $(shell $(PKG_CONFIG) --cflags gio-2.0)
-TSF_LDFLAGS ?= -shared windows/tsf/gtv_tsf.def $(ENGINE_OBJS) $(shell $(PKG_CONFIG) --libs gio-2.0) -lintl -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -lgdi32 -mwindows
+# Versioned engine DLL (real text service, lives in ver\<V>\).
+TSF_ENGINE_LDFLAGS ?= -shared windows/tsf/gtv_engine.def $(ENGINE_OBJS) $(shell $(PKG_CONFIG) --libs gio-2.0) -lintl -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -lgdi32 -mwindows
+# Stable stub (registered once, almost never replaced): pure Win32 only, so
+# it loads even though glib lives in the versioned payload, not beside it.
+STUB_LDFLAGS ?= -shared windows/tsf/gtv_tsf.def -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -mwindows
 
 RC_SRC = windows/resource.rc
 
@@ -22,28 +26,42 @@ VERSION_NUM ?= $(VERSION).0
 
 ENGINE_OBJS = $(ENGINE_SRCS:%.c=build/win/%.o)
 WIN_OBJS = $(WIN_SRCS:%.c=build/win/%.o)
-TSF_OBJS = $(TSF_SRCS:%.cpp=build/win/%.o)
+TSF_ENGINE_OBJS = $(TSF_ENGINE_SRCS:%.cpp=build/win/%.o)
+TSF_STUB_OBJS = $(TSF_STUB_SRCS:%.cpp=build/win/%.o)
 RC_OBJ = build/win/windows/resource.o
+STUB_RC_OBJ = build/win/windows/stub.o
 CORE_LIB = build/win/libgotiengviet.a
 
 TARGET = build/win/gotiengviet.exe
 TSF_TARGET = build/win/gtv_tsf.dll
+TSF_ENGINE_TARGET = build/win/gtv_engine.dll
 TEST_ENGINE = build/win/test-engine.exe
 TEST_SUPPORT = build/win/test-support.exe
+TEST_VERDIR = build/win/test-verdir.exe
 FAKE_CURL = build/win/fixtures/curl.exe
 
 TEST_CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 TEST_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm
 
-all: $(TARGET) $(TSF_TARGET)
+all: $(TARGET) $(TSF_TARGET) $(TSF_ENGINE_TARGET)
 
 $(TARGET): $(ENGINE_OBJS) $(WIN_OBJS) $(RC_OBJ)
 	@mkdir -p $(dir $@)
 	$(CC) $(ENGINE_OBJS) $(WIN_OBJS) $(RC_OBJ) $(LDFLAGS) -o $@
 
-$(TSF_TARGET): $(TSF_OBJS) $(ENGINE_OBJS) windows/tsf/gtv_tsf.def
+# Stable stub: registered once, replaced only when its own version grows.
+$(TSF_TARGET): $(TSF_STUB_OBJS) $(STUB_RC_OBJ) windows/tsf/gtv_tsf.def
 	@mkdir -p $(dir $@)
-	$(CXX) $(TSF_OBJS) $(TSF_LDFLAGS) -o $@
+	$(CXX) $(TSF_STUB_OBJS) $(STUB_RC_OBJ) $(STUB_LDFLAGS) -o $@
+
+# Versioned engine: the real text service, forwarded to by the stub.
+$(TSF_ENGINE_TARGET): $(TSF_ENGINE_OBJS) $(ENGINE_OBJS) windows/tsf/gtv_engine.def
+	@mkdir -p $(dir $@)
+	$(CXX) $(TSF_ENGINE_OBJS) $(TSF_ENGINE_LDFLAGS) -o $@
+
+build/win/windows/stub.o: windows/stub.rc
+	@mkdir -p $(dir $@)
+	$(WINDRES) -Iwindows $< -o $@
 
 build/win/windows/tsf/%.o: windows/tsf/%.cpp
 	@mkdir -p $(dir $@)
@@ -69,35 +87,54 @@ $(TEST_SUPPORT): tests/test_support.c $(CORE_LIB)
 	@mkdir -p $(dir $@)
 	$(CC) $(TEST_CFLAGS) $< $(CORE_LIB) $(TEST_LDFLAGS) -o $@
 
+$(TEST_VERDIR): tests/test_verdir.c $(CORE_LIB)
+	@mkdir -p $(dir $@)
+	$(CC) $(TEST_CFLAGS) $< $(CORE_LIB) $(TEST_LDFLAGS) -o $@
+
 $(FAKE_CURL): tests/fake_curl.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TEST_CFLAGS) $< $(TEST_LDFLAGS) -o $@
 
-test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(FAKE_CURL)
+test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(TEST_VERDIR) $(FAKE_CURL)
 	GTV_DATA_DIR="$(CURDIR)/data" ./$(TEST_ENGINE)
 	GTV_DATA_DIR="$(CURDIR)/data" GTV_TEST_CURL_DIR="$(CURDIR)/build/win/fixtures" ./$(TEST_SUPPORT)
+	./$(TEST_VERDIR)
 
 # Staging dir consumed by windows/installer.iss (SourceDir=release-pkg).
+# New-world layout: stable root (stub + current.txt) + versioned
+# payload in ver\<V>\. Updates only ever ADD a new ver dir, so running
+# processes never block the installer: no forced closes, no logoff.
 STAGE = release-pkg
-staging: $(TARGET) $(TSF_TARGET)
-	mkdir -p $(STAGE) $(STAGE)/data
-	cp $(TARGET) $(TSF_TARGET) $(STAGE)/
+VERDIR = $(STAGE)/ver/$(VERSION)
+staging: $(TARGET) $(TSF_TARGET) $(TSF_ENGINE_TARGET)
+	mkdir -p $(STAGE) $(VERDIR)/data
+	# Stage exactly one payload: drop other ver\<V>\ dirs left from previous
+	# packages (the installer would otherwise ship stale payloads).
+	for d in $(STAGE)/ver/*/; do \
+	  [ "$$d" = "$(VERDIR)/" ] || rm -rf "$$d"; \
+	done
+	# Drop flat-layout leftovers from pre-side-by-side packages (the real
+	# payload now lives under ver/<V>/; root keeps the stub only).
+	rm -rf $(STAGE)/data $(STAGE)/gspawn-win64-helper*.exe $(STAGE)/lib*.dll $(STAGE)/zlib1.dll $(STAGE)/gotiengviet.exe
+	cp $(TSF_TARGET) $(STAGE)/gtv_tsf.dll
+	cp $(TARGET) $(TSF_ENGINE_TARGET) $(VERDIR)/
 	changed=1; \
 	while [ "$$changed" = 1 ]; do \
 	  changed=0; \
-	  for binary in $(STAGE)/*.exe $(STAGE)/*.dll; do \
+	  for binary in $(VERDIR)/*.exe $(VERDIR)/*.dll; do \
 	    [ -f "$$binary" ] || continue; \
 	    while IFS= read -r dll; do \
-	      if [ -f "/mingw64/bin/$$dll" ] && [ ! -f "$(STAGE)/$$dll" ]; then \
-	        cp "/mingw64/bin/$$dll" $(STAGE)/; \
+	      if [ -f "/mingw64/bin/$$dll" ] && [ ! -f "$(VERDIR)/$$dll" ]; then \
+	        cp "/mingw64/bin/$$dll" $(VERDIR)/; \
 	        changed=1; \
 	      fi; \
 	    done < <(objdump -p "$$binary" | awk '/DLL Name:/ {print $$3}'); \
 	  done; \
 	done
-	cp -f /mingw64/bin/gspawn-win64-helper*.exe $(STAGE)/ 2>/dev/null || true
+	cp -f /mingw64/bin/gspawn-win64-helper*.exe $(VERDIR)/ 2>/dev/null || true
+	printf '%s' "$(VERSION)" > $(STAGE)/current.txt
 	cp README.md LICENSE $(STAGE)/
-	cp data/macros.txt data/emojis.txt data/config data/ai.conf data/prompts.conf data/learned-corrections.txt data/learned-words.txt $(STAGE)/data/
+	cp data/macros.txt data/emojis.txt data/config data/ai.conf data/prompts.conf data/learned-corrections.txt data/learned-words.txt $(VERDIR)/data/
 
 # Versioned installer (Windows-only: needs Inno Setup's iscc.exe).
 # SourceDir is relative to windows/installer.iss (script dir), not to make.

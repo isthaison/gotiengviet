@@ -26,7 +26,7 @@ $ build/gotiengviet-demo --transform telex duocjwd
 - **Một thuật toán chung** cho Telex và VNI — chỉ khác bảng ánh xạ phím; kiểu đặt dấu hiện đại (`hòa`) hoặc truyền thống (`hoà`).
 - **Chính tả ngoại tuyến (Linux)**: gạch đỏ ngay khi gõ theo quy tắc âm tiết (âm đầu–vần–phụ âm cuối–thanh), không cần mạng. Bản Windows/macOS dùng AI balloon thay thế.
 - **Gợi ý AI cục bộ (tùy chọn)**: Ollama trên máy bạn — debounce 350 ms, hủy khi gõ tiếp, rớt mạng vẫn gợi ý từ dữ liệu đã học.
-- **Macro/emoji bằng file text**: tự thêm `cty=Công ty TNHH` (gõ `cty` rồi nhấn **Tab** để bung từ viết tắt, phím Space giữ nguyên chữ), `:smile:`→😊, `(y)`→👍.
+- **Macro/emoji bằng file text**: tự thêm `cty=Công ty TNHH` (gõ `cty` rồi nhấn **Tab** để bung (macro/emoji đều cần Tab), phím Space giữ nguyên chữ), `:smile:`→😊, `(y)`→👍.
 - **Nhẹ, riêng tư**: lõi C thuần + glib; không keylogger đám mây, AI chạy local.
 - **Tự cập nhật**: kiểm tra release GitHub mỗi ngày, cài đè giữ nguyên cấu hình.
 

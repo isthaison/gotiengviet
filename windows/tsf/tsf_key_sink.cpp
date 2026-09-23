@@ -1,4 +1,5 @@
 #include "tsf_service.h"
+#include "tsf_suggest.h"
 #include "../app.h"
 
 /* Report a committed word to the tray app for the AI typo check. The tray
@@ -133,14 +134,33 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
     if (wParam == VK_TAB) {
         if (IsComposing()) {
             gchar *buf = gtv_engine_buffer(m_pEngine);
-            gchar *macro = expand_macro(buf);
+            gchar *expansion = expand_macro(buf);
+            if (!expansion) expansion = expand_emoji(buf);
             g_free(buf);
-            if (macro) {
-                g_free(macro);
+            if (expansion) {
+                g_free(expansion);
+                *pfEaten = TRUE;
+                return S_OK;
+            }
+            /* Inline suggestion highlight takes Tab when no exact match. */
+            if (gtv_suggest_visible()) {
                 *pfEaten = TRUE;
                 return S_OK;
             }
         }
+        return S_OK;
+    }
+
+    /* Suggestion navigation/selection (mirror IBus): Up/Down move, 1-5
+     * accept in Telex mode (in VNI digits are tone keys). Eaten only while
+     * the popup is visible. */
+    if ((wParam == VK_UP || wParam == VK_DOWN) && gtv_suggest_visible()) {
+        *pfEaten = TRUE;
+        return S_OK;
+    }
+    if (wParam >= '1' && wParam <= '5' && !(GetKeyState(VK_SHIFT) & 0x8000) &&
+        m_pEngine && m_pEngine->mode == GTV_TELEX && gtv_suggest_visible()) {
+        *pfEaten = TRUE;
         return S_OK;
     }
 
@@ -172,36 +192,47 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
             EndComposition(pic, TRUE);
             gtv_engine_reset(m_pEngine);
         }
+        gtv_suggest_hide();
         return S_OK;
     }
 
-    // Escape cancels composition
+    // Escape cancels composition (dismisses the suggestion popup first)
     if (wParam == VK_ESCAPE) {
         if (IsComposing()) {
-            EndComposition(pic, FALSE);
-            gtv_engine_reset(m_pEngine);
+            if (gtv_suggest_visible()) {
+                gtv_suggest_hide();
+            } else {
+                EndComposition(pic, FALSE);
+                gtv_engine_reset(m_pEngine);
+            }
             *pfEaten = TRUE;
         }
         return S_OK;
     }
 
-    // Return commits composition
+    // Return commits composition (or the highlighted suggestion)
     if (wParam == VK_RETURN) {
         if (IsComposing()) {
-            gchar *commit = gtv_engine_process(m_pEngine, '\n', NULL);
-            if (commit) {
-                UpdateCompositionUtf8(this, pic, commit);
-                NotifyWordFromCommit(commit);
-                g_free(commit);
+            if (gtv_suggest_visible()) {
+                gtv_suggest_commit_cursor(this, pic);
+            } else {
+                gchar *commit = gtv_engine_process(m_pEngine, '\n', NULL);
+                if (commit) {
+                    UpdateCompositionUtf8(this, pic, commit);
+                    NotifyWordFromCommit(commit);
+                    g_free(commit);
+                }
+                EndComposition(pic, TRUE);
+                gtv_engine_reset(m_pEngine);
             }
-            EndComposition(pic, TRUE);
-            gtv_engine_reset(m_pEngine);
+            gtv_suggest_hide();
             *pfEaten = TRUE;
         }
         return S_OK;
     }
 
-    // Tab expands macro; if not a macro, commits buffer and passes Tab through
+    // Tab expands macro/emoji; else accepts the suggestion highlight;
+    // if neither, commits buffer and passes Tab through
     if (wParam == VK_TAB) {
         if (IsComposing()) {
             guint bs = 0;
@@ -211,15 +242,36 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
                 EndComposition(pic, TRUE);
                 NotifyWordFromCommit(macro);
                 g_free(macro);
+                gtv_suggest_hide();
+                *pfEaten = TRUE;
+                return S_OK;
+            } else if (gtv_suggest_visible()) {
+                gtv_suggest_accept_cursor(this, pic);
                 *pfEaten = TRUE;
                 return S_OK;
             } else {
                 EndComposition(pic, TRUE);
                 gtv_engine_reset(m_pEngine);
+                gtv_suggest_hide();
                 *pfEaten = FALSE;
                 return S_OK;
             }
         }
+        return S_OK;
+    }
+
+    // Suggestion highlight navigation/selection (eaten in OnTestKeyDown).
+    if ((wParam == VK_UP || wParam == VK_DOWN) && gtv_suggest_visible()) {
+        gtv_suggest_move_cursor(wParam == VK_DOWN ? 1 : -1);
+        *pfEaten = TRUE;
+        return S_OK;
+    }
+    if (wParam >= '1' && wParam <= '5' && !(GetKeyState(VK_SHIFT) & 0x8000) &&
+        m_pEngine && m_pEngine->mode == GTV_TELEX && gtv_suggest_visible()) {
+        gint idx = (gint)(wParam - '1');
+        if (idx < gtv_suggest_count())
+            gtv_suggest_accept_index(this, pic, idx);
+        *pfEaten = TRUE;
         return S_OK;
     }
 
@@ -235,6 +287,7 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
                 UpdateCompositionUtf8(this, pic, buf);
             }
             g_free(buf);
+            gtv_suggest_on_key(this, pic);
             *pfEaten = TRUE;
             return S_OK;
         }
@@ -259,6 +312,7 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
     if (!IsComposing()) {
         if (!can_start_composition(m_pEngine, ch)) {
             CommitLiteralChar(this, pic, ch);
+            gtv_suggest_hide();
             *pfEaten = TRUE;
             return S_OK;
         }
@@ -279,6 +333,9 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
         // Update active composition
         UpdateEngineBuffer(this, pic, m_pEngine, TRUE);
     }
+
+    /* Restart the suggestion story (cancels anything stale). */
+    gtv_suggest_on_key(this, pic);
 
     *pfEaten = TRUE;
     return S_OK;

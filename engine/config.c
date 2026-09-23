@@ -48,7 +48,10 @@ gchar *gtv_data_path(const gchar *name){
         HMODULE hDll = NULL;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                                 (LPCWSTR)gtv_data_path, &hDll) || !hDll) {
-            hDll = GetModuleHandleW(L"gtv_tsf.dll");
+            /* Versioned engine first, then the stable stub (same dir as
+             * current.txt), then the legacy single-dir layout. */
+            hDll = GetModuleHandleW(L"gtv_engine.dll");
+            if (!hDll) hDll = GetModuleHandleW(L"gtv_tsf.dll");
         }
         if (hDll) {
             gchar *dlldir = module_dir(hDll);

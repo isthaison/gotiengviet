@@ -1,8 +1,8 @@
 # Bản Windows
 
-Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (`gtv_tsf.dll`, composition chuẩn Windows — đúng trong mọi ô nhập kể cả autocomplete/khó tính); app khay hệ thống lo cấu hình, gợi ý AI, cập nhật. Không còn hook bàn phím.
+Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (stub `gtv_tsf.dll` đăng ký một lần + engine versioned trong `ver\<bản>\`, composition chuẩn Windows — đúng trong mọi ô nhập kể cả autocomplete/khó tính); app khay hệ thống lo cấu hình, gợi ý AI, cập nhật. Không còn hook bàn phím.
 
-- Sau khi cài: đăng xuất/đăng nhập lại rồi chọn GoTiengViet bằng `Win+Space`.
+- Cài lần đầu: đăng xuất/đăng nhập lại rồi chọn GoTiengViet bằng `Win+Space`. Các bản **cập nhật sau không cần** đóng app, đăng xuất hay reboot (xem dưới).
 - Nếu chưa thấy bàn phím GoTiengViet: vào **Settings → Time & Language → Language** → chọn `English` (hoặc `Tiếng Việt`) → **Options** → **Add a keyboard** → chọn **GoTiengViet**. Không thấy nữa thì đăng xuất/đăng nhập lại một lần.
 - Icon khay hiện kiểu gõ như bản Linux: đỏ `T` = Telex, đỏ `V` = VNI (**click-trái** trực tiếp vào icon khay để chuyển đổi nhanh giữa Telex và VNI; chuột-phải mở menu; click đúp mở Cài đặt). Tooltip khay cũng hiện `GoTiengViet — Telex/VNI` nên chụp màn hình vẫn thấy mode gõ hiện tại. Không có chữ `E`/nút tắt: chuyển Anh/Việt bằng `Win+Space` (Windows quản lý indicator ngôn ngữ).
 - Telex/VNI, chuẩn dấu, chính tả đổi trong Bảng điều khiển/menu tray/click khay, TSF nhận ngay khi chuyển ô nhập (đọc lại cấu hình mỗi lần kích hoạt).
@@ -10,7 +10,8 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (`gtv_tsf.dll`, comp
 ## Cài đặt và cập nhật
 
 - Mỗi release GitHub đính kèm `gotiengviet-<version>-x64-setup.exe` (Inno Setup, per-user, không cần admin, gỡ sạch qua Add/Remove Programs, giữ nguyên cấu hình).
-- App tự kiểm tra release mới nhất mỗi ngày; menu tray **Kiểm tra cập nhật...** để kiểm tra tay. Có bản mới thì hiện balloon — **click vào balloon** để tải và chạy bộ cài silent, app tự thoát để thay file. So sánh semver, chỉ cài đúng asset `gotiengviet-<version>-x64-setup.exe`.
+- Cập nhật không chạm app đang chạy, không cần đăng xuất/reboot: mỗi bản nằm trong thư mục version riêng (`ver\<bản>\`), stub TSF (`gtv_tsf.dll`) đăng ký đúng một lần nên không cài lại, không UAC. App đang mở giữ bản cũ tới khi thoát; app mở mới dùng bản mới ngay; app khay tự tiếp quản bản mới trong ~1 giây. Chỉ giữ bản hiện tại + 1 bản rollback, cũ hơn tự dọn.
+- App tự kiểm tra release mới nhất mỗi ngày; menu tray **Kiểm tra cập nhật...** để kiểm tra tay. Có bản mới thì hiện balloon — **click vào balloon** để tải và chạy bộ cài silent. So sánh semver, chỉ cài đúng asset `gotiengviet-<version>-x64-setup.exe`.
 - Code signing: bản release ký self-signed cert (RSA 4096, 1 năm) — bypass SmartScreen trên大部分 Windows. Nếu cert chưa cấu hình, bản unsigned vẫn hoạt động bình thường nhưng SmartScreen có thể hiện cảnh báo lần đầu chạy.
 - Chẩn đoán: `%APPDATA%\gotiengviet\update.log` (mọi bước check/tải/cài của updater).
 
@@ -25,6 +26,7 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (`gtv_tsf.dll`, comp
   khi bật AI (tick checkbox hoặc lưu), app tự kiểm tra → tự động cài Ollama bằng lệnh chính thức (`irm https://ollama.com/install.ps1 | iex`) chạy nền hoàn toàn im lặng nếu thiếu →
   chạy `ollama serve` nền → pull model nếu chưa có, chờ `/api/tags` tối đa 15s. Cần mạng lần đầu.
 - **Gợi ý AI dạng balloon**: TSF báo mỗi từ vừa commit về app khay; từ sai được hỏi Ollama nền (`"sai" co the ban muon go "dung"?`, chống spam 10 giây). Cần Ollama + `curl` (có sẵn từ Windows 10). **Click balloon** để nhận (chưa gõ tiếp thì thay tại chỗ, rồi thì copy vào clipboard); lựa chọn được học vào `learned-corrections.txt` nên offline vẫn gợi ý.
+- **Bảng gợi ý keyword inline (broker ngoài process)**: TSF trong app nhập liệu chỉ giữ composition/candidate và bắt phím, không tạo cửa sổ (an toàn với Electron/OpenCode); process tray riêng vẽ overlay cạnh caret, không lấy focus. Gõ `:sm` gợi ý emoji ngay không cần AI; từ thường gợi ý từ Ollama sau debounce 350 ms, rớt mạng dùng dữ liệu đã học. Phím: `Up/Down` di chuyển, `Tab`/`Enter` hoặc số `1-5` (Telex) để nhận, `Esc` bỏ (vẫn gõ tiếp), `Space` giữ nguyên chữ. Không lấy được tọa độ caret thật thì không hiện gì (không fallback góc màn hình). Từ trùng macro/emoji khớp tuyệt đối vẫn ưu tiên bung bằng `Tab` như cũ. Lựa chọn được học như balloon.
 - Macro/emoji/prompts/config: chung lõi và file `data/` với bản Linux.
 - Chữ Việt hiển thị đúng mọi locale: toàn bộ UI dùng Unicode API, dialog đặt chữ lúc chạy.
 
@@ -43,7 +45,7 @@ giá trị không rỗng. Lưu ghi đè file riêng của bạn (`macros.txt`/`e
 `%APPDATA%\gotiengviet\`, thay thế hoàn toàn file hệ thống) — **app đang mở phải khởi
 động lại mới nhận bảng mới** (TSF đọc bảng lúc app khởi động).
 
-Macro (gõ tắt) được kích hoạt bằng phím **Tab** (gõ từ tắt rồi nhấn Tab để bung từ đầy đủ; bấm Space hoặc dấu câu sẽ giữ nguyên từ viết tắt, không tự động bung ngoài ý muốn). Emoji bung tự động.
+Macro và emoji đều kích hoạt bằng phím **Tab** (gõ từ tắt/trigger rồi nhấn Tab để bung; bấm Space hoặc dấu câu giữ nguyên, không tự động bung ngoài ý muốn).
 
 ## Gạch đỏ dưới chữ Việt trong trình duyệt/app khác
 
@@ -55,7 +57,7 @@ hoặc Windows (Settings → Time & language → Typing → Highlight misspelt w
 
 ## Giới hạn đã biết
 
-- Chưa có gợi ý inline trong ô nhập.
+- Gợi ý Ollama inline chạy qua overlay của process tray (không tạo cửa sổ trong app nhập liệu nên an toàn với Electron/OpenCode); macro/emoji vẫn bung bằng `Tab`.
 - TSF chưa hỗ trợ trường mật khẩu đặc biệt.
 
 ## Build và release

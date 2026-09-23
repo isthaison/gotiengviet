@@ -1,4 +1,5 @@
 #include "startup.h"
+#include "internal.h"
 
 #include <gio/gio.h>
 
@@ -6,6 +7,8 @@
 #define GTV_RUN_KEY "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 #define GTV_RUN_VALUE "GoTiengViet"
 
+/* Startup entries point at the running (current) payload exe; a stale
+ * entry heals itself because old payloads forward to current.txt. */
 static void run_key_set(gboolean enable) {
     HKEY hkey;
     if (RegOpenKeyEx(HKEY_CURRENT_USER, GTV_RUN_KEY, 0, KEY_SET_VALUE, &hkey) != ERROR_SUCCESS)
@@ -19,6 +22,42 @@ static void run_key_set(gboolean enable) {
         RegDeleteValueW(hkey, L"GoTiengViet");
     }
     RegCloseKey(hkey);
+}
+
+/* Heal a stale Run value (older payload) to this exe. Only touches the
+ * value when it already exists and points inside our own app dir. */
+void gtv_startup_repoint(void) {
+    WCHAR wexe[MAX_PATH];
+    if (!GetModuleFileNameW(NULL, wexe, MAX_PATH)) return;
+    gchar *exe = g_utf16_to_utf8((const gunichar2 *)wexe, -1, NULL, NULL, NULL);
+    if (!exe) return;
+    gchar *appdir = gtv_app_dir_for_module(exe);
+    HKEY hkey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, GTV_RUN_KEY, 0, KEY_READ | KEY_SET_VALUE, &hkey) == ERROR_SUCCESS) {
+        WCHAR cur[MAX_PATH];
+        DWORD size = sizeof(cur), type = 0;
+        if (RegQueryValueExW(hkey, L"GoTiengViet", NULL, &type, (LPBYTE)cur, &size) == ERROR_SUCCESS
+            && type == REG_SZ) {
+            gchar *cur8 = g_utf16_to_utf8((const gunichar2 *)cur, -1, NULL, NULL, NULL);
+            if (cur8 && strcmp(cur8, exe) != 0) {
+                gchar *curdir = gtv_app_dir_for_module(cur8);
+                gboolean same_app = !strcmp(curdir, appdir);
+                g_free(curdir);
+                if (same_app) {
+                    gunichar2 *wpath = g_utf8_to_utf16(exe, -1, NULL, NULL, NULL);
+                    if (wpath) {
+                        RegSetValueExW(hkey, L"GoTiengViet", 0, REG_SZ, (const BYTE *)wpath,
+                                       (DWORD)((lstrlenW((LPCWSTR)wpath) + 1) * sizeof(WCHAR)));
+                        g_free(wpath);
+                    }
+                }
+            }
+            g_free(cur8);
+        }
+        RegCloseKey(hkey);
+    }
+    g_free(appdir);
+    g_free(exe);
 }
 
 static gboolean run_key_get(void) {
@@ -109,7 +148,7 @@ int gtv_startup_apply(const char *op) {
             gchar *exe = NULL, *quoted = NULL;
             gboolean ok = FALSE;
             if (GetModuleFileNameW(NULL, wexe, MAX_PATH)) {
-                exe = g_utf16_to_utf8(wexe, -1, NULL, NULL, NULL);
+                exe = g_utf16_to_utf8((const gunichar2 *)wexe, -1, NULL, NULL, NULL);
                 quoted = g_strdup_printf("\"%s\"", exe ? exe : "");
                 char *args[] = {"schtasks", "/Create", "/TN", GTV_TASK_NAME,
                                 "/TR", quoted, "/SC", "ONLOGON",

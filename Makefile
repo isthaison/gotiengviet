@@ -36,12 +36,15 @@ $(BUILD_DIR)/test-engine: tests/test_engine.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(CORE_LIBS) -o $@
 $(BUILD_DIR)/test-support: tests/test_support.c $(CORE_LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(CORE_LIBS) -o $@
+$(BUILD_DIR)/test-verdir: tests/test_verdir.c $(CORE_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(CORE_LIB) $(LDFLAGS) $(CORE_LIBS) -o $@
 $(BUILD_DIR)/fixtures/curl: tests/fake_curl.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(CORE_LIBS) -o $@
-test: $(BUILD_DIR)/test-engine $(BUILD_DIR)/test-support $(BUILD_DIR)/fixtures/curl
+test: $(BUILD_DIR)/test-engine $(BUILD_DIR)/test-support $(BUILD_DIR)/test-verdir $(BUILD_DIR)/fixtures/curl
 	$(BUILD_DIR)/test-engine
 	GTV_TEST_CURL_DIR="$(abspath $(BUILD_DIR))/fixtures" $(BUILD_DIR)/test-support
+	$(BUILD_DIR)/test-verdir
 vet:
 	$(MAKE) build test CFLAGS='-O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Werror' BUILD_DIR=$(BUILD_DIR)/strict
 install: build

@@ -4,10 +4,10 @@
 ; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
 
 #ifndef AppVersion
-  #define AppVersion "0.8.11"
+  #define AppVersion "0.8.16"
 #endif
 #ifndef AppVerNum
-  #define AppVerNum "0.8.11.0"
+  #define AppVerNum "0.8.16.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\release-pkg"
@@ -38,16 +38,15 @@ Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; The running tray app holds this mutex (see windows/main.c); setup asks
-; the user to close it instead of failing on locked exe/dlls.
-AppMutex=GoTiengViet_Single_Instance_Mutex
+; The running tray takes over gracefully through the takeover event (see
+; windows/main.c), and updates only ADD a new ver\<V>\ payload dir, so setup
+; never asks the user to close anything and never replaces running files.
 ; NEVER auto-close apps: CloseApplications once killed Explorer (black
-; screen) and hangs in /VERYSILENT (unanswerable dialog). In-use DLLs use
-; restartreplace (reboot finishes the swap); the user closes apps by hand.
+; screen) and hangs in /VERYSILENT (unanswerable dialog).
 CloseApplications=no
 WizardStyle=modern
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\gotiengviet.exe
+UninstallDisplayIcon={app}\ver\{#AppVersion}\gotiengviet.exe
 LicenseFile=..\LICENSE
 SetupIconFile=icons\gotiengviet.ico
 ShowLanguageDialog=no
@@ -66,37 +65,47 @@ Name: "startup"; Description: "{cm:StartupDesc}"; GroupDescription: "{cm:Additio
 Name: "desktopicon"; Description: "{cm:DesktopDesc}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#SourceDir}\gotiengviet.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\gspawn-win64-helper*.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-; gtv_tsf.dll (TSF text service) included via the glob below; restartreplace
-; because host apps may still hold it while updating.
-Source: "{#SourceDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist restartreplace
-Source: "{#SourceDir}\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs
+; Stable root: stub + current pointer. No ignoreversion on the
+; stub: Inno compares its VERSIONINFO and replaces it only when the staged
+; stub is newer, so day-to-day updates never touch a possibly-loaded stub
+; and no app is ever closed for an update. (restartreplace stays as the
+; safety net for the rare stub-version bump itself.)
+Source: "{#SourceDir}\gtv_tsf.dll"; DestDir: "{app}"; Flags: skipifsourcedoesntexist restartreplace
+Source: "{#SourceDir}\current.txt"; DestDir: "{app}"; Flags: ignoreversion
+; Versioned payload: each release adds a new ver\<V>\ dir (tray, engine DLL,
+; runtime, data). Running processes keep their mapped files until they exit
+; (Chrome-updater model); new processes load the current payload.
+Source: "{#SourceDir}\ver\*"; DestDir: "{app}\ver"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{userprograms}\GoTiengViet\GoTiengViet"; Filename: "{app}\gotiengviet.exe"
-Name: "{userprograms}\GoTiengViet\Gõ Tiếng Việt"; Filename: "{app}\gotiengviet.exe"; Comment: "Mở GoTiengViet"
+Name: "{userprograms}\GoTiengViet\GoTiengViet"; Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"
+Name: "{userprograms}\GoTiengViet\Gõ Tiếng Việt"; Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Comment: "Mở GoTiengViet"
 Name: "{userprograms}\GoTiengViet\Gỡ bỏ cài đặt"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\GoTiengViet"; Filename: "{app}\gotiengviet.exe"; Tasks: desktopicon
+Name: "{userdesktop}\GoTiengViet"; Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Tasks: desktopicon
 
 [Registry]
 ; Same Run value the tray menu manages, so both stay in sync.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GoTiengViet"; ValueData: """{app}\gotiengviet.exe"""; Flags: uninsdeletevalue; Tasks: startup
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GoTiengViet"; ValueData: """{app}\ver\{#AppVersion}\gotiengviet.exe"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
 ; regsvr32 loads from System32, so its DLL search misses our bundled glib
 ; next to gtv_tsf.dll: prepend {app} to PATH or registration silently
 ; fails and no keyboard appears in language settings.
-Filename: "{cmd}"; Parameters: "/c set ""PATH={app};%PATH%"" && regsvr32.exe /s ""{app}\gtv_tsf.dll"""; Flags: runhidden
+; Skipped on updates (Check): the stub path never changes once registered.
+Filename: "{cmd}"; Parameters: "/c set ""PATH={app};%PATH%"" && regsvr32.exe /s ""{app}\gtv_tsf.dll"""; Flags: runhidden; Check: NeedsStubRegistration
 ; One-time MACHINE registration of the TSF profiles/categories (HKLM):
 ; per-user Register/AddLanguageProfile always fail, leaving the keyboard
 ; invisible to Windows. Verb "runas" prompts for admin once.
-Filename: "{app}\gotiengviet.exe"; Parameters: "--register-tsf"; Verb: "runas"; Flags: runhidden waituntilterminated shellexec; StatusMsg: "Dang ky keyboard GoTV voi he thong..."
-Filename: "{app}\gotiengviet.exe"; Description: "{cm:LaunchProgram,GoTiengViet}"; Flags: nowait postinstall
+; Skipped on updates (Check): no UAC prompt for day-to-day updates.
+Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Parameters: "--register-tsf"; Verb: "runas"; Flags: runhidden waituntilterminated shellexec; StatusMsg: "Dang ky keyboard GoTV voi he thong..."; Check: NeedsTsfProfile
+; Takeover: the new payload asks any running tray to exit gracefully.
+Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Parameters: "--takeover"; Description: "{cm:LaunchProgram,GoTiengViet}"; Flags: nowait postinstall
 
 [UninstallRun]
+; Ask the running tray to exit gracefully first (takeover event).
+Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{cmd}"; Parameters: "/c set ""PATH={app};%PATH%"" && regsvr32.exe /s /u ""{app}\gtv_tsf.dll"""; Flags: runhidden
 ; The tray menu manages this same value independently of the installer's
 ; [Tasks]/[Registry] entry, so delete it explicitly (stale autostart would
@@ -111,3 +120,19 @@ Filename: "schtasks.exe"; Parameters: "/Delete /TN GoTiengViet /F"; Flags: runhi
 ; Catch strays the [Files] list never owned (downloaded deps, update
 ; leftovers): {app} holds no user data (config lives in %APPDATA%).
 Type: filesandordirs; Name: "{app}"
+
+[Code]
+{ Skip re-registration on updates: the stub path never changes, so once the
+  COM class and the TSF profile exist, updates install with no regsvr32 and
+  no elevation (no UAC prompt on day-to-day updates). }
+function NeedsStubRegistration(): Boolean;
+begin
+  Result := not RegValueExists(HKEY_CURRENT_USER,
+    'Software\Classes\CLSID\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\InprocServer32', '');
+end;
+
+function NeedsTsfProfile(): Boolean;
+begin
+  Result := not RegKeyExists(HKEY_LOCAL_MACHINE,
+    'SOFTWARE\Microsoft\CTF\TIP\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\LanguageProfile\0x0000042a');
+end;

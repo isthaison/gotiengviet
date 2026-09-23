@@ -6,11 +6,15 @@ GTV_VERSION := $(shell cat $(dir $(lastword $(MAKEFILE_LIST)))../VERSION 2>/dev/
 ENGINE_SRCS = engine/ai.c engine/charset.c engine/compose.c engine/config.c \
               engine/engine.c engine/json.c engine/learn.c engine/macro.c \
               engine/phonology.c engine/promotion.c engine/spell.c \
-              engine/telex.c engine/text.c engine/update.c engine/vni.c
+              engine/telex.c engine/text.c engine/update.c engine/verdir.c engine/vni.c
 
 # Windows tray app (C) + TSF text service (C++). Keep beside ENGINE_SRCS so
 # Makefile.win never drifts from the file list again.
 WIN_SRCS = windows/main.c windows/app.c windows/tray.c windows/tray_ai.c \
-           windows/setup.c windows/data.c windows/startup.c windows/update.c windows/tsf_install.c windows/input_setup.c windows/win_utf.c windows/ollama.c
-TSF_SRCS = windows/tsf/tsf_service.cpp windows/tsf/tsf_key_sink.cpp \
-           windows/tsf/tsf_composition.cpp windows/tsf/tsf_register.cpp
+           windows/setup.c windows/data.c windows/startup.c windows/update.c windows/tsf_install.c windows/input_setup.c windows/win_utf.c windows/ollama.c windows/suggest_overlay.c
+# TSF engine DLL (real text service, versioned) vs stable stub (registered once).
+TSF_ENGINE_SRCS = windows/tsf/tsf_service.cpp windows/tsf/tsf_key_sink.cpp \
+           windows/tsf/tsf_composition.cpp windows/tsf/tsf_factory.cpp \
+           windows/tsf/tsf_suggest.cpp
+TSF_STUB_SRCS = windows/tsf/stub_loader.cpp windows/tsf/tsf_register.cpp
+TSF_SRCS = $(TSF_ENGINE_SRCS) $(TSF_STUB_SRCS)

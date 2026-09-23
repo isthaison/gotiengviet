@@ -129,9 +129,18 @@ GPtrArray* get_emoji_suggestions(const char *prefix){
     if(!prefix || !*prefix) return out;
     tables_load();
     gchar *lower = g_utf8_strdown(prefix, -1);
+    /* Exact match wins first */
+    for(guint i = 0; i < emoji_entries->len; i++){
+        TableEntry *e = emoji_entries->pdata[i];
+        if(!strcmp(e->fold, lower)){
+            add_candidate_unique(out, e->value);
+            break;
+        }
+    }
+    /* Prefix matches up to 5 */
     for(guint i = 0; i < emoji_entries->len && out->len < 5; i++){
         TableEntry *e = emoji_entries->pdata[i];
-        if(e->key[0] == ':' && g_str_has_prefix(e->key, lower))
+        if(g_str_has_prefix(e->fold, lower))
             add_candidate_unique(out, e->value);
     }
     g_free(lower);

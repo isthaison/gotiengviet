@@ -13,7 +13,7 @@ static void test_stateful(void) {
     g_assert_cmpuint(backspaces,==,1);
     gchar *commit=gtv_engine_process(engine,' ',NULL);
     g_assert_cmpstr(commit,==,"đượ ");g_free(commit);
-    const gchar *phrases[]={"vn\t",":SMILE:","ko\t",NULL};
+    const gchar *phrases[]={"vn\t",":SMILE:\t","ko\t",NULL};
     const gchar *expected[]={"Việt Nam","😊","không"};
     for(guint i=0;phrases[i];i++) {
         for(const gchar *p=phrases[i];*p;p++) {
@@ -449,61 +449,125 @@ static void test_macro_and_emoji(void) {
     g_assert_cmpstr(g_ptr_array_index(sugs, 0), ==, "😊");
     g_ptr_array_unref(sugs);
 
-    /* Test instant commit through gtv_engine_process */
+    /* Test emoticons with uppercase and other starter characters */
+    GPtrArray *s_d = get_emoji_suggestions(":D");
+    g_assert_nonnull(s_d);
+    g_assert_cmpuint(s_d->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(s_d, 0), ==, "😀");
+    g_ptr_array_unref(s_d);
+
+    GPtrArray *s_dash_d = get_emoji_suggestions(":-D");
+    g_assert_nonnull(s_dash_d);
+    g_assert_cmpuint(s_dash_d->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(s_dash_d, 0), ==, "😀");
+    g_ptr_array_unref(s_dash_d);
+
+    GPtrArray *s_wink = get_emoji_suggestions(";)");
+    g_assert_nonnull(s_wink);
+    g_assert_cmpuint(s_wink->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(s_wink, 0), ==, "😉");
+    g_ptr_array_unref(s_wink);
+
+    GPtrArray *s_heart = get_emoji_suggestions("<3");
+    g_assert_nonnull(s_heart);
+    g_assert_cmpuint(s_heart->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(s_heart, 0), ==, "❤️");
+    g_ptr_array_unref(s_heart);
+
+    GPtrArray *s_p = get_emoji_suggestions(":P");
+    g_assert_nonnull(s_p);
+    g_assert_cmpuint(s_p->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(s_p, 0), ==, "😛");
+    g_ptr_array_unref(s_p);
+
+    /* Test emoji stays in buffer until Tab (no auto-expand) */
     GtvConfig cfg = {.mode = GTV_TELEX, .modern = TRUE};
     GtvEngine *eng = gtv_engine_new(&cfg);
 
     const char *seq = ":smile:";
     gchar *commit = NULL;
+    guint bs = 0;
     for(const char *p = seq; *p; p++){
         g_free(commit);
         commit = gtv_engine_process(eng, (gunichar)*p, NULL);
     }
-    g_assert_nonnull(commit);
-    g_assert_cmpstr(commit, ==, "😊");
-    g_free(commit);
-
-    /* Test instant commit for :) */
-    gtv_engine_reset(eng);
-    commit = gtv_engine_process(eng, ':', NULL);
     g_assert_null(commit);
-    commit = gtv_engine_process(eng, ')', NULL);
+    g_free(commit);
+    commit = gtv_engine_process(eng, '\t', &bs);
     g_assert_nonnull(commit);
     g_assert_cmpstr(commit, ==, "😊");
+    g_assert_cmpuint(bs, ==, 7);
     g_free(commit);
 
-    /* Test instant commit for :-) */
+    /* Test Tab expansion for :) */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, ':', NULL));
+    g_assert_null(gtv_engine_process(eng, ')', NULL));
+    commit = gtv_engine_process(eng, '\t', &bs);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "😊");
+    g_assert_cmpuint(bs, ==, 2);
+    g_free(commit);
+
+    /* Test Tab expansion for :-) */
     gtv_engine_reset(eng);
     g_assert_null(gtv_engine_process(eng, ':', NULL));
     g_assert_null(gtv_engine_process(eng, '-', NULL));
-    commit = gtv_engine_process(eng, ')', NULL);
+    g_assert_null(gtv_engine_process(eng, ')', NULL));
+    commit = gtv_engine_process(eng, '\t', &bs);
     g_assert_nonnull(commit);
     g_assert_cmpstr(commit, ==, "😊");
+    g_assert_cmpuint(bs, ==, 3);
     g_free(commit);
 
-    /* Test instant commit for <3 */
+    /* Test Tab expansion for <3 */
     gtv_engine_reset(eng);
     g_assert_null(gtv_engine_process(eng, '<', NULL));
-    commit = gtv_engine_process(eng, '3', NULL);
+    g_assert_null(gtv_engine_process(eng, '3', NULL));
+    commit = gtv_engine_process(eng, '\t', &bs);
     g_assert_nonnull(commit);
     g_assert_cmpstr(commit, ==, "❤️");
+    g_assert_cmpuint(bs, ==, 2);
     g_free(commit);
 
-    /* Test parenthesized emoji aliases used by chat apps */
+    /* Test parenthesized emoji aliases expand on Tab, not automatically */
     gtv_engine_reset(eng);
     g_assert_null(gtv_engine_process(eng, '(', NULL));
     g_assert_null(gtv_engine_process(eng, 'y', NULL));
-    commit = gtv_engine_process(eng, ')', NULL);
+    g_assert_null(gtv_engine_process(eng, ')', NULL));
+    commit = gtv_engine_process(eng, '\t', &bs);
     g_assert_nonnull(commit);
     g_assert_cmpstr(commit, ==, "👍");
+    g_assert_cmpuint(bs, ==, 3);
     g_free(commit);
 
-    /* Test instant commit for :D */
+    /* Test :D expands on Tab */
     gtv_engine_reset(eng);
     g_assert_null(gtv_engine_process(eng, ':', NULL));
-    commit = gtv_engine_process(eng, 'D', NULL);
+    g_assert_null(gtv_engine_process(eng, 'D', NULL));
+    commit = gtv_engine_process(eng, '\t', &bs);
     g_assert_nonnull(commit);
     g_assert_cmpstr(commit, ==, "😀");
+    g_assert_cmpuint(bs, ==, 2);
+    g_free(commit);
+
+    /* Test emoji trigger + Space commits literally (no expansion) */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, ':', NULL));
+    g_assert_null(gtv_engine_process(eng, ')', NULL));
+    commit = gtv_engine_process(eng, ' ', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, ":) ");
+    g_free(commit);
+
+    /* Test emoji trigger + punctuation commits literally */
+    gtv_engine_reset(eng);
+    g_assert_null(gtv_engine_process(eng, '(', NULL));
+    g_assert_null(gtv_engine_process(eng, 'y', NULL));
+    g_assert_null(gtv_engine_process(eng, ')', NULL));
+    commit = gtv_engine_process(eng, '.', NULL);
+    g_assert_nonnull(commit);
+    g_assert_cmpstr(commit, ==, "(y).");
     g_free(commit);
 
     /* Test normal colon after word */
@@ -545,7 +609,7 @@ static void test_macro_and_emoji(void) {
 
     /* Test macro expands on Tab */
     gtv_engine_reset(eng);
-    guint bs = 0;
+    bs = 0;
     g_assert_null(gtv_engine_process(eng, 'v', &bs));
     g_assert_null(gtv_engine_process(eng, 'n', &bs));
     commit = gtv_engine_process(eng, '\t', &bs);

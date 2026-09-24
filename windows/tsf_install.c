@@ -187,6 +187,22 @@ static void ensure_profiles_registered(void) {
     ensure_profile_registered(GTV_TSF_LANG_VI, GTV_TSF_PROFILE_GUID_STR, L"GoTV");
 }
 
+/* Stale English (0x0409) profile left by pre-0.8.8 builds: those builds
+ * registered GoTV under en-US too, so the keyboard lists twice (messy
+ * Win+Space / Settings list). Current builds register Vietnamese only, so
+ * the leftover is removed here. HKCU delete works unelevated; HKLM needs
+ * admin (see gtv_tsf_register_elevated). Missing keys are fine. */
+static void remove_stale_en_profile_tree(HKEY root) {
+    wchar_t leaf[MAX_PATH], parent[MAX_PATH];
+    swprintf(leaf, MAX_PATH, L"%ls\\0x00000409\\%ls",
+             GTV_TSF_PROFILE_BASE, GTV_TSF_PROFILE_GUID_STR);
+    swprintf(parent, MAX_PATH, L"%ls\\0x00000409", GTV_TSF_PROFILE_BASE);
+    if (RegDeleteKeyW(root, leaf) == ERROR_SUCCESS)
+        log_msg("Removed stale en-US profile leaf (root=%p)", (void *)root);
+    if (RegDeleteKeyW(root, parent) == ERROR_SUCCESS)
+        log_msg("Removed stale en-US profile key (root=%p)", (void *)root);
+}
+
 /* Ensure BOTH keyboard and textservice categories are registered under
  * HKCU. Writes every layout Windows has used so at least one matches:
  *   TIP\{CLSID}\Category\Category\{cat}\{clsid}  (Win10 RegisterCategory)
@@ -432,6 +448,7 @@ void gtv_tsf_install_ensure_registered(void) {
     old_path = NULL;
 
     ensure_profiles_registered();
+    remove_stale_en_profile_tree(HKEY_CURRENT_USER);
     ensure_category_registered();
     enable_profiles_via_api();
 
@@ -522,6 +539,10 @@ gboolean gtv_tsf_register_elevated(void) {
         hr = p->lpVtbl->EnableLanguageProfile(p, &clsid, langs[i], &guidProfile, TRUE);
         log_msg("EnableLanguageProfile 0x%04x hr=0x%08lx", (unsigned)langs[i], (unsigned long)hr);
     }
+    /* Drop the stale English profile pre-0.8.8 builds registered under HKLM
+     * (else GoTV lists twice under EN + VI). Errors ignored: already gone. */
+    hr = p->lpVtbl->RemoveLanguageProfile(p, &clsid, 0x0409, &guidProfile);
+    log_msg("RemoveLanguageProfile 0x0409 hr=0x%08lx", (unsigned long)hr);
     p->lpVtbl->Release(p);
 
     ITfCategoryMgr *c = NULL;
@@ -547,6 +568,8 @@ gboolean gtv_tsf_register_elevated(void) {
 
     /* HKCU fallback + enable so the current user gets it immediately. */
     ensure_profiles_registered();
+    remove_stale_en_profile_tree(HKEY_CURRENT_USER);
+    remove_stale_en_profile_tree(HKEY_LOCAL_MACHINE);
     ensure_category_registered();
     enable_profiles_via_api();
 

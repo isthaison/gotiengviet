@@ -4,10 +4,10 @@
 ; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
 
 #ifndef AppVersion
-  #define AppVersion "0.8.17"
+  #define AppVersion "0.8.18"
 #endif
 #ifndef AppVerNum
-  #define AppVerNum "0.8.17.0"
+  #define AppVerNum "0.8.18.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\release-pkg"
@@ -133,6 +133,13 @@ end;
 
 function NeedsTsfProfile(): Boolean;
 begin
+  { Re-run the one-time elevated TSF registration when the Vietnamese
+    profile is missing OR when a stale English (0x0409) profile from
+    pre-0.8.8 builds is still present (it makes GoTV list twice) —
+    one UAC prompt, then never again. }
   Result := not RegKeyExists(HKEY_LOCAL_MACHINE,
     'SOFTWARE\Microsoft\CTF\TIP\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\LanguageProfile\0x0000042a');
+  if not Result then
+    Result := RegKeyExists(HKEY_LOCAL_MACHINE,
+      'SOFTWARE\Microsoft\CTF\TIP\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\LanguageProfile\0x00000409');
 end;

@@ -7,6 +7,7 @@
 #include "startup.h"
 #include "tsf_install.h"
 #include "input_setup.h"
+#include "ollama.h"
 #include "update.h"
 #include "resource.h"
 #include "version.h"
@@ -285,6 +286,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     /* 5. Initialize Tray Icon (typing is handled natively by Windows TSF) */
     gtv_tray_init(g_app.hwnd_main);
+
+    /* A custom Ollama server is a child service, so it does not survive a
+     * reboot with the tray. Restore it whenever AI suggestions are enabled;
+     * the worker is asynchronous and single-flight. */
+    if (g_app.config.ai_enabled)
+        gtv_ollama_ensure_all_async(NULL, g_app.config.url, g_app.config.model);
 
     /* Daily self-update check against GitHub releases (throttled). */
     gtv_update_check_async(g_app.hwnd_main, FALSE);

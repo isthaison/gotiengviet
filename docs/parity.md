@@ -37,7 +37,7 @@ Ký hiệu: ✅ có · ⚠️ một phần · ❌ chưa có · ➖ hệ điều 
 | Tính năng | Linux | Windows | macOS |
 |---|---|---|---|
 | Indicator/menu riêng | ✅ AppIndicator | ✅ tray icon | ➖ menu input hệ thống |
-| Chuyển Việt/Anh | ✅ nguồn Super+Space | ✅ Win+Space | ✅ menu input |
+| Chuyển nguồn nhập | ✅ nguồn Super+Space | ➖ GoTV là US duy nhất | ✅ menu input |
 | Tự khởi động | ✅ xdg autostart | ✅ registry/task | ❌ |
 | Bỏ qua ô mật khẩu | ✅ | ⚠️ hệ thống (một phần) | ⚠️ hệ thống |
 | Nhật ký chẩn đoán | ✅ `debug/crash.log` | ✅ `update.log` | ❌ |

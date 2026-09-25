@@ -236,8 +236,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     /* 2. Ensure this installation owns the per-user TSF registration. */
     gtv_tsf_install_ensure_registered();
 
-    /* 2b. Attach GoTV to the user's languages (Win+Space switcher).
-     * Async worker; version-stamped, additive-only. */
+    /* 2b. Attach GoTV to English/US and remove the old Vietnamese entry.
+     * Async worker; setup-revision stamped. */
     gtv_input_setup_ensure_async();
 
     /* 3. Initialize GoTiengViet config */

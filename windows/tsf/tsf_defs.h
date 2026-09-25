@@ -18,9 +18,9 @@ DEFINE_GUID(GUID_GtvProfile,
 #define GTV_TSF_MODEL_NAME L"GoTV"
 #define GTV_TSF_DESC       L"GoTV"
 
-/* Vietnamese Language ID: 0x042A */
+/* Vietnamese Language ID: 0x042A, retained for stale-profile removal. */
 #define GTV_LANG_VIETNAMESE MAKELANGID(LANG_VIETNAMESE, SUBLANG_DEFAULT)
-/* English (US) Language ID: 0x0409 (standard for systems without VN language pack) */
+/* English (US) Language ID: 0x0409. */
 #define GTV_LANG_ENGLISH    MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US)
 
 /* GUID_TFCAT_TIP_TEXTSERVICE is not defined in MinGW's msctf.h.

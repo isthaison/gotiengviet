@@ -19,7 +19,7 @@ static const wchar_t *GTV_TSF_INPROC_KEY =
  * If these don't exist, the keyboard won't appear in language settings. */
 static const wchar_t *GTV_TSF_PROFILE_BASE =
     L"Software\\Microsoft\\CTF\\TIP\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\LanguageProfile";
-static const wchar_t *GTV_TSF_LANG_VI = L"0x0000042a";
+static const wchar_t *GTV_TSF_LANG_EN = L"0x00000409";
 
 /* Category GUIDs: a keyboard TIP must register these, otherwise Win10/11
  * won't list it in language settings (see windows/tsf/tsf_register.cpp).
@@ -108,10 +108,10 @@ static gboolean reg_key_exists(const wchar_t *subkey) {
 }
 
 static gboolean tsf_profiles_registered(void) {
-    wchar_t key_vi[MAX_PATH];
-    swprintf(key_vi, MAX_PATH, L"%ls\\%ls\\%ls",
-             GTV_TSF_PROFILE_BASE, GTV_TSF_LANG_VI, GTV_TSF_PROFILE_GUID_STR);
-    if (reg_key_exists(key_vi))
+    wchar_t key_en[MAX_PATH];
+    swprintf(key_en, MAX_PATH, L"%ls\\%ls\\%ls",
+             GTV_TSF_PROFILE_BASE, GTV_TSF_LANG_EN, GTV_TSF_PROFILE_GUID_STR);
+    if (reg_key_exists(key_en))
         return TRUE;
     log_msg("No TSF language profiles found under HKCU");
     return FALSE;
@@ -184,23 +184,21 @@ static void ensure_profile_registered(const wchar_t *langid,
 }
 
 static void ensure_profiles_registered(void) {
-    ensure_profile_registered(GTV_TSF_LANG_VI, GTV_TSF_PROFILE_GUID_STR, L"GoTV");
+    ensure_profile_registered(GTV_TSF_LANG_EN, GTV_TSF_PROFILE_GUID_STR, L"GoTV");
 }
 
-/* Stale English (0x0409) profile left by pre-0.8.8 builds: those builds
- * registered GoTV under en-US too, so the keyboard lists twice (messy
- * Win+Space / Settings list). Current builds register Vietnamese only, so
- * the leftover is removed here. HKCU delete works unelevated; HKLM needs
+/* Remove the stale Vietnamese profile so GoTV appears only under English/US.
+ * HKCU delete works unelevated; HKLM needs
  * admin (see gtv_tsf_register_elevated). Missing keys are fine. */
-static void remove_stale_en_profile_tree(HKEY root) {
+static void remove_stale_vi_profile_tree(HKEY root) {
     wchar_t leaf[MAX_PATH], parent[MAX_PATH];
-    swprintf(leaf, MAX_PATH, L"%ls\\0x00000409\\%ls",
+    swprintf(leaf, MAX_PATH, L"%ls\\0x0000042a\\%ls",
              GTV_TSF_PROFILE_BASE, GTV_TSF_PROFILE_GUID_STR);
-    swprintf(parent, MAX_PATH, L"%ls\\0x00000409", GTV_TSF_PROFILE_BASE);
+    swprintf(parent, MAX_PATH, L"%ls\\0x0000042a", GTV_TSF_PROFILE_BASE);
     if (RegDeleteKeyW(root, leaf) == ERROR_SUCCESS)
-        log_msg("Removed stale en-US profile leaf (root=%p)", (void *)root);
+        log_msg("Removed stale vi-VN profile leaf (root=%p)", (void *)root);
     if (RegDeleteKeyW(root, parent) == ERROR_SUCCESS)
-        log_msg("Removed stale en-US profile key (root=%p)", (void *)root);
+        log_msg("Removed stale vi-VN profile key (root=%p)", (void *)root);
 }
 
 /* Ensure BOTH keyboard and textservice categories are registered under
@@ -272,7 +270,7 @@ static void enable_profiles_via_api(void) {
     CLSIDFromString((LPOLESTR)GTV_TSF_PROFILE_GUID_STR, &guidProfile);
     pProfiles->lpVtbl->Register(pProfiles, &clsid);
 
-    const LANGID langs[1] = { 0x042A };
+    const LANGID langs[1] = { 0x0409 };
     for (int i = 0; i < 1; i++) {
         hr = pProfiles->lpVtbl->EnableLanguageProfile(pProfiles, &clsid, langs[i],
                                                        &guidProfile, TRUE);
@@ -396,6 +394,7 @@ void gtv_tsf_install_ensure_registered(void) {
     }
 
     log_msg("app dir resolved, checking TSF registration");
+    remove_stale_vi_profile_tree(HKEY_CURRENT_USER);
 
     /* Re-register if: InprocServer32 path mismatch OR TSF profiles missing
      * OR category missing. NOTE: RegQueryValueExW takes a value name, not
@@ -448,7 +447,7 @@ void gtv_tsf_install_ensure_registered(void) {
     old_path = NULL;
 
     ensure_profiles_registered();
-    remove_stale_en_profile_tree(HKEY_CURRENT_USER);
+    remove_stale_vi_profile_tree(HKEY_CURRENT_USER);
     ensure_category_registered();
     enable_profiles_via_api();
 
@@ -459,8 +458,8 @@ void gtv_tsf_install_ensure_registered(void) {
         log_msg("WARNING: TSF registration may have failed - check logs");
 }
 
-/* TRUE when EnumLanguageProfiles(0x042A) returns our profile, i.e. the
- * OS genuinely recognises GoTV as a Vietnamese keyboard. Registry keys
+/* TRUE when EnumLanguageProfiles(0x0409) returns our profile, i.e. the
+ * OS genuinely recognises GoTV as an English/US keyboard. Registry keys
  * alone are not enough (per-user Register/AddLanguageProfile fail). */
 static gboolean profile_enumerated(void) {
     gboolean found = FALSE;
@@ -477,7 +476,7 @@ static gboolean profile_enumerated(void) {
                           &IID_ITfInputProcessorProfiles, (void **)&p);
     if (SUCCEEDED(hr) && p) {
         IEnumTfLanguageProfiles *e = NULL;
-        if (SUCCEEDED(p->lpVtbl->EnumLanguageProfiles(p, 0x042A, &e)) && e) {
+        if (SUCCEEDED(p->lpVtbl->EnumLanguageProfiles(p, 0x0409, &e)) && e) {
             TF_LANGUAGEPROFILE pr;
             while (e->lpVtbl->Next(e, 1, &pr, NULL) == S_OK) {
                 if (IsEqualGUID(&pr.clsid, &clsid)) {
@@ -529,7 +528,7 @@ gboolean gtv_tsf_register_elevated(void) {
     log_msg("Register hr=0x%08lx", (unsigned long)hr);
     if (FAILED(hr)) ok_all = FALSE;
 
-    const LANGID langs[1] = { 0x042A };
+    const LANGID langs[1] = { 0x0409 };
     for (int i = 0; i < 1; i++) {
         hr = p->lpVtbl->AddLanguageProfile(p, &clsid, langs[i], &guidProfile,
                                            L"GoTV", 4, dll_path,
@@ -539,10 +538,8 @@ gboolean gtv_tsf_register_elevated(void) {
         hr = p->lpVtbl->EnableLanguageProfile(p, &clsid, langs[i], &guidProfile, TRUE);
         log_msg("EnableLanguageProfile 0x%04x hr=0x%08lx", (unsigned)langs[i], (unsigned long)hr);
     }
-    /* Drop the stale English profile pre-0.8.8 builds registered under HKLM
-     * (else GoTV lists twice under EN + VI). Errors ignored: already gone. */
-    hr = p->lpVtbl->RemoveLanguageProfile(p, &clsid, 0x0409, &guidProfile);
-    log_msg("RemoveLanguageProfile 0x0409 hr=0x%08lx", (unsigned long)hr);
+    hr = p->lpVtbl->RemoveLanguageProfile(p, &clsid, 0x042A, &guidProfile);
+    log_msg("RemoveLanguageProfile 0x042A hr=0x%08lx", (unsigned long)hr);
     p->lpVtbl->Release(p);
 
     ITfCategoryMgr *c = NULL;
@@ -568,13 +565,13 @@ gboolean gtv_tsf_register_elevated(void) {
 
     /* HKCU fallback + enable so the current user gets it immediately. */
     ensure_profiles_registered();
-    remove_stale_en_profile_tree(HKEY_CURRENT_USER);
-    remove_stale_en_profile_tree(HKEY_LOCAL_MACHINE);
+    remove_stale_vi_profile_tree(HKEY_CURRENT_USER);
+    remove_stale_vi_profile_tree(HKEY_LOCAL_MACHINE);
     ensure_category_registered();
     enable_profiles_via_api();
 
     if (profile_enumerated()) {
-        log_msg("Elevated registration verified: GoTV enumerates for 0x042A");
+        log_msg("Elevated registration verified: GoTV enumerates for 0x0409");
         return TRUE;
     }
     log_msg("WARNING: GoTV still not enumerated (ok_all=%d)", ok_all);

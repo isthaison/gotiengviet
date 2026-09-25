@@ -75,7 +75,7 @@ Source: "{#SourceDir}\current.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; Versioned payload: each release adds a new ver\<V>\ dir (tray, engine DLL,
 ; runtime, data). Running processes keep their mapped files until they exit
 ; (Chrome-updater model); new processes load the current payload.
-Source: "{#SourceDir}\ver\*"; DestDir: "{app}\ver"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\ver\*"; DestDir: "{app}\ver"; Flags: ignoreversion restartreplace recursesubdirs createallsubdirs
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -133,13 +133,12 @@ end;
 
 function NeedsTsfProfile(): Boolean;
 begin
-  { Re-run the one-time elevated TSF registration when the Vietnamese
-    profile is missing OR when a stale English (0x0409) profile from
-    pre-0.8.8 builds is still present (it makes GoTV list twice) —
+  { Re-run elevated TSF registration when the English profile is missing
+    or the stale Vietnamese profile is still present —
     one UAC prompt, then never again. }
   Result := not RegKeyExists(HKEY_LOCAL_MACHINE,
-    'SOFTWARE\Microsoft\CTF\TIP\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\LanguageProfile\0x0000042a');
+    'SOFTWARE\Microsoft\CTF\TIP\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\LanguageProfile\0x00000409');
   if not Result then
     Result := RegKeyExists(HKEY_LOCAL_MACHINE,
-      'SOFTWARE\Microsoft\CTF\TIP\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\LanguageProfile\0x00000409');
+      'SOFTWARE\Microsoft\CTF\TIP\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\LanguageProfile\0x0000042a');
 end;

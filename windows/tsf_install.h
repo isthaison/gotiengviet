@@ -6,7 +6,7 @@
 void gtv_tsf_install_ensure_registered(void);
 
 /* One-time machine registration: ITfInputProcessorProfiles::Register,
- * AddLanguageProfile (VI only), EnableLanguageProfile, plus
+ * AddLanguageProfile (US only), EnableLanguageProfile, plus
  * ITfCategoryMgr::RegisterCategory for the keyboard categories.
  * Needs admin (HKLM writes); returns TRUE when the profile enumerates
  * afterwards. Invoked as: gotiengviet.exe --register-tsf (elevated). */

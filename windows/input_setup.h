@@ -3,9 +3,9 @@
 
 #include <glib.h>
 
-/* Attach the GoTV TIP to the user's Vietnamese language, purely additive
- * and idempotent. Runs in a worker thread; safe to call at every startup
- * (a version stamp skips repeats). Uses the OS-validated
+/* Attach the GoTV TIP to English/US and remove the old Vietnamese entry.
+ * Runs in a worker thread; safe to call at every startup (a setup-revision
+ * stamp skips repeats). Uses the OS-validated
  * Set-WinUserLanguageList path via a hidden powershell child. Machine
  * registration (--register-tsf, admin) must have run first, otherwise
  * Windows drops the TIP and we retry later. */

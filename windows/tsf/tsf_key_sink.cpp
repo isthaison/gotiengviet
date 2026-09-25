@@ -110,8 +110,7 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
-    // No software on/off: the TIP is active only while selected.
-    // Switching to English is a Win+Space keyboard change (Windows owns it).
+    // No software on/off: GoTV is the only US keyboard.
 
     // Check modifiers
     if ((GetKeyState(VK_CONTROL) & 0x8000) ||
@@ -164,8 +163,7 @@ STDMETHODIMP CGtvTextService::OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPAR
         return S_OK;
     }
 
-    // Convert key through US layout: GoTV owns Telex/VNI; Windows' VIE
-    // hardware layout must not turn number-row keys into Vietnamese chars.
+    // Convert key through US layout: GoTV owns Telex/VNI.
     WCHAR wchars[4] = {0};
     int count = key_to_unicode(wParam, lParam, wchars, 4);
     if (count == 1 && wchars[0] >= 0x20) {

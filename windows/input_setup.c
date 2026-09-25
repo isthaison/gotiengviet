@@ -1,15 +1,5 @@
-/* Automatic per-user input setup: attach the GoTV keyboard to the user's
- * Vietnamese language so it shows up in the Win+Space / taskbar switcher
- * without manual Settings work.
- *
- * GoTV is the ONLY keyboard under Vietnamese (badge "VIE"): any other TIP
- * Windows puts there (e.g. the built-in Telex) is removed, otherwise the
- * switcher shows duplicate VIE entries. Other languages (e.g. en-US with
- * the plain US keyboard, badge "ENG") are never touched. Idempotent: a
- * version stamp avoids respawning powershell on every launch. The heavy
- * lifting goes through Set-WinUserLanguageList — the OS-validated path —
- * in a hidden powershell child, because raw registry writes are
- * ignored/dropped by the input stack. */
+/* Automatic per-user input setup: migrate GoTV from Vietnamese to English/US
+ * and remove the duplicate plain US keyboard. */
 #include "input_setup.h"
 #include "version.h"
 
@@ -17,10 +7,10 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 
-/* TIP strings, same format Windows itself uses, e.g.
- * 042a:{CLSID}{ProfileGUID}. GoTV lives under Vietnamese so the taskbar
- * badge shows "VIE" — distinguishing it from the plain US keyboard ("ENG"). */
+#define GTV_TIP_EN "0409:{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}"
 #define GTV_TIP_VI "042a:{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}{D4C5B6A7-1E2F-4A3B-8C9D-0E1F2A3B4C5D}"
+#define GTV_TIP_US "0409:00000409"
+#define GTV_INPUT_SETUP_REVISION "6"
 
 static void setup_log(const gchar *fmt, ...) {
     gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
@@ -47,7 +37,7 @@ static gboolean stamp_current(void) {
     gchar *contents = NULL;
     gboolean ok = FALSE;
     if (g_file_get_contents(path, &contents, NULL, NULL) && contents)
-        ok = !strcmp(g_strstrip(contents), GTV_VERSION);
+        ok = !strcmp(g_strstrip(contents), GTV_INPUT_SETUP_REVISION);
     g_free(contents);
     g_free(path);
     return ok;
@@ -55,41 +45,31 @@ static gboolean stamp_current(void) {
 
 static void stamp_write(void) {
     gchar *path = stamp_path();
-    g_file_set_contents(path, GTV_VERSION, -1, NULL);
+    g_file_set_contents(path, GTV_INPUT_SETUP_REVISION, -1, NULL);
     g_free(path);
 }
 
-/* One powershell invocation: Vietnamese gets GoTV as its ONLY keyboard
- * (badge "VIE"), en-US and friends are untouched (badge "ENG").
- * Result: exactly 2 switcher entries — ENG US keyboard + VIE GoTV. */
 static const char *setup_script(void) {
     return "$ErrorActionPreference='SilentlyContinue';"
            "$l=Get-WinUserLanguageList;"
            "$c=$false;"
-           /* Add Vietnamese with GoTV-only if missing */
-           "$hasVi=$null -ne ($l | Where-Object{$_.LanguageTag -match '^vi'});"
-           "if(-not $hasVi){"
-           "  $vi=New-WinUserLanguageList 'vi-VN';"
-           "  $vi[0].InputMethodTips.Clear();"
-           "  $vi[0].InputMethodTips.Add('" GTV_TIP_VI "');"
-           "  $l+=$vi;$c=$true}"
-           /* Existing vi: strip non-GoTV TIPs (built-in Telex), ensure GoTV */
-           "foreach($x in $l){"
-           "  if($x.LanguageTag -match '^vi'){"
-           "    $drop=@($x.InputMethodTips | Where-Object{$_ -ne '" GTV_TIP_VI "'});"
-           "    foreach($d in $drop){[void]$x.InputMethodTips.Remove($d);$c=$true}"
-           "    if($x.InputMethodTips -notcontains '" GTV_TIP_VI "'){"
-           "      $x.InputMethodTips.Add('" GTV_TIP_VI "');$c=$true}}}"
+           "for($i=$l.Count-1;$i -ge 0;$i--){$x=$l[$i];if($x.LanguageTag -match '^vi' -and $x.InputMethodTips -contains '" GTV_TIP_VI "'){[void]$l.RemoveAt($i);$c=$true}}"
+           "$ei=-1;"
+           "for($i=0;$i -lt $l.Count;$i++){if($l[$i].LanguageTag -eq 'en-US'){$ei=$i;break}}"
+           "if($ei -lt 0){$add=New-WinUserLanguageList 'en-US';$l.Add($add[0]);$ei=$l.Count-1;$c=$true}"
+           "$en=$l[$ei];"
+           "for($i=$en.InputMethodTips.Count-1;$i -ge 0;$i--){$tip=$en.InputMethodTips[$i];if($tip -eq '" GTV_TIP_US "' -or $tip -eq '" GTV_TIP_EN "'){$en.InputMethodTips.RemoveAt($i);$c=$true}}"
+           "if($en.InputMethodTips -notcontains '" GTV_TIP_EN "'){$en.InputMethodTips.Add('" GTV_TIP_EN "');$c=$true}"
            "if($c){Set-WinUserLanguageList $l -Force};"
-           /* Verify: vi exists with GoTV as its sole keyboard */
+           "Remove-Item -LiteralPath 'HKCU:\\Software\\Microsoft\\CTF\\Assemblies\\0x0000042a' -Recurse -Force -ErrorAction SilentlyContinue;"
            "$l2=Get-WinUserLanguageList;"
-           "$ok=$true;"
-           "$hasVi2=$null -ne ($l2 | Where-Object{$_.LanguageTag -match '^vi'});"
-           "if(-not $hasVi2){$ok=$false}"
-           "foreach($x in $l2){"
-           "  if($x.LanguageTag -match '^vi'){"
-           "    if($x.InputMethodTips -notcontains '" GTV_TIP_VI "'){$ok=$false}"
-           "    if($x.InputMethodTips.Count -ne 1){$ok=$false}}}"
+           "$en2=$null;"
+           "for($i=0;$i -lt $l2.Count;$i++){if($l2[$i].LanguageTag -eq 'en-US'){$en2=$l2[$i];break}}"
+           "$goCount=0;$hasUs=$false;"
+           "if($null -ne $en2){for($i=0;$i -lt $en2.InputMethodTips.Count;$i++){if($en2.InputMethodTips[$i] -eq '" GTV_TIP_EN "'){$goCount++}elseif($en2.InputMethodTips[$i] -eq '" GTV_TIP_US "'){$hasUs=$true}}}"
+           "$viGone=$true;"
+           "for($i=0;$i -lt $l2.Count;$i++){if($l2[$i].LanguageTag -match '^vi' -and $l2[$i].InputMethodTips -contains '" GTV_TIP_VI "'){$viGone=$false;break}}"
+           "$ok=$null -ne $en2 -and $goCount -eq 1 -and -not $hasUs -and $viGone;"
            "if($ok){exit 0}else{exit 1}";
 }
 

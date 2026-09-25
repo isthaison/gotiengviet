@@ -84,18 +84,16 @@ STDAPI DllRegisterServer(void)
     if (SUCCEEDED(hr) && pProfiles) {
         pProfiles->Register(CLSID_GtvTextService);
 
-        /* Register ONLY under Vietnamese (0x042A). Do NOT register under
-         * en-US — that causes duplicate keyboard entries in Settings/Win+Space.
-         * Users add Vietnamese language in Settings to get the GoTV keyboard. */
         pProfiles->AddLanguageProfile(CLSID_GtvTextService,
-            GTV_LANG_VIETNAMESE,
+            GTV_LANG_ENGLISH,
             GUID_GtvProfile,
             GTV_TSF_DESC,
             (ULONG)wcslen(GTV_TSF_DESC),
             szModule,
             (ULONG)wcslen(szModule),
             0);
-        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile, TRUE);
+        pProfiles->EnableLanguageProfile(CLSID_GtvTextService, GTV_LANG_ENGLISH, GUID_GtvProfile, TRUE);
+        pProfiles->RemoveLanguageProfile(CLSID_GtvTextService, GTV_LANG_VIETNAMESE, GUID_GtvProfile);
 
         pProfiles->Release();
     }

@@ -55,7 +55,7 @@ chuyển bằng `Super+Space`. Chi tiết: [docs/dev.md](docs/dev.md).
 
 **Windows 10/11**: tải `gotiengviet-<version>-x64-setup.exe` ở trang
 [Releases](https://github.com/isthaison/gotiengviet/releases/latest) và chạy
-(cài per-user, không cần admin) → đăng xuất/đăng xuất lại; GoTV tự thay bàn phím US mặc định.
+(cài per-user, không cần admin) → đăng xuất/đăng nhập lại → chọn **GoTV** bằng `Win+Space`.
 Chi tiết: [docs/windows.md](docs/windows.md).
 
 **macOS**: tải `gotiengviet-<version>-macos.dmg` hoặc `.pkg` ở trang Releases (bản preview),

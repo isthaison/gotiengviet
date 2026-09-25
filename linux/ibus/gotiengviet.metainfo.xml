@@ -34,6 +34,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.20" date="2026-09-25">
+      <description>
+        <p>Dang</p>
+      </description>
+    </release>
     <release version="0.8.19" date="2026-09-24">
       <description>
         <p>Restore Ollama automatically at startup for Windows suggestions.</p>

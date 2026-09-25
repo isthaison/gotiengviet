@@ -5,8 +5,9 @@
 #include <glib.h>
 #include "../engine/engine.h"
 
-/* No on/off state: GoTV is the only US keyboard. The tray only shows
- * the input method: Telex [T] vs VNI [V]. */
+/* No on/off state: the TSF keyboard is always active; switching to
+ * English is done with Win+Space (Windows owns the language indicator).
+ * The tray only shows the input method: Telex [T] vs VNI [V]. */
 typedef struct {
     GtvConfig config;
     HWND hwnd_main;

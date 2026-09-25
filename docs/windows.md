@@ -2,9 +2,9 @@
 
 Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (stub `gtv_tsf.dll` đăng ký một lần + engine versioned trong `ver\<bản>\`, composition chuẩn Windows — đúng trong mọi ô nhập kể cả autocomplete/khó tính); app khay hệ thống lo cấu hình, gợi ý AI, cập nhật. Không còn hook bàn phím.
 
-- Cài lần đầu: đăng xuất/đăng nhập lại; ứng dụng tự gắn **GoTiengViet** làm bàn phím US duy nhất và xóa mục VIE cũ. Các bản **cập nhật sau không cần** đóng app, đăng xuất hay reboot (xem dưới).
-- Nếu chưa thấy bàn phím GoTiengViet: vào **Settings → Time & Language → Language** → chọn `English (United States)` → **Options** → **Add a keyboard** → chọn **GoTiengViet**. Không thấy nữa thì đăng xuất/đăng nhập lại một lần.
-- Icon khay hiện kiểu gõ như bản Linux: đỏ `T` = Telex, đỏ `V` = VNI (**click-trái** trực tiếp vào icon khay để chuyển đổi nhanh giữa Telex và VNI; chuột-phải mở menu; click đúp mở Cài đặt). Tooltip khay cũng hiện `GoTiengViet — Telex/VNI` nên chụp màn hình vẫn thấy mode gõ hiện tại.
+- Cài lần đầu: đăng xuất/đăng nhập lại rồi chọn GoTiengViet bằng `Win+Space`. Các bản **cập nhật sau không cần** đóng app, đăng xuất hay reboot (xem dưới).
+- Nếu chưa thấy bàn phím GoTiengViet: vào **Settings → Time & Language → Language** → chọn `English` (hoặc `Tiếng Việt`) → **Options** → **Add a keyboard** → chọn **GoTiengViet**. Không thấy nữa thì đăng xuất/đăng nhập lại một lần.
+- Icon khay hiện kiểu gõ như bản Linux: đỏ `T` = Telex, đỏ `V` = VNI (**click-trái** trực tiếp vào icon khay để chuyển đổi nhanh giữa Telex và VNI; chuột-phải mở menu; click đúp mở Cài đặt). Tooltip khay cũng hiện `GoTiengViet — Telex/VNI` nên chụp màn hình vẫn thấy mode gõ hiện tại. Không có chữ `E`/nút tắt: chuyển Anh/Việt bằng `Win+Space` (Windows quản lý indicator ngôn ngữ).
 - Telex/VNI, chuẩn dấu, chính tả đổi trong Bảng điều khiển/menu tray/click khay, TSF nhận ngay khi chuyển ô nhập (đọc lại cấu hình mỗi lần kích hoạt).
 
 ## Cài đặt và cập nhật

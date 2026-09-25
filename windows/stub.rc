@@ -1,13 +1,13 @@
 #include <windows.h>
 
 /* Stub version: bump ONLY when windows/tsf/stub_loader.cpp or
- * windows/tsf/tsf_register.cpp change. The installer entry carries no
- * ignoreversion flag, so Inno compares VERSIONINFO and replaces
- * gtv_tsf.dll only when the staged stub is newer: day-to-day updates
- * never touch the registered (possibly loaded) stub. Kept deliberately
- * independent from the app GTV_VERSION. */
-#define GTV_STUB_VERSION "2"
-#define GTV_STUB_VERSION_NUM 2,0,0,0
+ * windows/tsf/tsf_register.cpp change AND the installed base already
+ * carries the previous payload. v1 already registers VI-only, so the
+ * VI + drop-EN payload rides without a reboot (updates never re-run
+ * regsvr32; cleanup runs in-app). Kept deliberately independent from
+ * the app GTV_VERSION. */
+#define GTV_STUB_VERSION "1"
+#define GTV_STUB_VERSION_NUM 1,0,0,0
 
 1 VERSIONINFO
 FILEVERSION     GTV_STUB_VERSION_NUM

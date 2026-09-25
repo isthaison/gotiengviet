@@ -11,7 +11,7 @@ static NOTIFYICONDATAW nid = {0};
 static HICON icon_current = NULL;
 
 /* Like the Linux indicator (Telex/VNI label): T = Telex, V = VNI.
- * Always "on" — GoTV is the only US keyboard, not a tray state. */
+ * Always "on" — English is a Win+Space keyboard switch, not a tray state. */
 static HICON create_tray_text_icon(GtvMode mode) {
     int cx = GetSystemMetrics(SM_CXSMICON);
     int cy = GetSystemMetrics(SM_CYSMICON);

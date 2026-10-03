@@ -9,6 +9,7 @@
  * OS-validated path — in a hidden powershell child, because raw registry
  * writes are ignored/dropped by the input stack. */
 #include "input_setup.h"
+#include "keyboard.h"
 #include "version.h"
 
 #include <windows.h>
@@ -60,10 +61,21 @@ static void stamp_write(void) {
     g_free(path);
 }
 
+void gtv_input_setup_mark_done(void) {
+    stamp_write();
+}
+
 /* One powershell invocation: English keeps the plain US keyboard only
  * (any GoTV TIP left by 0.8.19 is dropped) and Vietnamese gets GoTV as
  * its ONLY keyboard (badge "VIE").
- * Result: exactly 2 switcher entries — ENG US keyboard + VIE GoTV. */
+ * Result: exactly 2 switcher entries — ENG US keyboard + VIE GoTV.
+ *
+ * Note: an existing vi entry whose InputMethodTips is EMPTY cannot be fixed
+ * in place — InputMethodTips is a read-only property, so .Add() on the
+ * returned collection is a no-op (Remove() appears to work because the list
+ * is re-read). Such an entry is what a failed install leaves behind, and it
+ * is why vi-VN showed up with no keyboard at all. Any vi entry that is not
+ * already exactly [GoTV] is therefore dropped and rebuilt from scratch. */
 static const char *setup_script(void) {
     return "$ErrorActionPreference='SilentlyContinue';"
            "$l=Get-WinUserLanguageList;"
@@ -73,33 +85,25 @@ static const char *setup_script(void) {
            "  if($x.LanguageTag -eq 'en-US'){"
            "    if($x.InputMethodTips -contains '" GTV_TIP_EN "'){[void]$x.InputMethodTips.Remove('" GTV_TIP_EN "');$c=$true}"
            "    if($x.InputMethodTips -notcontains '" GTV_TIP_US "'){$x.InputMethodTips.Add('" GTV_TIP_US "');$c=$true}}}"
-           /* Add Vietnamese with GoTV-only if missing */
-           "$hasVi=$null -ne ($l | Where-Object{$_.LanguageTag -match '^vi'});"
-           "if(-not $hasVi){"
-           "  $vi=New-WinUserLanguageList 'vi-VN';"
-           "  $vi[0].InputMethodTips.Clear();"
-           "  $vi[0].InputMethodTips.Add('" GTV_TIP_VI "');"
-           "  $l+=$vi;$c=$true}"
-           /* Existing vi: strip non-GoTV TIPs (built-in Telex), ensure GoTV */
-           "foreach($x in $l){"
-           "  if($x.LanguageTag -match '^vi'){"
-           "    $drop=@($x.InputMethodTips | Where-Object{$_ -ne '" GTV_TIP_VI "'});"
-           "    foreach($d in $drop){[void]$x.InputMethodTips.Remove($d);$c=$true}"
-           "    if($x.InputMethodTips -notcontains '" GTV_TIP_VI "'){"
-           "      $x.InputMethodTips.Add('" GTV_TIP_VI "');$c=$true}}}"
+           /* Drop every vi entry: rebuilt below with GoTV as the only TIP */
+           "for($i=$l.Count-1;$i-ge 0;$i--){"
+           "  if($l[$i].LanguageTag -match '^vi'){$l.RemoveAt($i);$c=$true}}"
+           "$vi=New-WinUserLanguageList 'vi-VN';"
+           "$vi[0].InputMethodTips.Clear();"
+           "$vi[0].InputMethodTips.Add('" GTV_TIP_VI "');"
+           "$l.Add($vi[0]);"
            "if($c){Set-WinUserLanguageList $l -Force};"
            /* Verify: en-US (if present) has US but not GoTV; vi has GoTV sole */
            "$l2=Get-WinUserLanguageList;"
            "$ok=$true;"
-           "$hasVi2=$null -ne ($l2 | Where-Object{$_.LanguageTag -match '^vi'});"
-           "if(-not $hasVi2){$ok=$false}"
+           "$vi2=@($l2 | Where-Object{$_.LanguageTag -match '^vi'});"
+           "if($vi2.Count -ne 1){$ok=$false}"
+           "elseif($vi2[0].InputMethodTips.Count -ne 1){$ok=$false}"
+           "elseif($vi2[0].InputMethodTips[0] -ne '" GTV_TIP_VI "'){$ok=$false}"
            "foreach($x in $l2){"
            "  if($x.LanguageTag -eq 'en-US'){"
            "    if($x.InputMethodTips -contains '" GTV_TIP_EN "'){$ok=$false}"
-           "    if($x.InputMethodTips -notcontains '" GTV_TIP_US "'){$ok=$false}}"
-           "  if($x.LanguageTag -match '^vi'){"
-           "    if($x.InputMethodTips -notcontains '" GTV_TIP_VI "'){$ok=$false}"
-           "    if($x.InputMethodTips.Count -ne 1){$ok=$false}}}"
+           "    if($x.InputMethodTips -notcontains '" GTV_TIP_US "'){$ok=$false}}}"
            "if($ok){exit 0}else{exit 1}";
 }
 
@@ -169,6 +173,11 @@ static gpointer setup_worker(gpointer data) {
 }
 
 void gtv_input_setup_ensure_async(void) {
+    /* The keyboard manager lets the user own their own list; once they have
+     * saved one, this automatic pass must never run again or it would undo
+     * their choices on the next launch. */
+    if (gtv_kbd_is_custom())
+        return;
     if (stamp_current())
         return;
     GThread *th = g_thread_new("gtv-input-setup", setup_worker, NULL);

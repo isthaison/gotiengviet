@@ -16,9 +16,15 @@ static const wchar_t *GTV_TSF_INPROC_KEY =
     L"Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32";
 
 /* TSF profile keys: HKCU\Software\Microsoft\CTF\TIP\{CLSID}\LanguageProfile\{langid}\{profileguid}
- * If these don't exist, the keyboard won't appear in language settings. */
+ * If these don't exist, the keyboard won't appear in language settings.
+ * The HKLM copy is the one that decides whether Windows KEEPS our tip in the
+ * user's language list: with only the HKCU keys present, Set-WinUserLanguageList
+ * silently drops 042A:{CLSID}{profile} and vi-VN ends up with zero keyboards,
+ * so Win+Space shows nothing. Verified with EnumLanguageProfiles(0x042A). */
 static const wchar_t *GTV_TSF_PROFILE_BASE =
     L"Software\\Microsoft\\CTF\\TIP\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\LanguageProfile";
+static const wchar_t *GTV_TSF_PROFILE_BASE_MACHINE =
+    L"SOFTWARE\\Microsoft\\CTF\\TIP\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\LanguageProfile";
 static const wchar_t *GTV_TSF_LANG_VI = L"0x0000042a";
 
 /* Category GUIDs: a keyboard TIP must register these, otherwise Win10/11
@@ -97,13 +103,30 @@ static gboolean registered_to(const wchar_t *dll_path) {
     return ok;
 }
 
-static gboolean reg_key_exists(const wchar_t *subkey) {
+static gboolean reg_key_exists_root(HKEY root, const wchar_t *subkey) {
     HKEY hkey = NULL;
-    LONG rc = RegOpenKeyExW(HKEY_CURRENT_USER, subkey, 0, KEY_READ, &hkey);
+    LONG rc = RegOpenKeyExW(root, subkey, 0, KEY_READ, &hkey);
     if (rc == ERROR_SUCCESS) {
         RegCloseKey(hkey);
         return TRUE;
     }
+    return FALSE;
+}
+
+static gboolean reg_key_exists(const wchar_t *subkey) {
+    return reg_key_exists_root(HKEY_CURRENT_USER, subkey);
+}
+
+/* TRUE when the machine-level Vietnamese profile leaf exists: that is the
+ * one ITfInputProcessorProfiles writes and the one Windows validates the
+ * 042A:{CLSID}{profile} tip string against. */
+static gboolean machine_profile_registered(void) {
+    wchar_t key_vi[MAX_PATH];
+    swprintf(key_vi, MAX_PATH, L"%ls\\%ls\\%ls",
+             GTV_TSF_PROFILE_BASE_MACHINE, GTV_TSF_LANG_VI, GTV_TSF_PROFILE_GUID_STR);
+    if (reg_key_exists_root(HKEY_LOCAL_MACHINE, key_vi))
+        return TRUE;
+    log_msg("No machine-level TSF profile for 0x042a (HKLM ...\\{profile})");
     return FALSE;
 }
 
@@ -192,13 +215,22 @@ static void ensure_profiles_registered(void) {
  * admin (see gtv_tsf_register_elevated). Missing keys are fine. */
 static void remove_stale_en_profile_tree(HKEY root) {
     wchar_t leaf[MAX_PATH], parent[MAX_PATH];
+    LONG rc_leaf, rc_parent;
     swprintf(leaf, MAX_PATH, L"%ls\\0x00000409\\%ls",
              GTV_TSF_PROFILE_BASE, GTV_TSF_PROFILE_GUID_STR);
     swprintf(parent, MAX_PATH, L"%ls\\0x00000409", GTV_TSF_PROFILE_BASE);
-    if (RegDeleteKeyW(root, leaf) == ERROR_SUCCESS)
+    rc_leaf = RegDeleteKeyW(root, leaf);
+    rc_parent = RegDeleteKeyW(root, parent);
+    if (rc_leaf == ERROR_SUCCESS)
         log_msg("Removed stale en-US profile leaf (root=%p)", (void *)root);
-    if (RegDeleteKeyW(root, parent) == ERROR_SUCCESS)
+    if (rc_parent == ERROR_SUCCESS)
         log_msg("Removed stale en-US profile key (root=%p)", (void *)root);
+    /* A leftover en-US profile makes the switcher offer GoTV twice, so make
+     * the failure visible instead of letting it pass silently. */
+    if (rc_leaf != ERROR_SUCCESS && rc_leaf != ERROR_FILE_NOT_FOUND)
+        log_msg("Failed to remove stale en-US profile leaf (rc=%ld)", (long)rc_leaf);
+    if (rc_parent != ERROR_SUCCESS && rc_parent != ERROR_FILE_NOT_FOUND)
+        log_msg("Failed to remove stale en-US profile key (rc=%ld)", (long)rc_parent);
 }
 
 /* Ensure BOTH keyboard and textservice categories are registered under
@@ -272,6 +304,20 @@ static void enable_profiles_via_api(void) {
 
     const LANGID langs[1] = { 0x042A };
     for (int i = 0; i < 1; i++) {
+        /* AddLanguageProfile is what actually writes
+         * ...\CTF\TIP\{CLSID}\LanguageProfile\0x0000042a\{profile}.
+         * EnableLanguageProfile alone only flips the per-user enabled bit, and
+         * without the profile leaf Windows drops 042A:{CLSID}{profile} from
+         * the user language list — the language then has no keyboard at all
+         * and Win+Space shows nothing. It is idempotent (S_FALSE when the
+         * profile is already there), so call it on every launch.
+         * Unelevated: it writes HKLM only when it can; the installer runs
+         * this once as admin for the machine-level copy. */
+        hr = pProfiles->lpVtbl->AddLanguageProfile(pProfiles, &clsid, langs[i],
+                                                   &guidProfile, L"GoTV", 4,
+                                                   NULL, 0, 0);
+        log_msg("AddLanguageProfile lang=0x%04x hr=0x%08lx", (unsigned)langs[i],
+                (unsigned long)hr);
         hr = pProfiles->lpVtbl->EnableLanguageProfile(pProfiles, &clsid, langs[i],
                                                        &guidProfile, TRUE);
         log_msg("EnableLanguageProfile lang=0x%04x hr=0x%08lx", (unsigned)langs[i],
@@ -456,6 +502,13 @@ void gtv_tsf_install_ensure_registered(void) {
         log_msg("TSF registration verified OK");
     else
         log_msg("WARNING: TSF registration may have failed - check logs");
+
+    /* The HKLM profile leaf needs admin to write. Without it Windows drops
+     * GoTV from the vi language, so point the user at the one command that
+     * fixes it instead of leaving an empty language in the switcher. */
+    if (!machine_profile_registered())
+        log_msg("WARNING: machine profile missing - run: gotiengviet.exe --register-tsf "
+                "(admin) or reinstall; vi-VN will show no keyboard until then");
 }
 
 /* TRUE when EnumLanguageProfiles(0x042A) returns our profile, i.e. the

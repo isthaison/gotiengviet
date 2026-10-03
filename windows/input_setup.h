@@ -12,4 +12,10 @@
  * Windows drops the TIP and we retry later. */
 void gtv_input_setup_ensure_async(void);
 
+/* Marks the automatic setup as done without touching the language list, so
+ * a later gtv_input_setup_ensure_async() is a no-op. Used after the user
+ * saves their own keyboard list in the keyboard manager: from then on the
+ * list is theirs and the automatic pass must never overwrite it. */
+void gtv_input_setup_mark_done(void);
+
 #endif /* GTV_INPUT_SETUP_H */

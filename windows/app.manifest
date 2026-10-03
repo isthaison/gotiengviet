@@ -28,8 +28,13 @@
   </trustInfo>
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
-      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
-      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">system</dpiAwareness>
+      <!-- Per-monitor so the suggestion overlay can be built at the caret
+           monitor's real scale. Under "system" awareness a window on a scaled
+           secondary monitor is sized for the system DPI and then bitmap
+           stretched by DWM, and GetDeviceCaps(LOGPIXELSY) cannot report the
+           scale the overlay actually needs. -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
     </windowsSettings>
   </application>
 </assembly>

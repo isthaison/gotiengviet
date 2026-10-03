@@ -1,13 +1,24 @@
 #include <windows.h>
 
-/* Stub version: bump ONLY when windows/tsf/stub_loader.cpp or
- * windows/tsf/tsf_register.cpp change AND the installed base already
- * carries the previous payload. v1 already registers VI-only, so the
- * VI + drop-EN payload rides without a reboot (updates never re-run
- * regsvr32; cleanup runs in-app). Kept deliberately independent from
- * the app GTV_VERSION. */
-#define GTV_STUB_VERSION "1"
-#define GTV_STUB_VERSION_NUM 1,0,0,0
+/* Stub version: bump by 1 whenever windows/tsf/stub_loader.cpp or
+ * windows/tsf/tsf_register.cpp change.
+ *
+ * It MUST be strictly increasing. The installer's gtv_tsf.dll entry has no
+ * ignoreversion flag (windows/installer.iss), so Inno compares VERSIONINFO
+ * and replaces the stub ONLY when the staged version is NEWER. A version
+ * that goes backwards is never installed: the machine keeps the old stub
+ * forever and every later stub fix is silently dropped.
+ *
+ * 0.8.20 (ec70211) did change tsf_register.cpp - register under Vietnamese
+ * instead of English - but reset this to "1", reasoning that v1 already
+ * registered VI-only. That skips exactly the machines that had the
+ * intervening v2: 1.0 < 2.0, so Inno kept the stale stub and no subsequent
+ * stub fix could land. Going to 3, the next value above anything ever
+ * shipped, restores monotonicity.
+ *
+ * Deliberately independent from the app GTV_VERSION. */
+#define GTV_STUB_VERSION "3"
+#define GTV_STUB_VERSION_NUM 3,0,0,0
 
 1 VERSIONINFO
 FILEVERSION     GTV_STUB_VERSION_NUM

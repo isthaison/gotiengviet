@@ -1,6 +1,10 @@
 #include "suggest_overlay.h"
 #include "suggest_ipc.h"
 
+#include <glib.h>
+#include <glib/gstdio.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include <wchar.h>
 
@@ -9,6 +13,8 @@
 typedef struct {
     HWND hwnd;
     HFONT font;
+    UINT font_dpi; /* DPI s_overlay.font was built for, 0 = none */
+    UINT dpi;      /* DPI of the monitor the overlay currently sits on */
     DWORD source_pid;
     DWORD generation;
     DWORD count;
@@ -19,23 +25,92 @@ typedef struct {
 
 static GtvSuggestOverlay s_overlay;
 
-static HFONT overlay_font(void) {
-    if (!s_overlay.font) {
-        HDC dc = GetDC(NULL);
-        int dpi = dc ? GetDeviceCaps(dc, LOGPIXELSY) : 96;
-        if (dc) ReleaseDC(NULL, dc);
-        s_overlay.font = CreateFontW(-MulDiv(9, dpi, 72), 0, 0, 0, FW_NORMAL,
-                                     FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                                     OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                     DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-                                     L"Segoe UI");
+/* Misplaced caret is invisible from the outside, so leave a short trail in
+ * %APPDATA%\gotiengviet\suggest.log. Enough to tell a bad rect arriving from
+ * the text service apart from bad placement done here. Bounded size. */
+static void overlay_log(const gchar *fmt, ...) {
+    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    g_mkdir_with_parents(dir, 0755);
+    gchar *path = g_build_filename(dir, "suggest.log", NULL);
+    g_free(dir);
+
+    FILE *probe = g_fopen(path, "r");
+    if (probe) {
+        fseek(probe, 0, SEEK_END);
+        if (ftell(probe) > 65536) {
+            fclose(probe);
+            g_remove(path);
+            probe = NULL;
+        } else fclose(probe);
     }
+
+    FILE *f = g_fopen(path, "a");
+    g_free(path);
+    if (!f) return;
+    GDateTime *now = g_date_time_new_now_local();
+    gchar *ts = now ? g_date_time_format(now, "%Y-%m-%d %H:%M:%S") : g_strdup("?");
+    fprintf(f, "[%s] ", ts);
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(f, fmt, args);
+    va_end(args);
+    fputc('\n', f);
+    fclose(f);
+    g_free(ts);
+    if (now) g_date_time_unref(now);
+}
+
+/* Real DPI of the monitor the caret is on. The tray process is per-monitor
+ * aware, so this is not virtualised: the popup is built at the same scale as
+ * the host app instead of the system one. GetDpiForWindow is resolved at
+ * runtime (Windows 10 1607+); GetDeviceCaps is the fallback. */
+static UINT overlay_dpi(void) {
+    typedef UINT (WINAPI *GetDpiForWindowFn)(HWND);
+    static GetDpiForWindowFn get_dpi_for_window = NULL;
+    static int probed = 0;
+    if (!probed) {
+        probed = 1;
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        FARPROC proc = user32
+            ? GetProcAddress(user32, "GetDpiForWindow")
+            : NULL;
+        /* GetProcAddress has no typed variant; go through a void* to keep
+         * -Wall from flagging the function-pointer cast. */
+        *(void **)&get_dpi_for_window = (void *)proc;
+    }
+
+    UINT dpi = 0;
+    HWND focus = GetForegroundWindow();
+    if (get_dpi_for_window && focus && IsWindow(focus))
+        dpi = get_dpi_for_window(focus);
+    if (dpi < 48) {
+        HDC dc = GetDC(NULL);
+        dpi = dc ? (UINT)GetDeviceCaps(dc, LOGPIXELSY) : 96;
+        if (dc) ReleaseDC(NULL, dc);
+    }
+    return dpi >= 48 ? dpi : 96;
+}
+
+static HFONT overlay_font(UINT dpi) {
+    if (s_overlay.font && s_overlay.font_dpi == dpi)
+        return s_overlay.font;
+    if (s_overlay.font) {
+        DeleteObject(s_overlay.font);
+        s_overlay.font = NULL;
+        s_overlay.font_dpi = 0;
+    }
+    s_overlay.font = CreateFontW(-MulDiv(9, dpi, 72), 0, 0, 0, FW_NORMAL,
+                                 FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                                 OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                                 L"Segoe UI");
+    s_overlay.font_dpi = s_overlay.font ? dpi : 0;
     return s_overlay.font;
 }
 
 static int overlay_row_height(HDC dc) {
     TEXTMETRICW metrics;
-    HFONT font = overlay_font();
+    HFONT font = overlay_font(s_overlay.dpi);
     HFONT old = font ? (HFONT)SelectObject(dc, font) : NULL;
     int height = GetTextMetricsW(dc, &metrics) ? metrics.tmHeight + 8 : 24;
     if (old) SelectObject(dc, old);
@@ -44,42 +119,93 @@ static int overlay_row_height(HDC dc) {
 
 static void overlay_measure(int *width, int *height) {
     HDC dc = GetDC(s_overlay.hwnd);
-    int max_width = 140;
-    int row_height = 24;
+    int max_width = MulDiv(140, (int)s_overlay.dpi, 96);
+    int row_height = MulDiv(24, (int)s_overlay.dpi, 96);
     if (dc) {
         row_height = overlay_row_height(dc);
-        HFONT font = overlay_font();
+        HFONT font = overlay_font(s_overlay.dpi);
         HFONT old = font ? (HFONT)SelectObject(dc, font) : NULL;
         for (DWORD i = 0; i < s_overlay.count; i++) {
             SIZE size;
             if (GetTextExtentPoint32W(dc, s_overlay.candidates[i],
                                       (int)wcslen(s_overlay.candidates[i]), &size) &&
-                size.cx + 36 > max_width)
-                max_width = size.cx + 36;
+                size.cx + MulDiv(36, (int)s_overlay.dpi, 96) > max_width)
+                max_width = size.cx + MulDiv(36, (int)s_overlay.dpi, 96);
         }
         if (old) SelectObject(dc, old);
         ReleaseDC(s_overlay.hwnd, dc);
     }
-    *width = max_width > 340 ? 340 : max_width;
-    *height = (int)s_overlay.count * row_height + 4;
+    int max_px = MulDiv(340, (int)s_overlay.dpi, 96);
+    *width = max_width > max_px ? max_px : max_width;
+    *height = (int)s_overlay.count * row_height + MulDiv(4, (int)s_overlay.dpi, 96);
 }
 
 static void overlay_show(RECT caret) {
+    UINT dpi = overlay_dpi();
+    if (dpi != s_overlay.dpi) {
+        overlay_log("dpi %u -> %u", (unsigned)s_overlay.dpi, (unsigned)dpi);
+        s_overlay.dpi = dpi;
+    }
+
     int width, height;
     overlay_measure(&width, &height);
 
     HMONITOR monitor = MonitorFromRect(&caret, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO info = {0};
+    MONITORINFO info;
     info.cbSize = sizeof(info);
-    RECT work = caret;
-    if (monitor && GetMonitorInfoW(monitor, &info)) work = info.rcWork;
+    BOOL have_work = FALSE;
+    RECT work;
+    /* Only clamp when the work area is known. Defaulting it to the caret rect
+     * made the clamp below compare the popup against itself, which pinned it
+     * to the caret's own top-left corner. */
+    if (monitor && GetMonitorInfoW(monitor, &info)) {
+        work = info.rcWork;
+        have_work = TRUE;
+    }
 
     int x = caret.left;
     int y = caret.bottom + 2;
-    if (y + height > work.bottom) y = caret.top - height - 2;
-    if (x + width > work.right) x = work.right - width;
-    if (x < work.left) x = work.left;
-    if (y < work.top) y = work.top;
+    if (have_work) {
+        /* Flip above the caret, but only when the popup genuinely fits there:
+         * clamping to work.top afterwards used to undo the flip and leave the
+         * popup far away from the caret. */
+        if (y + height > work.bottom) {
+            int above = caret.top - height - 2;
+            if (above >= work.top)
+                y = above;
+            else if (work.bottom - height >= work.top)
+                y = work.bottom - height;
+        }
+        if (x + width > work.right) x = work.right - width;
+        if (x < work.left) x = work.left;
+        if (y < work.top) y = work.top;
+        if (y + height > work.bottom) y = work.bottom - height;
+    }
+
+    /* A caret rect that misses the focused window was produced upstream in the
+     * text service; record it, since that is the signature of the popup
+     * appearing in the wrong place. Throttled: this runs on the tray UI thread
+     * once per keystroke, so a persistent fault must not turn into a file write
+     * per character. */
+    static DWORD last_anomaly = 0;
+    HWND focus = GetForegroundWindow();
+    RECT fr;
+    if (focus && GetWindowRect(focus, &fr)) {
+        RECT hit;
+        if (!IntersectRect(&hit, &caret, &fr)) {
+            DWORD now = GetTickCount();
+            if (!last_anomaly || now - last_anomaly >= 2000) {
+                last_anomaly = now;
+                overlay_log("caret %ld,%ld,%ld,%ld outside focus window "
+                            "%ld,%ld,%ld,%ld -> popup at %d,%d dpi %u",
+                            (long)caret.left, (long)caret.top,
+                            (long)caret.right, (long)caret.bottom,
+                            (long)fr.left, (long)fr.top,
+                            (long)fr.right, (long)fr.bottom, x, y,
+                            (unsigned)s_overlay.dpi);
+            }
+        }
+    }
 
     SetWindowPos(s_overlay.hwnd, HWND_TOPMOST, x, y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -95,13 +221,15 @@ static void overlay_paint(HWND hwnd) {
     FrameRect(dc, &client, (HBRUSH)(COLOR_WINDOWFRAME + 1));
 
     int row_height = overlay_row_height(dc);
-    HFONT font = overlay_font();
+    HFONT font = overlay_font(s_overlay.dpi);
     HFONT old = font ? (HFONT)SelectObject(dc, font) : NULL;
     SetBkMode(dc, TRANSPARENT);
+    int gutter = MulDiv(2, (int)s_overlay.dpi, 96);
+    int indent = MulDiv(6, (int)s_overlay.dpi, 96);
     for (DWORD i = 0; i < s_overlay.count; i++) {
         WCHAR label[GTV_SUGGEST_IPC_CANDIDATE_BYTES + 8];
-        RECT row = { 1, 2 + (int)i * row_height, client.right - 1,
-                     2 + ((int)i + 1) * row_height };
+        RECT row = { gutter, gutter + (int)i * row_height, client.right - gutter,
+                     gutter + ((int)i + 1) * row_height };
         if (i == s_overlay.selected) {
             FillRect(dc, &row, (HBRUSH)(COLOR_HIGHLIGHT + 1));
             SetTextColor(dc, GetSysColor(COLOR_HIGHLIGHTTEXT));
@@ -111,7 +239,7 @@ static void overlay_paint(HWND hwnd) {
         swprintf(label, sizeof(label) / sizeof(label[0]), L"%lu  %ls",
                  (unsigned long)(i + 1), s_overlay.candidates[i]);
         label[(sizeof(label) / sizeof(label[0])) - 1] = L'\0';
-        row.left += 6;
+        row.left += indent;
         DrawTextW(dc, label, -1, &row,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
     }
@@ -149,6 +277,7 @@ BOOL gtv_suggest_overlay_init(HINSTANCE instance, HWND owner) {
     s_overlay.hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
                                      GTV_SUGGEST_OVERLAY_CLASS, L"GoTiengViet",
                                      WS_POPUP, 0, 0, 1, 1, owner, NULL, instance, NULL);
+    if (s_overlay.hwnd) s_overlay.dpi = overlay_dpi();
     return s_overlay.hwnd != NULL;
 }
 
@@ -157,6 +286,8 @@ void gtv_suggest_overlay_cleanup(void) {
     s_overlay.hwnd = NULL;
     if (s_overlay.font) DeleteObject(s_overlay.font);
     s_overlay.font = NULL;
+    s_overlay.font_dpi = 0;
+    s_overlay.dpi = 0;
     s_overlay.source_pid = 0;
     s_overlay.generation = 0;
     s_overlay.count = 0;

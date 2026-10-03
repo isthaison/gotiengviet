@@ -1,6 +1,8 @@
 /* Tests for engine/verdir.c (versioned install layout helpers). Portable. */
 #include "../engine/internal.h"
 #include <glib/gstdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static void test_app_dir(void) {
     gchar *d;
@@ -195,6 +197,43 @@ static void test_legacy(void) {
     g_free(tmp);
 }
 
+/* windows/stub.rc must carry a strictly increasing stub version.
+ *
+ * The installer's gtv_tsf.dll entry has no ignoreversion flag, so Inno
+ * replaces the registered stub only when the staged VERSIONINFO is NEWER.
+ * A backwards version therefore never reaches any machine - and it fails
+ * silently, which is exactly how 0.8.20 shipped a stub fix that never
+ * landed on machines carrying the intervening v2. FLOOR is the highest
+ * value ever released; raise it whenever the stub version is raised. */
+static void test_stub_version_monotonic(void) {
+    const long floor = 3; /* highest stub version ever released */
+    const char *needles[] = { "#define GTV_STUB_VERSION_NUM ", "#define GTV_STUB_VERSION \"" };
+
+    gchar *path = g_build_filename(g_get_current_dir(), "windows", "stub.rc", NULL);
+    gchar *rc = NULL;
+    if (!g_file_get_contents(path, &rc, NULL, NULL)) {
+        g_test_skip("windows/stub.rc not found from the current directory");
+        g_free(path);
+        return;
+    }
+    g_free(path);
+
+    /* Major component of the numeric tuple. */
+    const char *num = strstr(rc, needles[0]);
+    g_assert_nonnull(num);
+    long major = strtol(num + strlen(needles[0]), NULL, 10);
+    g_assert_cmpint(major, >=, floor);
+
+    /* The readable string must agree with the tuple, otherwise Inno
+     * compares a VERSIONINFO nobody intended to ship. */
+    const char *txt = strstr(rc, needles[1]);
+    g_assert_nonnull(txt);
+    txt += strlen(needles[1]);
+    g_assert_cmpint((long)strtol(txt, NULL, 10), ==, major);
+
+    g_free(rc);
+}
+
 int main(int argc, char **argv) {
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/verdir/app-dir", test_app_dir);
@@ -203,5 +242,6 @@ int main(int argc, char **argv) {
     g_test_add_func("/verdir/forward", test_forward);
     g_test_add_func("/verdir/cleanup", test_cleanup);
     g_test_add_func("/verdir/legacy", test_legacy);
+    g_test_add_func("/verdir/stub-version-monotonic", test_stub_version_monotonic);
     return g_test_run();
 }

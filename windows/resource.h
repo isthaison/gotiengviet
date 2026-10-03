@@ -36,8 +36,10 @@
 #define ID_TRAY_MODERN      308
 #define ID_TRAY_UPDATE      309
 #define ID_TRAY_STARTUP_ADMIN 312
+#define ID_TRAY_KEYBOARDS   313
 
 #define IDC_BTN_DATA        217
+#define IDC_BTN_KEYBOARD    253
 #define IDC_LBL_AI_STATUS   233
 #define IDC_LBL_AI_LOG      234
 #define IDC_EDIT_AI_LOG     235
@@ -55,5 +57,21 @@
 #define IDC_DATA_FOLDER     230
 #define IDC_DATA_CLOSE      231
 #define IDC_DATA_NOTE       232
+
+/* Keyboard (Win+Space) manager: current list + "add available" picker. */
+#define IDD_KEYBOARD_DIALOG 240
+#define IDD_KBD_ADD_DIALOG  260
+#define IDC_KBD_LIST        241
+#define IDC_KBD_UP          242
+#define IDC_KBD_DOWN        243
+#define IDC_KBD_REMOVE      244
+#define IDC_KBD_ADD         245
+#define IDC_KBD_DEFAULT     246
+#define IDC_KBD_CLOSE       247
+#define IDC_KBD_STATUS      248
+#define IDC_KBD_LANG        249
+#define IDC_KBD_AVAIL       250
+#define IDC_KBD_AVAIL_ADD   251
+#define IDC_KBD_LBL_CURRENT 254
 
 #endif /* RESOURCE_H */

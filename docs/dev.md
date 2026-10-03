@@ -80,6 +80,32 @@ Quy ước đa nền tảng: `engine/` không chứa code riêng OS nào
 `macos/` gọi vào engine. Thêm file nguồn mới thì khai báo ở
 `mk/common.mk` (Windows) — Linux tự glob `engine/*.c`.
 
+## DLL bị inject: `gtv_tsf.dll` + `gtv_engine.dll` (Windows)
+
+Windows nạp TSF text service vào **mọi** process nhận text input. Loader
+Windows resolve import **theo tên file**, không quan tâm thư mục: app host đã
+nạp `zlib1.dll` của riêng nó thì DLL ta muốn nạp cùng tên sẽ bị chính nó chiếm.
+Microsoft Teams (Chromium) đóng gói `zlib1.dll` chỉ export API `z_*`, nên
+import `deflate` của glib rơi vào đó và app chết với *"The procedure entry
+point deflate could not be located in ...libgio-2.0-0.dll"*.
+
+Vì vậy hai DLL này **không được import DLL của bên thứ ba nào**:
+glib/gio/zlib/intl/iconv/pcre2/libffi/libstdc++/libgcc/winpthread đều static
+link **vào trong** `gtv_engine.dll` (`Makefile.win`, `GLIB_STATIC_DEFS`); nó
+chỉ còn import DLL hệ thống. `gotiengviet.exe` thì vẫn dùng glib dạng shared
+(bình thường, nó là process riêng).
+
+Hệ quả bắt buộc khi sửa:
+
+- Engine dùng glib phải biên dịch trong cây riêng `build/win-static/`
+  (ABI static khác shared: `dllimport` vs gọi trực tiếp) — không trộn với
+  object đi vào `gotiengviet.exe`.
+- Thêm thư viện mới cho engine ⇒ thêm vào `GLIB_STATIC_LIBS` (static) và vào
+  `STATIC_SYS_LIBS` (DLL hệ thống).
+- `make -f Makefile.win check-tsf-isolated` (đã nằm trong `test` và `staging`)
+  fail nếu `gtv_tsf.dll`/`gtv_engine.dll` import bất kỳ DLL nào không thuộc
+  danh sách hệ thống.
+
 Mọi lệnh shell gom trong `./gtv.sh` duy nhất (`build|test|vet|clean|install|package|bump|help`).
 
 ## API thư viện C

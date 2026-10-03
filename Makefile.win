@@ -6,14 +6,56 @@ PKG_CONFIG ?= pkg-config
 include mk/common.mk
 
 CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
-LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32 -lole32 -luuid -lcomctl32
+# -loleaut32: windows/keyboard.c calls SysFreeString (BSTR) for the TSF profiles.
+LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm -mwindows -luser32 -lshell32 -ladvapi32 -lole32 -loleaut32 -luuid -lcomctl32
 
 TSF_CXXFLAGS ?= -O2 -g -std=c++14 -Wall -Wextra -Wno-unused-parameter -Iengine -Iwindows/tsf $(shell $(PKG_CONFIG) --cflags gio-2.0)
-# Versioned engine DLL (real text service, lives in ver\<V>\).
-TSF_ENGINE_LDFLAGS ?= -shared windows/tsf/gtv_engine.def $(ENGINE_OBJS) $(shell $(PKG_CONFIG) --libs gio-2.0) -lintl -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -lgdi32 -mwindows
-# Stable stub (registered once, almost never replaced): pure Win32 only, so
-# it loads even though glib lives in the versioned payload, not beside it.
+# Stable stub (registered once, almost never replaced): pure Win32, not even a
+# runtime DLL, so it always loads - see the note on the injected engine below.
 STUB_LDFLAGS ?= -shared windows/tsf/gtv_tsf.def -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -mwindows
+
+# --- Injected TSF engine: statically linked glib -------------------------
+# gtv_engine.dll is loaded by Windows into EVERY process that takes text
+# input (Word, Chrome, Teams, VS Code, ...). An injected DLL must not import
+# third-party DLLs by name: the loader resolves imports by base name against
+# whatever is already mapped, so a host app that ships its own copy silently
+# hijacks ours. Microsoft Teams (Chromium) ships zlib1.dll exporting only the
+# z_* prefixed API, so glib's "deflate" import resolved to it and the whole
+# app died with "The procedure entry point deflate could not be located in
+# ...libgio-2.0-0.dll".
+#
+# So glib/gio/zlib/intl/iconv/pcre2/libffi/libstdc++/libgcc/winpthread are all
+# linked INTO the engine DLL; it then imports system DLLs only (the `test`
+# target and `check-tsf-isolated` below enforce that). gotiengviet.exe keeps
+# the shared glib: it is a normal process and may ship the MSYS2 runtime.
+#
+# Static and shared glib disagree on the ABI (dllimport vs direct calls), so
+# the engine objects are compiled into a separate tree, never shared with the
+# objects that go into gotiengviet.exe.
+GLIB_STATIC_DEFS = -DGLIB_STATIC_COMPILATION -DGOBJECT_STATIC_COMPILATION \
+                   -DGIO_STATIC_COMPILATION -DGMODULE_STATIC_COMPILATION
+STATIC_CFLAGS ?= $(CFLAGS) $(GLIB_STATIC_DEFS)
+STATIC_CXXFLAGS ?= $(TSF_CXXFLAGS) $(GLIB_STATIC_DEFS)
+
+# -nodefaultlibs: gcc's spec would append -lpthread dynamically, which drags
+# libwinpthread-1.dll back in as an import. Everything is spelled out instead;
+# one --start-group keeps the mutual references between the archives resolvable.
+STATIC_SYS_LIBS = -lmingw32 -lmoldname -lmingwex -lmsvcrt -lkernel32 \
+                  -lole32 -loleaut32 -luuid -ladvapi32 -luser32 -lgdi32 \
+                  -lpsapi -lshlwapi -lshell32 -lws2_32 -liphlpapi -ldnsapi
+GLIB_STATIC_LIBS = -Wl,--start-group \
+                   -Wl,-Bstatic -lgio-2.0 -lgobject-2.0 -lgmodule-2.0 -lglib-2.0 \
+                   -lintl -lffi -liconv -lpcre2-8 -lz -Wl,-Bdynamic \
+                   $(STATIC_SYS_LIBS) \
+                   -Wl,-Bstatic -lstdc++ -lgcc -lgcc_eh -lpthread -Wl,-Bdynamic \
+                   -Wl,--end-group
+# MSYS2's static libglib ships a vasnprintf.o that wants the msvcrt *import*
+# thunk for wcrtomb, but mingw-w64 only provides wcrtomb as a plain function.
+# Point the import name at the real symbol so the link closes.
+GLIB_STATIC_FIXUPS = -Wl,--defsym=__imp_wcrtomb=wcrtomb
+
+# Versioned engine DLL (real text service, lives in ver\<V>\).
+TSF_ENGINE_LDFLAGS ?= -shared -nodefaultlibs windows/tsf/gtv_engine.def $(STATIC_ENGINE_OBJS) $(GLIB_STATIC_LIBS) $(GLIB_STATIC_FIXUPS) -Wl,--exclude-libs,ALL -mwindows
 
 RC_SRC = windows/resource.rc
 
@@ -26,8 +68,12 @@ VERSION_NUM ?= $(VERSION).0
 
 ENGINE_OBJS = $(ENGINE_SRCS:%.c=build/win/%.o)
 WIN_OBJS = $(WIN_SRCS:%.c=build/win/%.o)
-TSF_ENGINE_OBJS = $(TSF_ENGINE_SRCS:%.cpp=build/win/%.o)
 TSF_STUB_OBJS = $(TSF_STUB_SRCS:%.cpp=build/win/%.o)
+# Separate tree for the injected engine (see GLIB_STATIC_DEFS above): the same
+# C sources compiled against the static glib ABI must not be mixed with the
+# shared-glib objects that end up in gotiengviet.exe.
+STATIC_ENGINE_OBJS = $(ENGINE_SRCS:%.c=build/win-static/%.o)
+STATIC_TSF_ENGINE_OBJS = $(TSF_ENGINE_SRCS:%.cpp=build/win-static/%.o)
 RC_OBJ = build/win/windows/resource.o
 STUB_RC_OBJ = build/win/windows/stub.o
 CORE_LIB = build/win/libgotiengviet.a
@@ -55,9 +101,18 @@ $(TSF_TARGET): $(TSF_STUB_OBJS) $(STUB_RC_OBJ) windows/tsf/gtv_tsf.def
 	$(CXX) $(TSF_STUB_OBJS) $(STUB_RC_OBJ) $(STUB_LDFLAGS) -o $@
 
 # Versioned engine: the real text service, forwarded to by the stub.
-$(TSF_ENGINE_TARGET): $(TSF_ENGINE_OBJS) $(ENGINE_OBJS) windows/tsf/gtv_engine.def
+# Statically linked (no third-party DLL imports) - see GLIB_STATIC_DEFS above.
+$(TSF_ENGINE_TARGET): $(STATIC_TSF_ENGINE_OBJS) $(STATIC_ENGINE_OBJS) windows/tsf/gtv_engine.def
 	@mkdir -p $(dir $@)
-	$(CXX) $(TSF_ENGINE_OBJS) $(TSF_ENGINE_LDFLAGS) -o $@
+	$(CXX) $(STATIC_TSF_ENGINE_OBJS) $(TSF_ENGINE_LDFLAGS) -o $@
+
+build/win-static/windows/tsf/%.o: windows/tsf/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(STATIC_CXXFLAGS) -c $< -o $@
+
+build/win-static/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(STATIC_CFLAGS) -c $< -o $@
 
 build/win/windows/stub.o: windows/stub.rc
 	@mkdir -p $(dir $@)
@@ -75,7 +130,10 @@ build/win/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/win/windows/resource.o: windows/resource.rc
+# windows/app.manifest is embedded by resource.rc but is not included from it,
+# so without listing it here a manifest-only edit is silently ignored until an
+# unrelated rebuild or a clean.
+build/win/windows/resource.o: windows/resource.rc windows/app.manifest
 	@mkdir -p $(dir $@)
 	$(WINDRES) -Iwindows $< -o $@
 
@@ -95,10 +153,36 @@ $(FAKE_CURL): tests/fake_curl.c
 	@mkdir -p $(dir $@)
 	$(CC) $(TEST_CFLAGS) $< $(TEST_LDFLAGS) -o $@
 
-test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(TEST_VERDIR) $(FAKE_CURL)
+test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(TEST_VERDIR) $(FAKE_CURL) check-tsf-isolated
 	GTV_DATA_DIR="$(CURDIR)/data" ./$(TEST_ENGINE)
 	GTV_DATA_DIR="$(CURDIR)/data" GTV_TEST_CURL_DIR="$(CURDIR)/build/win/fixtures" ./$(TEST_SUPPORT)
 	./$(TEST_VERDIR)
+
+# Guard for the injected-DLL contract: Windows loads gtv_tsf.dll and
+# gtv_engine.dll into every text-input process, and the loader binds imports by
+# base name against whatever is already mapped there. Any third-party import
+# is a live landmine - Microsoft Teams (Chromium) ships its own zlib1.dll that
+# exports only z_deflate, and that turned glib's "deflate" import into an
+# unrecoverable load failure. Keep both DLLs on system DLLs only.
+TSF_SYSTEM_DLLS = advapi32 bcrypt combase crypt32 dbghelp dnsapi gdi32 gdi32full \
+                  iphlpapi kernel32 msvcrt netapi32 normaliz ntdll ole32 oleaut32 \
+                  powrprof psapi rpcrt4 sechost setupapi shell32 shlwapi user32 \
+                  userenv version winhttp winmm wintrust ws2_32
+check-tsf-isolated: $(TSF_TARGET) $(TSF_ENGINE_TARGET)
+	@fail=0; \
+	for dll in $(TSF_TARGET) $(TSF_ENGINE_TARGET); do \
+	  while IFS= read -r dep; do \
+	    low=$$(printf '%s' "$$dep" | tr 'A-Z' 'a-z'); \
+	    ok=0; \
+	    for sys in $(TSF_SYSTEM_DLLS); do \
+	      [ "$$low" = "$$sys.dll" ] && ok=1 && break; \
+	    done; \
+	    if [ "$$ok" = 0 ]; then \
+	      echo "  FAIL $$dll imports $$dep (must be a system DLL)"; fail=1; \
+	    fi; \
+	  done < <(objdump -p "$$dll" | awk '/DLL Name:/ {print $$3}'); \
+	done; \
+	if [ "$$fail" = 0 ]; then echo "  ok: TSF DLLs import system DLLs only"; else exit 1; fi
 
 # Staging dir consumed by windows/installer.iss (SourceDir=release-pkg).
 # New-world layout: stable root (stub + current.txt) + versioned
@@ -106,7 +190,7 @@ test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(TEST_VERDIR) $(FAKE_CURL)
 # processes never block the installer: no forced closes, no logoff.
 STAGE = release-pkg
 VERDIR = $(STAGE)/ver/$(VERSION)
-staging: $(TARGET) $(TSF_TARGET) $(TSF_ENGINE_TARGET)
+staging: $(TARGET) $(TSF_TARGET) $(TSF_ENGINE_TARGET) check-tsf-isolated
 	mkdir -p $(STAGE) $(VERDIR)/data
 	# Stage exactly one payload: drop other ver\<V>\ dirs left from previous
 	# packages (the installer would otherwise ship stale payloads).
@@ -142,7 +226,7 @@ setup: staging
 	iscc.exe /Q "/DAppVersion=$(VERSION)" "/DAppVerNum=$(VERSION_NUM)" "/DSourceDir=..\$(STAGE)" windows/installer.iss
 
 clean:
-	rm -rf build/win
+	rm -rf build/win build/win-static
 	rm -rf $(STAGE)
 
-.PHONY: all clean test
+.PHONY: all clean test check-tsf-isolated

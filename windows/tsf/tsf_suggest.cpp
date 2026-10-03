@@ -135,14 +135,53 @@ static void notify_tray_word(const char *word) {
 
 /* -- caret rectangle -------------------------------------------------- */
 
+/* A caret rect must be non-degenerate: msctf documents that GetTextExt
+ * answers {0,0,0,0} when the window is minimised or the text is not laid out,
+ * and Chromium/Electron return TS_E_NOLAYOUT for the same states. */
+static BOOL caret_rect_plausible(const RECT *r) {
+    return r && r->right > r->left && r->bottom > r->top;
+}
+
+/* Reject any rect that is not where the user is actually typing. The tray
+ * overlay draws the rect it is handed verbatim, so an unverified rect shows
+ * the popup in the wrong place -- and a cached one keeps showing it there. A
+ * rect is usable only if it lands on the focused window and on a real
+ * monitor. */
+static BOOL caret_rect_usable(const RECT *r) {
+    if (!caret_rect_plausible(r)) return FALSE;
+
+    HWND focus = GetForegroundWindow();
+    if (!focus || !IsWindow(focus)) return FALSE;
+
+    RECT wr;
+    if (!GetWindowRect(focus, &wr)) return FALSE;
+
+    /* Slack for rounding: a caret can sit flush against the window border. */
+    const LONG slack = 2;
+    RECT padded = { wr.left - slack, wr.top - slack,
+                    wr.right + slack, wr.bottom + slack };
+    RECT hit;
+    if (!IntersectRect(&hit, r, &padded)) return FALSE;
+
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    HMONITOR mon = MonitorFromWindow(focus, MONITOR_DEFAULTTONEAREST);
+    if (mon && GetMonitorInfoW(mon, &mi))
+        return IntersectRect(&hit, r, &mi.rcMonitor);
+    return TRUE;
+}
+
 BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc) {
     if (!pic || !rc) return FALSE;
     /* Read-only caret probe: open a tiny sync session through the context.
-     * Implemented with a one-shot edit session object below. */
+     * Both candidate rects are reported separately so the caller can pick the
+     * trustworthy one instead of committing to whichever query answered. */
     class CCaretSession : public ITfEditSession {
     public:
-        CCaretSession(CGtvTextService *service, ITfContext *p, RECT *o, BOOL *ok)
-            : m_cRef(1), m_service(service), m_pic(p), m_out(o), m_ok(ok) {
+        CCaretSession(CGtvTextService *service, ITfContext *p,
+                      RECT *comp, BOOL *comp_ok, RECT *sel, BOOL *sel_ok)
+            : m_cRef(1), m_service(service), m_pic(p),
+              m_comp(comp), m_comp_ok(comp_ok), m_sel(sel), m_sel_ok(sel_ok) {
             if (m_service) m_service->AddRef();
             if (m_pic) m_pic->AddRef();
         }
@@ -171,46 +210,50 @@ BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc) {
             if (FAILED(m_pic->GetActiveView(&view)) || !view)
                 return E_FAIL;
 
-            BOOL got = FALSE;
-            RECT r = {0, 0, 0, 0};
             BOOL clipped = FALSE;
+            RECT r = {0, 0, 0, 0};
 
-            /* 1. Try active composition range first. Essential for Chromium/Electron/
-             * OpenCode/VSCode because querying a 0-length collapsed selection often
-             * yields TS_E_NOLAYOUT or E_FAIL before reflow. The composition range has
-             * real character bounds. */
+            /* 1. Active composition range. Essential for Chromium/Electron/
+             * OpenCode/VSCode because querying a 0-length collapsed selection
+             * often yields TS_E_NOLAYOUT or E_FAIL before reflow. The
+             * composition range has real character bounds; collapse it onto
+             * its right edge to approximate the caret. */
             if (m_service && m_service->m_pComposition) {
                 ITfRange *compRange = NULL;
                 if (SUCCEEDED(m_service->m_pComposition->GetRange(&compRange)) && compRange) {
                     if (SUCCEEDED(view->GetTextExt(ec, compRange, &r, &clipped)) &&
-                        (r.right > r.left || r.bottom > r.top || r.left != 0 || r.top != 0)) {
+                        caret_rect_plausible(&r)) {
                         if (r.right > r.left) r.left = r.right;
-                        got = TRUE;
+                        if (m_comp && m_comp_ok) {
+                            *m_comp = r;
+                            *m_comp_ok = TRUE;
+                        }
                     }
                     compRange->Release();
                 }
             }
 
-            /* 2. Try selection range if composition range was not available or failed */
-            if (!got) {
+            /* 2. Selection range. For a collapsed selection this is the real
+             * caret, which is strictly better than the composition box, so it
+             * is probed independently and the caller prefers it. */
+            {
                 TF_SELECTION sel;
                 ULONG fetched = 0;
                 if (SUCCEEDED(m_pic->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &sel, &fetched)) &&
                     fetched == 1 && sel.range) {
+                    r.left = r.top = r.right = r.bottom = 0;
                     if (SUCCEEDED(view->GetTextExt(ec, sel.range, &r, &clipped)) &&
-                        (r.right > r.left || r.bottom > r.top || r.left != 0 || r.top != 0)) {
-                        got = TRUE;
+                        caret_rect_plausible(&r)) {
+                        if (m_sel && m_sel_ok) {
+                            *m_sel = r;
+                            *m_sel_ok = TRUE;
+                        }
                     }
                     sel.range->Release();
                 }
             }
 
             view->Release();
-
-            if (got && m_out && m_ok) {
-                *m_out = r;
-                *m_ok = TRUE;
-            }
             return S_OK;
         }
 
@@ -218,78 +261,97 @@ BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc) {
         volatile LONG m_cRef;
         CGtvTextService *m_service;
         ITfContext *m_pic;
-        RECT *m_out;
-        BOOL *m_ok;
+        RECT *m_comp;
+        BOOL *m_comp_ok;
+        RECT *m_sel;
+        BOOL *m_sel_ok;
     };
 
-    RECT out = {0, 0, 0, 0};
-    BOOL ok = FALSE;
-    CCaretSession *s = new (std::nothrow) CCaretSession(this, pic, &out, &ok);
+    RECT comp = {0, 0, 0, 0};
+    RECT sel = {0, 0, 0, 0};
+    BOOL comp_ok = FALSE;
+    BOOL sel_ok = FALSE;
+
+    CCaretSession *s = new (std::nothrow) CCaretSession(this, pic, &comp, &comp_ok,
+                                                         &sel, &sel_ok);
     if (s) {
-        HRESULT hrSession = E_FAIL;
-        pic->RequestEditSession(m_tfClientId, s, TF_ES_SYNC | TF_ES_READ, &hrSession);
+        /* Hosts routinely refuse or defer a read-only session while the key
+         * event that triggered us is still being dispatched. Both rects then
+         * stay invalid, the usability checks below reject anything stale, and
+         * the fallbacks take over -- previously the result was discarded
+         * outright and a fabricated rect was drawn instead. */
+        pic->RequestEditSession(m_tfClientId, s, TF_ES_SYNC | TF_ES_READ, NULL);
         s->Release();
     }
 
-    /* Fallback 1: Win32 caret via GetGUIThreadInfo */
+    /* Prefer the real caret, fall back to the composition box only when the
+     * selection probe did not yield a usable rect. */
+    RECT out = {0, 0, 0, 0};
+    BOOL ok = FALSE;
+    if (sel_ok && caret_rect_usable(&sel)) {
+        out = sel;
+        ok = TRUE;
+    } else if (comp_ok && caret_rect_usable(&comp)) {
+        out = comp;
+        ok = TRUE;
+    }
+
+    /* Fallback 1: Win32 caret via GetGUIThreadInfo (classic edit controls,
+     * notepad, WinForms). Chromium keeps no Win32 caret, so hwndCaret is NULL
+     * and GetCaretPos fails there; the usability check rejects the stale caret
+     * of a previously focused window. */
     if (!ok) {
         GUITHREADINFO gti;
         memset(&gti, 0, sizeof(gti));
         gti.cbSize = sizeof(gti);
         if (GetGUIThreadInfo(0, &gti)) {
+            RECT r = {0, 0, 0, 0};
             if (gti.hwndCaret && IsWindow(gti.hwndCaret) &&
                 (gti.rcCaret.right > gti.rcCaret.left || gti.rcCaret.bottom > gti.rcCaret.top)) {
-                RECT r = gti.rcCaret;
-                MapWindowPoints(gti.hwndCaret, NULL, (LPPOINT)&r, 2);
+                POINT pts[2];
+                pts[0].x = gti.rcCaret.left;
+                pts[0].y = gti.rcCaret.top;
+                pts[1].x = gti.rcCaret.right;
+                pts[1].y = gti.rcCaret.bottom;
+                if (MapWindowPoints(gti.hwndCaret, NULL, pts, 2) != (LONG)-1) {
+                    r.left = pts[0].x;
+                    r.top = pts[0].y;
+                    r.right = pts[1].x;
+                    r.bottom = pts[1].y;
+                }
+            } else if (gti.hwndFocus && IsWindow(gti.hwndFocus)) {
+                POINT pt;
+                if (GetCaretPos(&pt)) {
+                    ClientToScreen(gti.hwndFocus, &pt);
+                    r.left = pt.x;
+                    r.top = pt.y;
+                    r.right = pt.x + 2;
+                    r.bottom = pt.y + 20;
+                }
+            }
+            if (caret_rect_usable(&r)) {
                 out = r;
                 ok = TRUE;
-            } else if (gti.hwndFocus && IsWindow(gti.hwndFocus)) {
-                POINT pt = {0, 0};
-                if (GetCaretPos(&pt) && (pt.x != 0 || pt.y != 0)) {
-                    ClientToScreen(gti.hwndFocus, &pt);
-                    out.left = pt.x;
-                    out.top = pt.y;
-                    out.right = pt.x + 2;
-                    out.bottom = pt.y + 20;
-                    ok = TRUE;
-                }
             }
         }
     }
 
-    /* Fallback 2: Cached caret from active composition session */
+    /* Fallback 2: caret cached from the previous keystroke of this
+     * composition. Still validated, so a window move cannot pin the popup to
+     * a stale spot. */
     if (!ok) {
         EnterCriticalSection(&g_suggest.cs);
         if (g_suggest.last_caret_valid) {
-            out = g_suggest.last_caret;
-            ok = TRUE;
+            RECT cached = g_suggest.last_caret;
+            ok = caret_rect_usable(&cached);
+            if (ok) out = cached;
         }
         LeaveCriticalSection(&g_suggest.cs);
     }
 
-    /* Fallback 3: Active/Focused window or cursor position */
-    if (!ok) {
-        HWND fg = GetForegroundWindow();
-        if (fg && IsWindow(fg)) {
-            RECT rWnd;
-            if (GetWindowRect(fg, &rWnd)) {
-                POINT cur;
-                if (GetCursorPos(&cur) && PtInRect(&rWnd, cur)) {
-                    out.left = cur.x;
-                    out.top = cur.y;
-                    out.right = cur.x + 2;
-                    out.bottom = cur.y + 20;
-                    ok = TRUE;
-                } else {
-                    out.left = rWnd.left + 40;
-                    out.top = rWnd.bottom - 60;
-                    out.right = out.left + 2;
-                    out.bottom = out.top + 20;
-                    ok = TRUE;
-                }
-            }
-        }
-    }
+    /* No fabricated fallback: deriving a caret from the mouse pointer or an
+     * arbitrary window offset is what put the popup in the wrong place. When
+     * every probe fails the overlay is simply not shown (see the header). */
 
     if (ok) {
         EnterCriticalSection(&g_suggest.cs);

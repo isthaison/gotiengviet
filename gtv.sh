@@ -235,7 +235,18 @@ cmd_install_windows() {
     local setup; setup="$(win_setup_exe)"
     [[ -f "$setup" ]] || cmd_package_windows
     local appdir0; appdir0="$(win_localappdata)/Programs/GoTiengViet"
-    # New-world layout (current.txt present) only ADDs a ver\<V>\ payload dir,
+    local verv; verv="$(version)"
+    # Preflight: an install aborted mid-replace leaves gtv_tsf.dll marked for
+    # deletion - the file is still listed but every open fails with
+    # ERROR_ACCESS_DENIED, so Inno cannot read its VERSIONINFO, decides it
+    # must replace the stub, and DeleteFile then fails with code 5. The stub
+    # only clears once every process holding it exits.
+    if [[ -f "$appdir0/gtv_tsf.dll" ]] && ! head -c 2 "$appdir0/gtv_tsf.dll" >/dev/null 2>&1; then
+        echo "gtv.sh: CẢNH BÁO: $appdir0/gtv_tsf.dll đang bị đánh dấu xoá" >&2
+        echo "gtv.sh: (còn sót từ lần cài bị hủy). Cần đóng hết app đang dùng bàn phím" >&2
+        echo "gtv.sh: hoặc đăng xuất/đăng nhập lại (tốt nhất là reboot), rồi chạy lại install." >&2
+    fi
+    # New-world layout (current.txt present) only ADDS a ver\<V>\ payload dir,
     # so loaded files can never block the installer: no holder gate, no
     # forced closes, no logoff. The gate below stays for the one-time
     # migration from the legacy flat layout (old gtv_tsf.dll gets replaced
@@ -246,19 +257,38 @@ cmd_install_windows() {
     win_env
     # NOTE: launch via Start-Process, never direct exec: Inno run from an
     # MSYS console handle hangs before log init; detached start works.
+    # -Wait -PassThru is what makes a failed/rolled-back install visible:
+    # Inno exits non-zero after "User canceled"/rollback.
     local windir; windir="$(cygpath -w "$PWD")"
     local log="$PWD/setup-install.log"
     rm -f "$log"
-    powershell.exe -NoProfile -NonInteractive -Command \
-        "Start-Process '$windir\\$setup' -ArgumentList '/VERYSILENT','/NORESTART','/LOG=$windir\\setup-install.log'" || {
-        echo "gtv.sh: không khởi động được $setup" >&2; exit 1; }
-    win_wait_pattern "$(basename "$setup" .exe)" 600
+    local rc
+    rc="$(powershell.exe -NoProfile -NonInteractive -Command \
+        "\$p = Start-Process '$windir\\$setup' -ArgumentList '/VERYSILENT','/NORESTART','/LOG=$windir\\setup-install.log' -Wait -PassThru; \$p.ExitCode" \
+        2>/dev/null | tr -dc '0-9')" || rc=""
+    if [[ -n "$rc" && "$rc" != "0" ]]; then
+        echo "gtv.sh: installer thất bại (exit $rc) — thường là file đang bị tiến trình khóa" >&2
+        echo "--- setup log tail ---" >&2
+        tail -n 20 "$log" >&2 || true
+        exit 1
+    fi
     local appdir; appdir="$appdir0"
-    local verv; verv="$(version)"
-    if [[ ! -x "$appdir/ver/$verv/gotiengviet.exe" && ! -x "$appdir/gotiengviet.exe" ]]; then
+    local installed="$appdir/ver/$verv/gotiengviet.exe"
+    local staged="release-pkg/ver/$verv/gotiengviet.exe"
+    if [[ ! -f "$installed" && ! -f "$appdir/gotiengviet.exe" ]]; then
         echo "gtv.sh: install thất bại (thiếu payload $verv trong $appdir)" >&2
         echo "--- setup log tail ---" >&2
-        tail -n 15 "$log" >&2 || true
+        tail -n 20 "$log" >&2 || true
+        exit 1
+    fi
+    # Byte-compare against what we just built. Existence alone proves
+    # nothing: a rolled-back or cancelled install leaves the PREVIOUS
+    # payload in place, and reporting success there starts the old tray.
+    if [[ -f "$installed" && -f "$staged" ]] && ! cmp -s "$staged" "$installed"; then
+        echo "gtv.sh: install KHÔNG có hiệu lực: payload $verv trong $appdir không khớp bản vừa build" >&2
+        echo "gtv.sh: installer đã rollback, hoặc tiến trình đang khóa file." >&2
+        echo "--- setup log tail ---" >&2
+        tail -n 20 "$log" >&2 || true
         exit 1
     fi
     echo "Đã cài: $appdir"
@@ -635,7 +665,7 @@ cmd_uninstall_linux() {
 }
 
 cmd_package_linux() {
-    version=${1:-0.8.20-1}
+    version=${1:-0.8.23-1}
     architecture=$(dpkg --print-architecture)
     dpkg --validate-version "$version"
     make build test

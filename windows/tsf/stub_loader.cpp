@@ -14,8 +14,12 @@
  * Old processes keep the old engine mapped until they exit; new processes
  * load the current one. Same model as Chrome's updater, no forced closes.
  *
- * Pure Win32 (no glib): glib lives in the versioned payload, which the
- * stub cannot depend on to find itself.
+ * Pure Win32 (no glib, no runtime DLL at all): the engine this stub forwards
+ * to is self-contained - glib/gio/zlib are statically linked INTO
+ * gtv_engine.dll (see GLIB_STATIC_DEFS in Makefile.win). That is deliberate:
+ * Windows injects this DLL into every text-input process, and an injected DLL
+ * that imported e.g. zlib1.dll would be hijacked by any host app shipping its
+ * own same-named DLL (Microsoft Teams does, exporting only z_deflate).
  */
 #include <windows.h>
 #ifndef _WIN32_WINNT

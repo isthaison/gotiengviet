@@ -3,6 +3,7 @@
 #include "app.h"
 #include "setup.h"
 #include "startup.h"
+#include "keyboard.h"
 #include "update.h"
 #include "resource.h"
 #include "win_utf.h"
@@ -134,6 +135,7 @@ void gtv_tray_show_menu(HWND hwnd) {
 
     HMENU hmenu = CreatePopupMenu();
     gtv_win_menu_add_utf8(hmenu, "Bảng điều khiển...", 0, ID_TRAY_SETTINGS);
+    gtv_win_menu_add_utf8(hmenu, "Bàn phím (Win+Space)...", 0, ID_TRAY_KEYBOARDS);
     gtv_win_menu_add_utf8(hmenu, NULL, MF_SEPARATOR, 0);
 
     UINT telex_flag = (g_app.config.mode == GTV_TELEX) ? MF_CHECKED : MF_UNCHECKED;
@@ -165,6 +167,9 @@ void gtv_tray_show_menu(HWND hwnd) {
     switch (cmd) {
         case ID_TRAY_SETTINGS:
             gtv_setup_show(hwnd);
+            break;
+        case ID_TRAY_KEYBOARDS:
+            gtv_keyboard_show(hwnd);
             break;
         case ID_TRAY_MODE_TELEX:
             gtv_app_set_input_method(GTV_TELEX);

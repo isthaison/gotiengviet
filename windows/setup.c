@@ -3,6 +3,7 @@
 #include "data.h"
 #include "tray.h"
 #include "startup.h"
+#include "keyboard.h"
 #include "ollama.h"
 #include "resource.h"
 #include "win_utf.h"
@@ -190,6 +191,7 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 { IDC_BTN_OK, "Đồng ý" },
                 { IDC_BTN_CANCEL, "Hủy" },
                 { IDC_BTN_DATA, "Dữ liệu..." },
+                { IDC_BTN_KEYBOARD, "Bàn phím..." },
             };
             gtv_win_set_window_text(hwnd, "GoTiengViet - Cài đặt");
             for (guint i = 0; i < G_N_ELEMENTS(labels); i++) {
@@ -296,6 +298,9 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 return TRUE;
             } else if (id == IDC_BTN_DATA) {
                 gtv_data_show(hwnd);
+                return TRUE;
+            } else if (id == IDC_BTN_KEYBOARD) {
+                gtv_keyboard_show(hwnd);
                 return TRUE;
             }
             break;

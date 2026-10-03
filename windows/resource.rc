@@ -51,9 +51,10 @@ BEGIN
                     ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_BORDER | WS_VSCROLL | WS_TABSTOP,
                     10, 216, 220, 64
 
-    DEFPUSHBUTTON   "OK", IDC_BTN_OK, 120, 288, 50, 14
-    PUSHBUTTON      "Cancel", IDC_BTN_CANCEL, 175, 288, 50, 14
-    PUSHBUTTON      "Data", IDC_BTN_DATA, 55, 288, 60, 14
+    DEFPUSHBUTTON   "OK", IDC_BTN_OK, 126, 288, 50, 14
+    PUSHBUTTON      "Cancel", IDC_BTN_CANCEL, 179, 288, 50, 14
+    PUSHBUTTON      "Data", IDC_BTN_DATA, 5, 288, 55, 14
+    PUSHBUTTON      "Keyboards", IDC_BTN_KEYBOARD, 63, 288, 60, 14
 END
 
 IDD_DATA_DIALOG DIALOGEX 0, 0, 280, 232
@@ -78,9 +79,45 @@ BEGIN
     LTEXT           "Note", IDC_DATA_NOTE, 10, 188, 260, 36
 END
 
+/* Keyboard manager. The list order IS the Win+Space order, so the buttons
+ * next to it move an entry up/down in that order. */
+IDD_KEYBOARD_DIALOG DIALOGEX 0, 0, 290, 200
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "GoTiengViet - Keyboards"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    /* ASCII placeholders only: real strings are set at runtime in UTF-16. */
+    LTEXT           "Current", IDC_KBD_LBL_CURRENT, 8, 8, 200, 10
+    CONTROL         "", IDC_KBD_LIST, "SysListView32",
+                    LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP | WS_VSCROLL,
+                    8, 20, 210, 120
+    PUSHBUTTON      "Up", IDC_KBD_UP, 226, 20, 56, 14
+    PUSHBUTTON      "Down", IDC_KBD_DOWN, 226, 38, 56, 14
+    PUSHBUTTON      "Remove", IDC_KBD_REMOVE, 226, 56, 56, 14
+    PUSHBUTTON      "Add", IDC_KBD_ADD, 226, 80, 56, 14
+    PUSHBUTTON      "Default", IDC_KBD_DEFAULT, 226, 98, 56, 14
+    LTEXT           "Status", IDC_KBD_STATUS, 8, 146, 274, 20
+    PUSHBUTTON      "Close", IDC_KBD_CLOSE, 222, 178, 60, 14
+END
+
+/* "Add keyboard" picker: language on top, that language's keyboards below. */
+IDD_KBD_ADD_DIALOG DIALOGEX 0, 0, 250, 210
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "GoTiengViet - Add keyboard"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    COMBOBOX        IDC_KBD_LANG, 8, 8, 234, 200,
+                    CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "", IDC_KBD_AVAIL, "SysListView32",
+                    LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP | WS_VSCROLL,
+                    8, 32, 234, 140
+    DEFPUSHBUTTON   "Add", IDC_KBD_AVAIL_ADD, 100, 178, 66, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 172, 178, 66, 14
+END
+
 1 VERSIONINFO
-FILEVERSION     0,8,20,0
-PRODUCTVERSION  0,8,20,0
+FILEVERSION     0,8,23,0
+PRODUCTVERSION  0,8,23,0
 FILEFLAGSMASK   0x3fL
 FILEFLAGS       0x0L
 FILEOS          0x40004L
@@ -93,12 +130,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "GoTiengViet Open Source Project\0"
             VALUE "FileDescription", "GoTiengViet - Vietnamese Input (Native)\0"
-            VALUE "FileVersion", "0.8.20.0\0"
+            VALUE "FileVersion", "0.8.23.0\0"
             VALUE "InternalName", "gotiengviet\0"
             VALUE "LegalCopyright", "Copyright (C) 2026\0"
             VALUE "OriginalFilename", "gotiengviet.exe\0"
             VALUE "ProductName", "GoTiengViet\0"
-            VALUE "ProductVersion", "0.8.20.0\0"
+            VALUE "ProductVersion", "0.8.23.0\0"
         END
     END
     BLOCK "VarFileInfo"

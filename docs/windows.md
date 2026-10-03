@@ -17,16 +17,18 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (stub `gtv_tsf.dll` 
 
 ## Dùng hằng ngày
 
-- **Menu khay**: Bảng điều khiển, Telex/VNI, chính tả, chuẩn dấu,
+- **Menu khay**: Bảng điều khiển, Bàn phím (Win+Space)..., Telex/VNI, chính tả, chuẩn dấu,
   tự khởi động (thường/admin), Kiểm tra cập nhật, Thoát.
 - **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (Ollama, model chọn
   trong dropdown như bản Linux — `qwen2.5:0.5b`/`qwen2.5:1.5b`/`rule`, gõ tay model khác vẫn được — URL,
   dòng trạng thái + log `ollama serve` như bản Linux),
+  nút **Bàn phím...** (xem [Quản lý danh sách bàn phím](#quản-lý-danh-sách-bàn-phím-winspace)),
   nút **Dữ liệu...** — lưu ở `%APPDATA%\gotiengviet\` như bản Linux. Log serve nằm ở `%TEMP%\ollama_serve.log`;
   khi bật AI (tick checkbox hoặc lưu), app tự kiểm tra → tự động cài Ollama bằng lệnh chính thức (`irm https://ollama.com/install.ps1 | iex`) chạy nền hoàn toàn im lặng nếu thiếu →
   chạy `ollama serve` nền → pull model nếu chưa có, chờ `/api/tags` tối đa 15s. Cần mạng lần đầu.
 - **Gợi ý AI dạng balloon**: TSF báo mỗi từ vừa commit về app khay; từ sai được hỏi Ollama nền (`"sai" co the ban muon go "dung"?`, chống spam 10 giây). Cần Ollama + `curl` (có sẵn từ Windows 10). **Click balloon** để nhận (chưa gõ tiếp thì thay tại chỗ, rồi thì copy vào clipboard); lựa chọn được học vào `learned-corrections.txt` nên offline vẫn gợi ý.
 - **Bảng gợi ý keyword inline (broker ngoài process)**: TSF trong app nhập liệu chỉ giữ composition/candidate và bắt phím, không tạo cửa sổ (an toàn với Electron/OpenCode); process tray riêng vẽ overlay cạnh caret, không lấy focus. Gõ `:sm` gợi ý emoji ngay không cần AI; từ thường gợi ý từ Ollama sau debounce 350 ms, rớt mạng dùng dữ liệu đã học. Phím: `Up/Down` di chuyển, `Tab`/`Enter` hoặc số `1-5` (Telex) để nhận, `Esc` bỏ (vẫn gõ tiếp), `Space` giữ nguyên chữ. Không lấy được tọa độ caret thật thì không hiện gì (không fallback góc màn hình). Từ trùng macro/emoji khớp tuyệt đối vẫn ưu tiên bung bằng `Tab` như cũ. Lựa chọn được học như balloon.
+  Chẩn đoán vị trí hiển thị: `%APPDATA%\gotiengviet\suggest.log` — ghi mỗi khi rect caret nhận về không nằm trong cửa sổ đang focus (tức lỗi ở phía TSF), kèm DPI và toạ độ popup; nhật ký tự cắt ở 64 KB.
 - Macro/emoji/prompts/config: chung lõi và file `data/` với bản Linux.
 - Chữ Việt hiển thị đúng mọi locale: toàn bộ UI dùng Unicode API, dialog đặt chữ lúc chạy.
 
@@ -46,6 +48,32 @@ giá trị không rỗng. Lưu ghi đè file riêng của bạn (`macros.txt`/`e
 động lại mới nhận bảng mới** (TSF đọc bảng lúc app khởi động).
 
 Macro và emoji đều kích hoạt bằng phím **Tab** (gõ từ tắt/trigger rồi nhấn Tab để bung; bấm Space hoặc dấu câu giữ nguyên, không tự động bung ngoài ý muốn).
+
+## Quản lý danh sách bàn phím (Win+Space)
+
+Menu khay → **Bàn phím (Win+Space)...**, hoặc Bảng điều khiển → **Bàn phím...**.
+Đây là danh sách bàn phím mà `Win+Space` chuyển qua, theo đúng thứ tự Windows hiển thị:
+
+- **Thứ tự trong danh sách chính là thứ tự `Win+Space`** — dùng **Lên**/**Xuống** để đổi.
+- **Thêm...** mở danh sách bàn phím mà Windows đang có cho ngôn ngữ đã chọn: bàn phím cổ điển
+  (US, Dvorak, Colemak, French AZERTY/BÉPO…) và bộ gõ TSF (GoTV, Vietnamese Telex, VNI…).
+  Bàn phím đã có trong danh sách bị ẩn để khỏi thêm trùng.
+- **Xóa** để gỡ. Giữ ít nhất một bàn phím — Windows không cho `Win+Space` trống rỗng.
+- **Mặc định** trả về cấu hình GoTiengViet: **Anh (US) + Tiếng Việt (GoTV)**.
+- Sửa xong bấm **Đóng** và chọn **Có** để lưu.
+
+Vài điểm Windows thật sự quyết định, đã tính sẵn trong code:
+
+- Danh sách được đọc/ghi qua `Get/Set-WinUserLanguageList` (powershell ẩn), vì ghi thẳng
+  registry bị lớp input của Windows bỏ qua.
+- Lưu xong app **đọc lại** và so với danh sách đã chọn: nếu Windows từ chối một bàn phím
+  (TIP chưa đăng ký, ví dụ `gtv_tsf.dll` lỗi) thì báo tên bàn phím đó thay vì âm thầm mất —
+  và nói rõ phải chạy `gotiengviet.exe --register-tsf` (admin).
+- Windows tự gom bàn phím theo ngôn ngữ khi lưu, nên sau khi lưu danh sách được đọc lại
+  và hiển thị lại cho khớp với thứ tự thật của `Win+Space`.
+- Từ lúc bạn tự lưu, phần tự động lần đầu (`input_setup.c`) **không còn đụng vào** danh sách
+  nữa — nó sẽ không ghi đè lựa chọn của bạn ở các lần khởi động sau.
+- Log thao tác: `%LOCALAPPDATA%\gotiengviet\keyboard.log`.
 
 ## Gạch đỏ dưới chữ Việt trong trình duyệt/app khác
 

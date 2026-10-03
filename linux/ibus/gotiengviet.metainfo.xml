@@ -34,6 +34,21 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.23" date="2026-10-03">
+      <description>
+        <p>Windows: bang goi y hien thi sai cho - bo fallback lay toa do tu con tro chuot, kiem tra rect caret phai nam trong cua so dang focus, uu tien caret that; popup scale theo DPI man hinh (PerMonitorV2) va them suggest.log de chan doan.</p>
+      </description>
+    </release>
+    <release version="0.8.22" date="2026-10-02">
+      <description>
+        <p>Windows: static-link glib/gio/zlib vào gtv_engine.dll để TSF DLL không còn import DLL bên thứ ba (tránh đụng tên zlib1.dll với Teams/Chromion, gây lỗi 'procedure entry point deflate could not be located').</p>
+      </description>
+    </release>
+    <release version="0.8.21" date="2026-10-01">
+      <description>
+        <p>Thêm trình quản lý danh sách bàn phím Win+Space: xem, thêm, xóa, đổi thứ tự bàn phím (GoTV và mọi bàn phím Windows có), mở từ menu tray hoặc Bảng điều khiển.</p>
+      </description>
+    </release>
     <release version="0.8.20" date="2026-09-25">
       <description>
         <p>Dang</p>

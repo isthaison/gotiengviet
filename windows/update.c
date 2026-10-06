@@ -213,6 +213,82 @@ void gtv_update_disown_balloon(void) {
     InterlockedExchange(&update_balloon_owned, 0);
 }
 
+/* Launch the downloaded installer.
+ *
+ * ShellExecuteW alone is not enough: it has answered ERROR_ACCESS_DENIED (5)
+ * for every release since v0.8.19 on some hosts, and the old code hid that by
+ * retrying without parameters and without logging the outcome -- so the
+ * self-update looked like it did nothing and there was no record of why.
+ * Try the shell first (it understands Authenticode/MOTW policy), then fall
+ * back to CreateProcessW, which is what gtv.sh uses and is known to work.
+ *
+ * /VERYSILENT rather than /SILENT: /SILENT still shows a progress window, so
+ * the "silent" update was never actually silent. The installer log is kept so
+ * a failed update is diagnosable instead of silent. */
+static BOOL update_launch_installer(const gchar *installer_path) {
+    gunichar2 *winstaller = g_utf8_to_utf16(installer_path, -1, NULL, NULL, NULL);
+    if (!winstaller) return FALSE;
+
+    /* Inno log into the temp dir so a failed update is diagnosable. */
+    WCHAR tdir[MAX_PATH];
+    WCHAR wlog[MAX_PATH + 32];
+    if (GetTempPathW(MAX_PATH, tdir))
+        swprintf(wlog, MAX_PATH + 32, L"/VERYSILENT /NORESTART /LOG=\"%lsgtv-update-install.log\"",
+                 (LPCWSTR)tdir);
+    else
+        wcscpy(wlog, L"/VERYSILENT /NORESTART /LOG=\"gtv-update-install.log\"");
+
+    update_log("installer launching %s flags=%ls", installer_path, (LPCWSTR)wlog);
+
+    /* Use ShellExecuteEx so a launched process is distinguishable from a
+     * refused one; ShellExecuteW only yields a <=32 magic value. */
+    SHELLEXECUTEINFOW sei;
+    memset(&sei, 0, sizeof(sei));
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+    sei.lpVerb = L"open";
+    sei.lpFile = (LPCWSTR)winstaller;
+    sei.lpParameters = wlog;
+    sei.nShow = SW_HIDE;
+
+    BOOL launched = FALSE;
+    if (ShellExecuteExW(&sei)) {
+        if (sei.hProcess) CloseHandle(sei.hProcess);
+        launched = TRUE;
+        update_log("ShellExecuteExW launched installer");
+    } else {
+        update_log("ShellExecuteExW failed gle=%lu, falling back to CreateProcessW",
+                   (unsigned long)GetLastError());
+    }
+
+    if (!launched) {
+        /* Direct launch, detached: the tray quits right after this returns. */
+        WCHAR cmd[2 * MAX_PATH + 160];
+        swprintf(cmd, 2 * MAX_PATH + 160, L"\"%ls\" %ls",
+                 (LPCWSTR)winstaller, (LPCWSTR)wlog);
+        STARTUPINFOW si;
+        PROCESS_INFORMATION pi;
+        ZeroMemory(&si, sizeof(si));
+        si.cb = sizeof(si);
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+        ZeroMemory(&pi, sizeof(pi));
+        if (CreateProcessW(NULL, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW,
+                           NULL, NULL, &si, &pi)) {
+            if (pi.hThread) CloseHandle(pi.hThread);
+            if (pi.hProcess) CloseHandle(pi.hProcess);
+            launched = TRUE;
+            update_log("CreateProcessW launched installer");
+        } else {
+            update_log("CreateProcessW failed gle=%lu",
+                       (unsigned long)GetLastError());
+        }
+    }
+
+    g_free(winstaller);
+    return launched;
+}
+
 void gtv_update_on_downloaded(gchar *installer_path) {
     InterlockedExchange(&update_balloon_owned, 0);
     if (!installer_path || !*installer_path) {
@@ -221,15 +297,17 @@ void gtv_update_on_downloaded(gchar *installer_path) {
         g_free(installer_path);
         return;
     }
-    gunichar2 *winstaller = g_utf8_to_utf16(installer_path, -1, NULL, NULL, NULL);
-    update_log("installer launching %s", installer_path);
     gtv_tray_balloon_force("GoTiengViet cập nhật", "Đang cài đặt phiên bản mới...");
-    HINSTANCE hInst = ShellExecuteW(NULL, L"open", (LPCWSTR)winstaller, L"/SILENT", NULL, SW_SHOWNORMAL);
-    if ((INT_PTR)hInst <= 32) {
-        update_log("ShellExecuteW failed code=%ld, retrying", (long)(INT_PTR)hInst);
-        ShellExecuteW(NULL, L"open", (LPCWSTR)winstaller, NULL, NULL, SW_SHOWNORMAL);
+    if (!update_launch_installer(installer_path)) {
+        update_log("installer could not be launched; see hint below");
+        gtv_tray_balloon_force("GoTiengViet cập nhật",
+            "Không chạy được bộ cài. Mở %LOCALAPPDATA%\\Temp\\gtv-update-install.log "
+            "hoặc tải thủ công từ trang Releases.");
+        g_free(installer_path);
+        Sleep(500);
+        PostQuitMessage(0);
+        return;
     }
-    g_free(winstaller);
     g_free(installer_path);
     Sleep(500);
     PostQuitMessage(0);

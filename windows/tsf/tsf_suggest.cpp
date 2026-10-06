@@ -135,11 +135,16 @@ static void notify_tray_word(const char *word) {
 
 /* -- caret rectangle -------------------------------------------------- */
 
-/* A caret rect must be non-degenerate: msctf documents that GetTextExt
- * answers {0,0,0,0} when the window is minimised or the text is not laid out,
- * and Chromium/Electron return TS_E_NOLAYOUT for the same states. */
+/* A caret rect must have real vertical extent. Width may legitimately be 0:
+ * TSF reports a collapsed selection as left == right, and a Win32 caret is
+ * routinely zero pixels wide, so requiring right > left here would reject every
+ * real caret. msctf documents GetTextExt answering {0,0,0,0} when the window is
+ * minimised or the text is not laid out, which the height check does catch. */
 static BOOL caret_rect_plausible(const RECT *r) {
-    return r && r->right > r->left && r->bottom > r->top;
+    if (!r || r->bottom <= r->top) return FALSE;
+    if (r->right < r->left) return FALSE;
+    /* Guard against a host that hands back nonsense coordinates. */
+    return r->right - r->left <= 8192 && r->bottom - r->top <= 8192;
 }
 
 /* Reject any rect that is not where the user is actually typing. The tray
@@ -156,18 +161,25 @@ static BOOL caret_rect_usable(const RECT *r) {
     RECT wr;
     if (!GetWindowRect(focus, &wr)) return FALSE;
 
+    /* Widen a collapsed rect before intersecting: IntersectRect reports "no
+     * overlap" for a zero-width rect even when it sits well inside the box,
+     * which is exactly the shape of a real caret. */
+    RECT probe = *r;
+    if (probe.right == probe.left) probe.right = probe.left + 1;
+    if (probe.bottom == probe.top) probe.bottom = probe.top + 1;
+
     /* Slack for rounding: a caret can sit flush against the window border. */
     const LONG slack = 2;
     RECT padded = { wr.left - slack, wr.top - slack,
                     wr.right + slack, wr.bottom + slack };
     RECT hit;
-    if (!IntersectRect(&hit, r, &padded)) return FALSE;
+    if (!IntersectRect(&hit, &probe, &padded)) return FALSE;
 
     MONITORINFO mi;
     mi.cbSize = sizeof(mi);
     HMONITOR mon = MonitorFromWindow(focus, MONITOR_DEFAULTTONEAREST);
     if (mon && GetMonitorInfoW(mon, &mi))
-        return IntersectRect(&hit, r, &mi.rcMonitor);
+        return IntersectRect(&hit, &probe, &mi.rcMonitor);
     return TRUE;
 }
 

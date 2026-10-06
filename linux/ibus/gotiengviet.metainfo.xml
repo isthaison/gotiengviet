@@ -34,6 +34,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.24" date="2026-10-06">
+      <description>
+        <p>Windows: sửa updater tự cập nhật (ShellExecuteW trả ERROR_ACCESS_DENIED nên tự cập không bao giờ chạy được — giờ có fallback CreateProcessW và log trong thư mục temp); sửa rect caret collapsed bị loại sai nên bảng gợi ý có thể không hiện.</p>
+      </description>
+    </release>
     <release version="0.8.23" date="2026-10-03">
       <description>
         <p>Windows: bang goi y hien thi sai cho - bo fallback lay toa do tu con tro chuot, kiem tra rect caret phai nam trong cua so dang focus, uu tien caret that; popup scale theo DPI man hinh (PerMonitorV2) va them suggest.log de chan doan.</p>

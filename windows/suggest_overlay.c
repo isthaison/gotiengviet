@@ -191,8 +191,15 @@ static void overlay_show(RECT caret) {
     HWND focus = GetForegroundWindow();
     RECT fr;
     if (focus && GetWindowRect(focus, &fr)) {
+        /* A caret is normally zero pixels wide (collapsed selection), and
+         * IntersectRect reports "no overlap" for such a rect even when it sits
+         * inside the window. Widen before intersecting or every keystroke
+         * looks like an anomaly. */
+        RECT probe = caret;
+        if (probe.right == probe.left) probe.right = probe.left + 1;
+        if (probe.bottom == probe.top) probe.bottom = probe.top + 1;
         RECT hit;
-        if (!IntersectRect(&hit, &caret, &fr)) {
+        if (!IntersectRect(&hit, &probe, &fr)) {
             DWORD now = GetTickCount();
             if (!last_anomaly || now - last_anomaly >= 2000) {
                 last_anomaly = now;

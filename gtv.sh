@@ -116,6 +116,17 @@ win_localappdata() {
     powershell.exe -NoProfile -NonInteractive -Command '$env:LOCALAPPDATA' | tr -d '\r'
 }
 
+# sha256 of one file, bare hex.
+# Not `cmp`: `cmp` is in diffutils, which is NOT part of a base MSYS2 install,
+# so it failed with 127 and every successful install was then reported as
+# "không có hiệu lực". sha256sum is coreutils and always present.
+# The sed matters: the MSYS build prefixes binary-mode output with a backslash
+# ("\f16d…  *path"), so a plain `cut -d' ' -f1` yields "\f16d…" for a Windows
+# path and "f16d…" for a POSIX one -- equal files, unequal strings.
+win_sha256() {
+    sha256sum "$1" 2>/dev/null | sed -e 's/^\\//' -e 's/[[:space:]].*$//'
+}
+
 # Wait for a Windows process pattern to exit. Inno GUI detaches right
 # away, so blocking waits cannot be used; tasklist truncates long image
 # names, hence the PowerShell match instead.
@@ -281,15 +292,22 @@ cmd_install_windows() {
         tail -n 20 "$log" >&2 || true
         exit 1
     fi
-    # Byte-compare against what we just built. Existence alone proves
-    # nothing: a rolled-back or cancelled install leaves the PREVIOUS
-    # payload in place, and reporting success there starts the old tray.
-    if [[ -f "$installed" && -f "$staged" ]] && ! cmp -s "$staged" "$installed"; then
-        echo "gtv.sh: install KHÔNG có hiệu lực: payload $verv trong $appdir không khớp bản vừa build" >&2
-        echo "gtv.sh: installer đã rollback, hoặc tiến trình đang khóa file." >&2
-        echo "--- setup log tail ---" >&2
-        tail -n 20 "$log" >&2 || true
-        exit 1
+    # Verify against what we just built. Existence alone proves nothing: a
+    # rolled-back or cancelled install leaves the PREVIOUS payload in place,
+    # and reporting success there starts the old tray. An unreadable hash is
+    # treated as "cannot verify", never as a mismatch -- guessing wrong here
+    # tells the user a good install failed.
+    if [[ -f "$installed" && -f "$staged" ]]; then
+        local sum_built sum_installed
+        sum_built="$(win_sha256 "$staged")"
+        sum_installed="$(win_sha256 "$installed")"
+        if [[ -n "$sum_built" && -n "$sum_installed" && "$sum_built" != "$sum_installed" ]]; then
+            echo "gtv.sh: install KHÔNG có hiệu lực: payload $verv trong $appdir không khớp bản vừa build" >&2
+            echo "gtv.sh: installer đã rollback, hoặc tiến trình đang khóa file." >&2
+            echo "--- setup log tail ---" >&2
+            tail -n 20 "$log" >&2 || true
+            exit 1
+        fi
     fi
     echo "Đã cài: $appdir"
     # Startup entries point at the versioned tray (stale ones self-forward);
@@ -665,7 +683,7 @@ cmd_uninstall_linux() {
 }
 
 cmd_package_linux() {
-    version=${1:-0.8.23-1}
+    version=${1:-0.8.24-1}
     architecture=$(dpkg --print-architecture)
     dpkg --validate-version "$version"
     make build test

@@ -328,6 +328,68 @@ static gchar *github_api_url(void) {
 #ifdef _WIN32
 #include <windows.h>
 
+/* Schannel fails the whole handshake when it cannot reach a CRL/OCSP endpoint
+ * (CRYPT_E_NO_REVOCATION_CHECK, curl exit 35). On locked-down or offline-ish
+ * networks that is the normal case, and the updater then looks permanently
+ * offline even though the network is fine.
+ *
+ * --ssl-revoke-best-effort still attempts the check and only tolerates its
+ * failure, so it is preferred over --ssl-no-revoke, which disables the check
+ * outright. It needs curl >= 7.87, and Windows 10 still ships 7.55, so the
+ * flag is probed once and omitted when the local curl would reject it. */
+static const WCHAR *curl_tls_flags(void) {
+    static LONG probed = 0;
+    static BOOL supported = FALSE;
+    if (InterlockedCompareExchange(&probed, 1, 0) == 0) {
+        WCHAR out[MAX_PATH], name[MAX_PATH + 32];
+        if (GetTempPathW(MAX_PATH, out)) {
+            swprintf(name, MAX_PATH + 32, L"%lsgtv-curl-probe.txt", (LPCWSTR)out);
+            SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
+            HANDLE h = CreateFileW(name, GENERIC_WRITE, FILE_SHARE_READ, &sa,
+                                   CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, NULL);
+            if (h != INVALID_HANDLE_VALUE) {
+                STARTUPINFOW si;
+                PROCESS_INFORMATION pi;
+                ZeroMemory(&si, sizeof(si));
+                si.cb = sizeof(si);
+                si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+                si.wShowWindow = SW_HIDE;
+                si.hStdOutput = h;
+                si.hStdError = h;
+                ZeroMemory(&pi, sizeof(pi));
+                /* `curl --help all` lists every option it knows; an unknown
+                 * flag would instead make curl exit 2 and kill the update. */
+                WCHAR cmd[128];
+                wcscpy(cmd, L"curl.exe --help all");
+                if (CreateProcessW(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW,
+                                   NULL, NULL, &si, &pi)) {
+                    WaitForSingleObject(pi.hProcess, 10000);
+                    CloseHandle(pi.hProcess);
+                    if (pi.hThread) CloseHandle(pi.hThread);
+                }
+                CloseHandle(h);
+                HANDLE rf = CreateFileW(name, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_TEMPORARY, NULL);
+                if (rf != INVALID_HANDLE_VALUE) {
+                    DWORD len = GetFileSize(rf, NULL), got = 0;
+                    if (len && len < 262144) {
+                        gchar *buf = g_malloc(len + 1);
+                        if (ReadFile(rf, buf, len, &got, NULL)) {
+                            buf[got] = '\0';
+                            supported = strstr(buf, "ssl-revoke-best-effort") != NULL;
+                        }
+                        g_free(buf);
+                    }
+                    CloseHandle(rf);
+                }
+                DeleteFileW(name);
+            }
+        }
+        InterlockedExchange(&probed, 2);
+    }
+    return supported ? L"--ssl-revoke-best-effort " : L"";
+}
+
 /* Run curl with stdout/stderr captured to a temp file (never an anonymous
  * pipe). A pipe deadlocks once the payload exceeds its buffer: curl blocks
  * on write while we block in WaitForSingleObject, so every check stalls
@@ -375,10 +437,11 @@ static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) 
     g_free(curl_path);
     const WCHAR *prog_cmd = wprog ? (LPCWSTR)wprog : L"curl.exe";
 
-    size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) + 256;
+    const WCHAR *tls = curl_tls_flags();
+    size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) + wcslen(tls) + 256;
     WCHAR *cmd = g_new0(WCHAR, cmdlen);
-    wsprintfW(cmd, L"\"%ls\" --silent --show-error --fail --location --proto =https --connect-timeout 10 --max-time %ld --max-filesize %ld --header \"Accept: application/vnd.github+json\" --header \"User-Agent: GoTiengViet-Updater\" --url \"%ls\"",
-              prog_cmd, max_secs, max_bytes, (LPCWSTR)wurl);
+    wsprintfW(cmd, L"\"%ls\" %ls--silent --show-error --fail --location --proto =https --connect-timeout 10 --max-time %ld --max-filesize %ld --header \"Accept: application/vnd.github+json\" --header \"User-Agent: GoTiengViet-Updater\" --url \"%ls\"",
+              prog_cmd, tls, max_secs, max_bytes, (LPCWSTR)wurl);
     g_free(wprog);
     g_free(wurl);
 
@@ -479,10 +542,12 @@ static gboolean gtv_update_download_win32(const gchar *url, const gchar *dest_pa
     g_free(curl_path);
     const WCHAR *prog_cmd = wprog ? (LPCWSTR)wprog : L"curl.exe";
 
-    size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) + wcslen((LPCWSTR)wtmp) + 256;
+    const WCHAR *tls = curl_tls_flags();
+    size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) +
+                     wcslen((LPCWSTR)wtmp) + wcslen(tls) + 256;
     WCHAR *cmd = g_new0(WCHAR, cmdlen);
-    wsprintfW(cmd, L"\"%ls\" --silent --show-error --fail --location --proto =https --max-time 300 --max-filesize 157286400 --header \"User-Agent: GoTiengViet-Updater\" --output \"%ls\" --url \"%ls\"",
-              prog_cmd, (LPCWSTR)wtmp, (LPCWSTR)wurl);
+    wsprintfW(cmd, L"\"%ls\" %ls--silent --show-error --fail --location --proto =https --max-time 300 --max-filesize 157286400 --header \"User-Agent: GoTiengViet-Updater\" --output \"%ls\" --url \"%ls\"",
+              prog_cmd, tls, (LPCWSTR)wtmp, (LPCWSTR)wurl);
     g_free(wprog);
     g_free(wurl);
 

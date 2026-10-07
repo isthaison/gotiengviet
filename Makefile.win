@@ -106,13 +106,21 @@ $(TSF_ENGINE_TARGET): $(STATIC_TSF_ENGINE_OBJS) $(STATIC_ENGINE_OBJS) windows/ts
 	@mkdir -p $(dir $@)
 	$(CXX) $(STATIC_TSF_ENGINE_OBJS) $(TSF_ENGINE_LDFLAGS) -o $@
 
+# Header dependency tracking (-MMD -MP emits a .d next to every .o listing the
+# headers it read; -include pulls them back in). Without it make only compares
+# .c/.cpp timestamps, so `gtv.sh bump` rewriting windows/version.h did NOT
+# recompile anything including it: the payload folder got named 0.8.24 while the
+# binary inside still reported 0.8.23, so the updater saw a phantom update on
+# every run and re-installed the same stale payload.
+DEPFLAGS = -MMD -MP
+
 build/win-static/windows/tsf/%.o: windows/tsf/%.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(STATIC_CXXFLAGS) -c $< -o $@
+	$(CXX) $(STATIC_CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 build/win-static/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(STATIC_CFLAGS) -c $< -o $@
+	$(CC) $(STATIC_CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 build/win/windows/stub.o: windows/stub.rc
 	@mkdir -p $(dir $@)
@@ -128,7 +136,7 @@ $(CORE_LIB): $(ENGINE_OBJS)
 
 build/win/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # windows/app.manifest is embedded by resource.rc but is not included from it,
 # so without listing it here a manifest-only edit is silently ignored until an
@@ -228,5 +236,8 @@ setup: staging
 clean:
 	rm -rf build/win build/win-static
 	rm -rf $(STAGE)
+
+-include $(WIN_OBJS:.o=.d) $(STATIC_ENGINE_OBJS:.o=.d) \
+         $(STATIC_TSF_ENGINE_OBJS:.o=.d)
 
 .PHONY: all clean test check-tsf-isolated

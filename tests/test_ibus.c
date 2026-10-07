@@ -26,8 +26,6 @@ static void pump_until(guint want){
 }
 
 int main(int argc,char **argv) {
-    gchar *test_path=g_strconcat(g_getenv("GTV_TEST_CURL_DIR"),G_SEARCHPATH_SEPARATOR_S,g_getenv("PATH"),NULL);
-    g_setenv("PATH",test_path,TRUE);g_free(test_path);
     g_test_init(&argc,&argv,NULL);
     gchar *directory=g_dir_make_tmp("gotiengviet-ibus-test-XXXXXX",NULL);
     g_assert_nonnull(directory);
@@ -69,30 +67,33 @@ int main(int argc,char **argv) {
     g_assert_cmpstr(e->preedit->str,==,"");
     /* Partial syllables can be marked misspelled but must retain contextual completions. */
     ibus_gotiengviet_engine_reset(e);
-    e->spellcheck=TRUE;e->mode_telex=TRUE;e->config.ai_enabled=TRUE;
+    e->spellcheck=TRUE;e->mode_telex=TRUE;e->config.suggest_enabled=TRUE;
     g_string_assign(e->sentence_context,"xin");
-    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_c,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_t,0,0));
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_h,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_o,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_n,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_g,0,0));
     g_assert_cmpint(e->n_candidates,==,0);
-    g_assert_cmpuint(e->suggest_timer,>,0);g_assert_null(e->ai_cancellable);
+    g_assert_cmpuint(e->suggest_timer,>,0);g_assert_null(e->suggest_cancellable);
     for(guint i=0;i<150 && !e->n_candidates;i++){while(g_main_context_iteration(NULL,FALSE));g_usleep(10000);}
     g_assert_cmpint(e->n_candidates,>,0);
-    g_assert_cmpstr(e->candidates[0],==,"chào");
-    e->config.ai_enabled=FALSE;
+    g_assert_cmpstr(e->candidates[0],==,"thông");
+    e->config.suggest_enabled=FALSE;
     g_assert_cmpint(e->n_candidates,<=,5);
-    /* Only explicitly accepted AI candidates are persisted. */
+    /* Only explicitly accepted dictionary candidates are persisted. */
     g_assert_false(word_valid(e,"kông"));
-    e->candidates_from_ai=FALSE;learn_candidate(e,"kông");
+    e->candidates_from_dict=FALSE;learn_candidate(e,"kông");
     g_assert_false(word_valid(e,"kông"));
-    e->candidates_from_ai=TRUE;learn_candidate(e,"kông");
+    e->candidates_from_dict=TRUE;learn_candidate(e,"kông");
     g_assert_true(word_valid(e,"KÔNG"));
     /* Seed data flags classic typos offline from the first run. */
     g_assert_false(word_valid(e,"hoăc"));
-    /* A novel typo passes sync, but once the user accepts the Ollama
+    /* A novel typo passes sync, but once the user accepts the dictionary
      * correction for it, the mapping is remembered and flags it offline. */
     g_assert_true(word_valid(e,"khoog"));
     gchar *saved_preedit=g_strdup(e->preedit->str);
-    e->candidates_from_ai=TRUE;e->pending_bad=TRUE;
+    e->candidates_from_dict=TRUE;e->pending_bad=TRUE;
     e->pending_query=g_strdup("khoog");
     g_string_assign(e->preedit,"khoog");
     learn_candidate(e,"không");
@@ -101,9 +102,9 @@ int main(int argc,char **argv) {
     g_clear_pointer(&e->learned_fixes,g_hash_table_unref);
     g_assert_false(word_valid(e,"khoog"));
     g_string_assign(e->preedit,saved_preedit);g_free(saved_preedit);
-    g_clear_pointer(&e->pending_query,g_free);e->pending_bad=FALSE;e->candidates_from_ai=FALSE;
+    g_clear_pointer(&e->pending_query,g_free);e->pending_bad=FALSE;e->candidates_from_dict=FALSE;
     /* Offline helpers: case-insensitive fix lookup, folded completions. */
-    e->candidates_from_ai=TRUE;learn_candidate(e,"thông");e->candidates_from_ai=FALSE;
+    e->candidates_from_dict=TRUE;learn_candidate(e,"thông");e->candidates_from_dict=FALSE;
     gchar *fix=learned_fix_for(e,"HOĂC");
     g_assert_cmpstr(fix,==,"hoặc");g_free(fix);
     g_assert_null(learned_fix_for(e,"việt"));
@@ -113,19 +114,17 @@ int main(int argc,char **argv) {
     g_assert_cmpstr(g_ptr_array_index(local,0),==,"thông");
     g_assert_cmpstr(g_ptr_array_index(local,1),==,"thống");
     g_ptr_array_unref(local);
-    /* Full offline flow: Ollama down, remembered correction still suggested. */
+    /* Full offline flow: the remembered correction is still suggested. */
     ibus_gotiengviet_engine_reset(e);
     hide_suggest(e,engine);
-    e->spellcheck=TRUE;e->config.ai_enabled=TRUE;
-    gchar *saved_url=e->config.url;e->config.url=g_strdup("http://fail");
+    e->spellcheck=TRUE;e->config.suggest_enabled=TRUE;
     g_string_assign(e->preedit,"hoăc");
     push_preedit(e,engine,e->preedit->len,TRUE);
     for(guint i=0;i<200 && !e->n_candidates;i++){while(g_main_context_iteration(NULL,FALSE));g_usleep(10000);}
     g_assert_cmpint(e->n_candidates,==,1);
     g_assert_cmpstr(e->candidates[0],==,"hoặc");
-    g_assert_false(e->candidates_from_ai);
-    g_free(e->config.url);e->config.url=saved_url;
-    e->config.ai_enabled=FALSE;
+    g_assert_true(e->candidates_from_dict);
+    e->config.suggest_enabled=FALSE;
     ibus_gotiengviet_engine_reset(e);
     hide_suggest(e,engine);
     /* User tables replace shipped tables entirely (then reload defaults). */
@@ -325,7 +324,7 @@ int main(int argc,char **argv) {
     g_object_unref(engine);
     g_dbus_connection_close_sync(connection,NULL,NULL);g_object_unref(connection);
     g_test_dbus_down(test_bus);g_object_unref(test_bus);
-    const gchar *names[]={"config","ai.conf"};
+    const gchar *names[]={"config"};
     for(guint i=0;i<G_N_ELEMENTS(names);i++) {gchar *path=g_build_filename(config_dir,names[i],NULL);g_remove(path);g_free(path);}
     gchar *learned=g_build_filename(config_dir,"learned-words.txt",NULL);g_remove(learned);g_free(learned);
     gchar *fixes=g_build_filename(config_dir,"learned-corrections.txt",NULL);g_remove(fixes);g_free(fixes);

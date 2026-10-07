@@ -14,7 +14,8 @@ chạy trên cả ba hệ điều hành qua adapter mỏng của từng nền t�
 
 > **English:** GoTiengViet is a free, open-source **Vietnamese input method (Telex & VNI)** for
 > Linux (IBus), Windows 10/11 (TSF) and macOS (InputMethodKit) — a lightweight Unikey/EVKey
-> alternative with offline spellcheck, text macros/emoji and optional local AI suggestions via Ollama.
+> alternative with offline spellcheck, text macros/emoji and an offline dictionary
+> (word suggestions + typo corrections, auto-updated from GitHub).
 
 ```text
 $ build/gotiengviet-demo --transform telex duocjwd
@@ -25,9 +26,9 @@ $ build/gotiengviet-demo --transform telex duocjwd
 
 - **Một thuật toán chung** cho Telex và VNI — chỉ khác bảng ánh xạ phím; kiểu đặt dấu hiện đại (`hòa`) hoặc truyền thống (`hoà`).
 - **Chính tả ngoại tuyến (Linux)**: gạch đỏ ngay khi gõ theo quy tắc âm tiết (âm đầu–vần–phụ âm cuối–thanh), không cần mạng. Bản Windows/macOS dùng AI balloon thay thế.
-- **Gợi ý AI cục bộ (tùy chọn)**: Ollama trên máy bạn — debounce 350 ms, hủy khi gõ tiếp, rớt mạng vẫn gợi ý từ dữ liệu đã học.
+- **Gợi ý từ điển ngoại tuyến**: hoàn thành tiền tố (`thong`→`thông`) và sửa lỗi chính tả (`kông`→`không`), không cần mạng. Từ điển (`data/dict-vi.txt`, ~7000 từ) tự cập nhật từ GitHub release; từ bạn chọn được nhớ vào từ điển học riêng.
 - **Macro/emoji bằng file text**: tự thêm `cty=Công ty TNHH` (gõ `cty` rồi nhấn **Tab** để bung (macro/emoji đều cần Tab), phím Space giữ nguyên chữ), `:smile:`→😊, `(y)`→👍.
-- **Nhẹ, riêng tư**: lõi C thuần + glib; không keylogger đám mây, AI chạy local.
+- **Nhẹ, riêng tư**: lõi C thuần + glib; không keylogger đám mây, mọi gợi ý chạy offline trên máy.
 - **Tự cập nhật**: kiểm tra release GitHub mỗi ngày, cài đè giữ nguyên cấu hình.
 
 ## Trạng thái nền tảng
@@ -81,13 +82,13 @@ Ví dụ: `bawst` → `bắt`, `duocjwd` → `được`, `hoaf` → `hoà`/`hòa
 |---|---|---|---|
 | Telex + VNI | ✅ | ✅ | ✅ |
 | Linux (IBus) / Windows / macOS | ✅ cả 3 | Win + Linux | Win + macOS |
-| Chính tả khi gõ | ✅ gạch đỏ (Linux) | ❌ | ❌ (AI balloon thay thế) |
-| Gợi ý AI local (Ollama) | ✅ | ❌ | ❌ |
+| Chính tả khi gõ | ✅ gạch đỏ (Linux) | ❌ | ❌ (balloon thay thế) |
+| Gợi ý từ điển offline | ✅ | ❌ | ❌ |
 | Mã nguồn mở | ✅ MIT | ✅ | ✅ |
 
 ## Tài liệu
 
-- [Cấu hình & macro/emoji/AI](docs/config.md) · [Bản Windows](docs/windows.md) ·
+- [Cấu hình & macro/emoji/từ điển](docs/config.md) · [Bản Windows](docs/windows.md) ·
   [Bản macOS](docs/macos.md) · [Phát triển & đóng gói](docs/dev.md) ·
   [Đối chiếu tính năng theo nền tảng](docs/parity.md) ·
   [Trang chủ](https://isthaison.github.io/gotiengviet/)
@@ -96,11 +97,12 @@ Ví dụ: `bawst` → `bắt`, `duocjwd` → `được`, `hoaf` → `hoà`/`hòa
 
 ```sh
 build/gotiengviet-demo --transform telex duocjwd   # thử thuật toán
-build/gotiengviet-demo --suggest kông              # cần Ollama
+build/gotiengviet-demo --suggest thong            # hoàn thành tiền tố (offline)
+build/gotiengviet-demo --correct kông            # sửa lỗi (offline)
 ibus-setup-gotiengviet            # GUI Linux (tự bật tray nền)
 ibus-setup-gotiengviet --tray     # chỉ indicator
 ibus-setup-gotiengviet --cli      # terminal
-./gtv.sh build | test | vet | install | install-ollama | uninstall | package | bump | help
+./gtv.sh build | test | vet | install | uninstall | package | bump | help
 # Windows (MSYS2 MinGW hoặc cmd):  gtv build | test | install | uninstall | package
 # macOS: ./gtv.sh build | test | install | uninstall | package  (app vào ~/Library/Input Methods)
 ```
@@ -123,7 +125,7 @@ Mời issue/PR: mở issue mô tả lỗi kèm OS + phiên bản + log, hoặc P
 Chuẩn code: `engine/` thuần C đa nền tảng, adapter riêng từng OS trong `linux/`, `windows/`, `macos/`.
 
 > 💡 **Gợi ý topics cho repo** (mục About → ⚙️): `vietnamese` `tieng-viet` `telex` `vni`
-> `input-method` `ime` `ibus` `tsf` `unikey` `linux` `windows` `macos` `ollama` `c`
+> `input-method` `ime` `ibus` `tsf` `unikey` `linux` `windows` `macos` `dictionary` `c`
 
 ## Star History & Stargazers
 

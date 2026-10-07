@@ -26,14 +26,10 @@ cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotiengviet/`.
   `~/.config/gotiengviet/config` — xem [Cấu hình](config.md)).
 - Mở app lần nữa để mở cửa sổ **Dữ liệu** (bảng Macro/Emoji: xem, thêm/sửa/xóa,
   mở thư mục — chung API với bản Windows/Linux; lưu xong khởi động lại app để nhận).
-  Chưa có tùy chỉnh kiểu gõ/chuẩn dấu/AI trong UI — hiện chỉ sửa được qua file `~/.config/gotiengviet/config`.
+  Chưa có tùy chỉnh kiểu gõ/chuẩn dấu/gợi ý trong UI — hiện chỉ sửa được qua file `~/.config/gotiengviet/config`.
 - Tự kiểm tra cập nhật mỗi ngày; bản mới tải về `/tmp` rồi mở Finder để cài thủ công
   (khác Windows/Linux: tự cài silent).
-- Macro/emoji/prompts/config: chung lõi và file `data/` với mọi nền tảng (macro/emoji kích hoạt bằng phím Tab; Space giữ nguyên).
-- Hỗ trợ AI (Ollama): cài đặt Ollama trên macOS bằng lệnh chính thức:
-  ```sh
-  curl -fsSL https://ollama.com/install.sh | sh
-  ```
+- Macro/emoji/config: chung lõi và file `data/` với mọi nền tảng (macro/emoji kích hoạt bằng phím Tab; Space giữ nguyên).
 
 ## Build từ source (dev)
 
@@ -46,19 +42,16 @@ CI (`.github/workflows/build-macos.yml`) làm ba việc, bạn chạy lại y h�
 1. **Test lõi C** (cùng suite với Windows: engine + support + algorithm —
    test IBus/GTK chỉ chạy trên Linux):
 
-   ```sh
-   mkdir -p build/macos/fixtures
-   CORE_CFLAGS="$(pkg-config --cflags glib-2.0 gio-2.0) -Iengine"
-   CORE_LIBS="$(pkg-config --libs glib-2.0 gio-2.0) -lm"
-   clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
-     $CORE_CFLAGS tests/test_engine.c engine/*.c $CORE_LIBS -o build/macos/test-engine
-   clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
-     $CORE_CFLAGS tests/test_support.c engine/*.c $CORE_LIBS -o build/macos/test-support
-   clang -O2 -g tests/fake_curl.c $CORE_LIBS -o build/macos/fixtures/curl
-   GTV_DATA_DIR="$PWD/data" ./build/macos/test-engine
-   GTV_DATA_DIR="$PWD/data" GTV_TEST_CURL_DIR="$PWD/build/macos/fixtures" \
-     ./build/macos/test-support
-   ```
+    ```sh
+    CORE_CFLAGS="$(pkg-config --cflags glib-2.0 gio-2.0) -Iengine"
+    CORE_LIBS="$(pkg-config --libs glib-2.0 gio-2.0) -lm"
+    clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
+      $CORE_CFLAGS tests/test_engine.c engine/*.c $CORE_LIBS -o build/macos/test-engine
+    clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
+      $CORE_CFLAGS tests/test_support.c engine/*.c $CORE_LIBS -o build/macos/test-support
+    GTV_DATA_DIR="$PWD/data" ./build/macos/test-engine
+    GTV_DATA_DIR="$PWD/data" ./build/macos/test-support
+    ```
 
 2. **Link bundle** `GoTiengViet.app` (lõi C + ObjC, manual-retain, frameworks
    Cocoa + InputMethodKit), copy `macos/Info.plist` + `data/` vào `Resources`.
@@ -71,7 +64,7 @@ Cấu trúc bundle do CI tạo:
 GoTiengViet.app/Contents/
   Info.plist            Bundle ID vn.gotiengviet.GoTiengViet, LSUIElement (agent)
   MacOS/GoTiengViet     binary (lõi C + IMK controller)
-  Resources/data/       macro, emoji, config/ai mẫu, prompts, seed từ điển
+  Resources/data/       macro, emoji, config, từ điển, seed từ điển học
 ```
 
 ## Giới hạn đã biết (preview)

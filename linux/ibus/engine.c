@@ -46,7 +46,7 @@ struct _GoTiengVietEngine {
     int n_candidates;
     int cand_cursor;
     GtvConfig config;
-    GCancellable *ai_cancellable;
+    GCancellable *suggest_cancellable;
     gchar *pending_query;
     guint suggest_timer;
     GHashTable *learned_words;
@@ -54,7 +54,7 @@ struct _GoTiengVietEngine {
     GHashTable *learned_fixes;
     gchar *learned_fixes_path;
     gboolean pending_bad;
-    gboolean candidates_from_ai;
+    gboolean candidates_from_dict;
 };
 struct _GoTiengVietEngineClass { IBusEngineClass parent; };
 G_DEFINE_TYPE(IBusGoTiengVietEngine, ibus_gotiengviet_engine, IBUS_TYPE_ENGINE)
@@ -99,9 +99,9 @@ static gboolean word_valid(IBusGoTiengVietEngine *e,const gchar *word){
     return spell_word_valid(word);
 }
 static void learn_candidate(IBusGoTiengVietEngine *e,const gchar *candidate){
-    if(!e->candidates_from_ai)return;
-    /* Remember the Ollama-taught correction so the typo is flagged instantly
-     * next time without network. Only in correction mode (pending_bad) with
+    if(!e->candidates_from_dict)return;
+    /* Remember the dictionary-taught correction so the typo is flagged instantly
+     * next time, fully offline. Only in correction mode (pending_bad) with
      * single-word candidates, so mere completions are never marked as typos. */
     if(e->pending_bad && e->pending_query && e->preedit && e->preedit->len &&
        !strcmp(e->pending_query,e->preedit->str))
@@ -146,9 +146,9 @@ static void update_context(IBusGoTiengVietEngine *e, const char *committed){
 
 static void clear_candidates(IBusGoTiengVietEngine *e){
     if(e->suggest_timer){g_source_remove(e->suggest_timer);e->suggest_timer=0;}
-    if(e->ai_cancellable){
-        g_cancellable_cancel(e->ai_cancellable);
-        g_clear_object(&e->ai_cancellable);
+    if(e->suggest_cancellable){
+        g_cancellable_cancel(e->suggest_cancellable);
+        g_clear_object(&e->suggest_cancellable);
     }
     g_clear_pointer(&e->pending_query, g_free);
     e->pending_bad=FALSE;
@@ -166,7 +166,7 @@ static void hide_suggest(IBusGoTiengVietEngine *e, IBusEngine *engine){
 }
 
 static void show_candidates(IBusGoTiengVietEngine *e, IBusEngine *engine, GPtrArray *sugs){
-    e->candidates_from_ai=FALSE;
+    e->candidates_from_dict=FALSE;
     if(e->candidates){
         for(int i=0;i<e->n_candidates;i++) g_free(e->candidates[i]);
         g_free(e->candidates);
@@ -191,7 +191,7 @@ static void show_candidates(IBusGoTiengVietEngine *e, IBusEngine *engine, GPtrAr
     g_object_unref(table);
 }
 
-static void on_ai_suggestions_ready(GObject *source, GAsyncResult *res, gpointer user_data){
+static void on_suggest_ready(GObject *source, GAsyncResult *res, gpointer user_data){
     IBusGoTiengVietEngine *e = user_data;
     GError *error = NULL;
     GPtrArray *sugs = gtv_suggest_combined_finish(res, &error);
@@ -200,12 +200,12 @@ static void on_ai_suggestions_ready(GObject *source, GAsyncResult *res, gpointer
         g_object_unref(e);
         return;
     }
-    if(sugs && g_task_get_cancellable(G_TASK(res))==e->ai_cancellable && e->pending_query && g_strcmp0(e->preedit->str, e->pending_query) == 0 && e->preedit->len > 0){
+    if(sugs && g_task_get_cancellable(G_TASK(res))==e->suggest_cancellable && e->pending_query && g_strcmp0(e->preedit->str, e->pending_query) == 0 && e->preedit->len > 0){
         if(sugs->len > 0){
             show_candidates(e, (IBusEngine*)e, sugs);
-            e->candidates_from_ai=TRUE;
+            e->candidates_from_dict=TRUE;
         }else{
-            /* Ollama unreachable or empty: reuse Ollama-taught data offline.
+            /* Dictionary unavailable or empty: reuse taught data offline.
              * Typo mode shows the remembered correction; completion mode
              * completes from learned vocabulary. Not marked as AI results. */
             GPtrArray *local=g_ptr_array_new_with_free_func(g_free);
@@ -227,9 +227,9 @@ static gboolean request_suggestions(gpointer data){
     IBusGoTiengVietEngine *e=data;e->suggest_timer=0;
     gboolean bad=e->spellcheck && !word_valid(e,e->preedit->str);
     e->pending_bad=bad;
-    e->ai_cancellable=g_cancellable_new();
+    e->suggest_cancellable=g_cancellable_new();
     gtv_suggest_combined_async(&e->config,e->sentence_context->str,e->preedit->str,bad,
-        e->ai_cancellable,on_ai_suggestions_ready,g_object_ref(e));
+        e->suggest_cancellable,on_suggest_ready,g_object_ref(e));
     return G_SOURCE_REMOVE;
 }
 
@@ -250,9 +250,9 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
     }
 
     if(e->suggest_timer){g_source_remove(e->suggest_timer);e->suggest_timer=0;}
-    if(e->ai_cancellable){
-        g_cancellable_cancel(e->ai_cancellable);
-        g_clear_object(&e->ai_cancellable);
+    if(e->suggest_cancellable){
+        g_cancellable_cancel(e->suggest_cancellable);
+        g_clear_object(&e->suggest_cancellable);
     }
     g_clear_pointer(&e->pending_query, g_free);
     e->pending_bad=FALSE;
@@ -270,7 +270,7 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
     }
 
     show_candidates(e,engine,NULL);
-    if(e->config.ai_enabled && e->purpose!=IBUS_INPUT_PURPOSE_PASSWORD && e->purpose!=IBUS_INPUT_PURPOSE_PIN){
+    if(e->config.suggest_enabled && e->purpose!=IBUS_INPUT_PURPOSE_PASSWORD && e->purpose!=IBUS_INPUT_PURPOSE_PIN){
         e->pending_query=g_strdup(e->preedit->str);
         e->suggest_timer=g_timeout_add_full(G_PRIORITY_DEFAULT,350,request_suggestions,g_object_ref(e),g_object_unref);
     }
@@ -278,9 +278,9 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
 
 static void ibus_gotiengviet_engine_reset(IBusGoTiengVietEngine *e){
     if(e->suggest_timer){g_source_remove(e->suggest_timer);e->suggest_timer=0;}
-    if(e->ai_cancellable){
-        g_cancellable_cancel(e->ai_cancellable);
-        g_clear_object(&e->ai_cancellable);
+    if(e->suggest_cancellable){
+        g_cancellable_cancel(e->suggest_cancellable);
+        g_clear_object(&e->suggest_cancellable);
     }
     g_clear_pointer(&e->pending_query, g_free);
     e->pending_bad=FALSE;
@@ -767,7 +767,7 @@ static void bus_connected_cb(IBusBus *b, gpointer user_data){
         c = ibus_component_new_from_file("/usr/share/ibus/component/gotiengviet.xml");
     }
     if(!c){
-        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.8.26","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
+        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.8.28","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
         IBusEngineDesc *d = ibus_engine_desc_new_varargs(
             "name", "gotiengviet",
             "longname", "GoTiengViet",

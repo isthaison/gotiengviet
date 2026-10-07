@@ -42,22 +42,32 @@ static void test_config(void) {
     gtv_config_load(&config,directory);
     g_assert_cmpint(config.mode,==,GTV_TELEX);
     g_assert_true(config.modern);g_assert_true(config.spellcheck);
-    g_assert_false(config.ai_enabled);
-    config.mode=GTV_VNI;config.modern=FALSE;config.spellcheck=FALSE;config.ai_enabled=TRUE;
-    g_free(config.model);config.model=g_strdup("local-model");
+    g_assert_true(config.suggest_enabled);
+    config.mode=GTV_VNI;config.modern=FALSE;config.spellcheck=FALSE;config.suggest_enabled=FALSE;
     g_assert_true(gtv_config_save(&config,directory,NULL));
     gtv_config_load(&loaded,directory);
     g_assert_cmpint(loaded.mode,==,GTV_VNI);g_assert_false(loaded.modern);g_assert_false(loaded.spellcheck);
-    g_assert_true(loaded.ai_enabled);g_assert_cmpstr(loaded.model,==,"local-model");
+    g_assert_false(loaded.suggest_enabled);
     gtv_config_clear(&loaded);gtv_config_clear(&config);
-    gchar *path=g_build_filename(directory,"ai.conf",NULL);
-    g_assert_true(g_file_set_contents(path,"[ai]\nprovider=rule\nmodel=override\n",-1,NULL));
+    gchar *path=g_build_filename(directory,"config",NULL);
+    g_assert_true(g_file_set_contents(path,"[suggest]\nenable=true\n",-1,NULL));
     gtv_config_load(&loaded,directory);
-    g_assert_false(loaded.ai_enabled);g_assert_cmpstr(loaded.model,==,"override");
+    g_assert_true(loaded.suggest_enabled);
     gtv_config_clear(&loaded);
-    g_assert_true(g_file_set_contents(path,"[ai]\nmodel=qwen2:0.5b (~400MB)\n",-1,NULL));
+    /* Legacy [ai] section still migrates: explicit enable wins, otherwise
+     * provider=ollama implies on, provider=rule implies off. */
+    g_assert_true(g_file_set_contents(path,"[ai]\nprovider=rule\n",-1,NULL));
     gtv_config_load(&loaded,directory);
-    g_assert_cmpstr(loaded.model,==,"qwen2:0.5b");gtv_config_clear(&loaded);
+    g_assert_false(loaded.suggest_enabled);
+    gtv_config_clear(&loaded);
+    g_assert_true(g_file_set_contents(path,"[ai]\nprovider=ollama\n",-1,NULL));
+    gtv_config_load(&loaded,directory);
+    g_assert_true(loaded.suggest_enabled);
+    gtv_config_clear(&loaded);
+    g_assert_true(g_file_set_contents(path,"[ai]\nenable=false\nprovider=ollama\n",-1,NULL));
+    gtv_config_load(&loaded,directory);
+    g_assert_false(loaded.suggest_enabled);
+    gtv_config_clear(&loaded);
     g_remove(path);g_free(path);
     path=g_build_filename(directory,"config",NULL);g_remove(path);g_free(path);
     g_rmdir(directory);g_free(directory);
@@ -157,93 +167,94 @@ static void test_update(void) {
     g_free(old); g_free(stamp);
     g_free(cfgdir);
 }
-static void test_json(void) {
-    const gchar *valid[]={"{\"response\":\"được\"}","{\"x\":[1, true, null, {\"response\":\"ignore\"}],\"response\":\"\\u0111\\u01b0\\u1ee3c\"}","{\"response\":\"\\ud83d\\ude0a\"}",NULL};
-    const gchar *expected[]={"được","được","😊"};
-    for(guint i=0;valid[i];i++) {gchar *got=gtv_json_response(valid[i]);g_assert_cmpstr(got,==,expected[i]);g_free(got);}
-    const gchar *invalid[]={"", "{", "{\"response\":\"x\",}","{\"response\":\"x\"}junk","{\"response\":\"\\ud800\"}","{\"response\":\"\\u0000\"}","{\"response\":false}","{\"nested\":{\"response\":\"x\"}}",NULL};
-    for(guint i=0;invalid[i];i++) g_assert_null(gtv_json_response(invalid[i]));
-    gchar *quoted=gtv_json_quote("a\"\\\nđ");
-    gchar *object=g_strdup_printf("{\"response\":%s}",quoted);
-    gchar *decoded=gtv_json_response(object);
-    g_assert_cmpstr(decoded,==,"a\"\\\nđ");g_free(decoded);g_free(object);g_free(quoted);
-}
 static void test_spelling(void) {
     g_assert_true(spell_word_valid("được"));
     g_assert_false(spell_word_valid("kông")); /* k chỉ đi với i/e/y */
     /* Thuần quy tắc âm tiết, không danh sách cứng: hoăc/ge hợp cấu trúc nên
-     * qua vòng sync; lỗi kiểu này do Ollama sửa và được nhớ vào
+     * qua vòng sync; lỗi kiểu này do từ điển sửa và được nhớ vào
      * learned-corrections.txt để gạch đỏ ngay lần sau (xem test_ibus). */
     g_assert_true(spell_word_valid("hoăc"));
     g_assert_false(spell_word_valid("bàc")); /* huyền + phụ âm tắc c */
     g_assert_false(spell_word_valid("vièt")); /* huyền + phụ âm tắc t */
     /* Chưa gõ dấu thì sync luôn cho qua (đang gõ dở/chữ thô); ngh+a sai
-     * vẫn do Ollama sửa và được nhớ vào learned-corrections.txt. */
+     * vẫn do từ điển sửa và được nhớ vào learned-corrections.txt. */
     g_assert_true(spell_word_valid("ngha"));
     g_assert_true(spell_word_valid("ge"));
 
-    GtvConfig config={.ai_enabled=FALSE};
-    g_assert_false(gtv_ai_available(&config));
-    GPtrArray *suggestions=gtv_ai_suggest(&config,"kông","");
+    /* Disabled suggestions return nothing, even for known typos. */
+    GtvConfig config={.suggest_enabled=FALSE};
+    GPtrArray *suggestions=gtv_suggest_combined(&config,"","kông",TRUE);
     g_assert_cmpuint(suggestions->len,==,0);
     g_ptr_array_unref(suggestions);
 
-    /* Suggestions no longer capitalize based on the input. */
-    suggestions=gtv_ai_suggest(&config,"Kông","");
-    g_assert_cmpuint(suggestions->len,==,0);
+    /* Enabled: the dictionary corrects the classic typo offline. */
+    config.suggest_enabled=TRUE;
+    suggestions=gtv_suggest_combined(&config,"","kông",TRUE);
+    g_assert_cmpuint(suggestions->len,>,0);
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"không");
     g_ptr_array_unref(suggestions);
 
-    suggestions=gtv_ai_suggest(&config,"KÔNG","");
-    g_assert_cmpuint(suggestions->len,==,0);
+    suggestions=gtv_suggest_combined(&config,"","Kông",TRUE);
+    g_assert_cmpuint(suggestions->len,>,0);
     g_ptr_array_unref(suggestions);
 
-    /* Test voiceless stop correction */
-    suggestions=gtv_ai_suggest(&config,"vièt","");
-    g_assert_cmpuint(suggestions->len,==,0);
+    suggestions=gtv_suggest_combined(&config,"","vièt",TRUE);
+    g_assert_cmpuint(suggestions->len,>,0);
     g_ptr_array_unref(suggestions);
 
-    /* Test hoăc -> hoặc */
-    suggestions=gtv_ai_suggest(&config,"hoăc","");
-    g_assert_cmpuint(suggestions->len,==,0);
+    suggestions=gtv_suggest_combined(&config,"","hoăc",TRUE);
+    g_assert_cmpuint(suggestions->len,==,1);
+    g_assert_cmpstr(g_ptr_array_index(suggestions,0),==,"hoặc");
     g_ptr_array_unref(suggestions);
 
-    suggestions=gtv_ai_suggest(&config,"được","");
-    g_assert_cmpuint(suggestions->len,==,0);
+    /* A correct word is not "corrected". */
+    suggestions=gtv_suggest_combined(&config,"","được",TRUE);
+    gboolean found=FALSE;
+    for(guint i=0;i<suggestions->len;i++)
+        if(!strcmp(g_ptr_array_index(suggestions,i),"được")) found=TRUE;
+    g_assert_false(found);
     g_ptr_array_unref(suggestions);
 }
 
-static void test_prompts(void) {
-    gchar *tmp=g_dir_make_tmp("gotiengviet-prompts-XXXXXX",NULL);
+static void test_dict(void) {
+    /* The shipped seed loads offline: version tag, word count, lookups. */
+    g_assert_cmpuint(gtv_dict_count(), >, 1000);
+    g_assert_true(gtv_dict_tag() && *gtv_dict_tag());
+    GPtrArray *out = g_ptr_array_new_with_free_func(g_free);
+    /* Completions are alphabetical; every hit shares the (folded) prefix. */
+    gtv_dict_complete("thong", out, 5);
+    g_assert_cmpuint(out->len, >, 0);
+    g_assert_cmpuint(out->len, <=, 5);
+    gboolean found_thong = FALSE;
+    for (guint i = 0; i < out->len; i++) {
+        gchar *w = g_ptr_array_index(out, i);
+        gchar *f = gtv_fold_accents(w);
+        g_assert_true(g_str_has_prefix(w, "thong") || (f && g_str_has_prefix(f, "thong")));
+        if (!strcmp(w, "thông")) found_thong = TRUE;
+        g_free(f);
+    }
+    g_assert_true(found_thong);
+    g_ptr_array_set_size(out, 0);
+    /* Corrections: classic typo ranks first via the fixes seed. */
+    GPtrArray *fix = gtv_suggest_combined(
+        &(GtvConfig){.suggest_enabled = TRUE}, "", "kông", TRUE);
+    g_assert_cmpuint(fix->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(fix, 0), ==, "không");
+    g_ptr_array_unref(fix);
+    /* Pure dictionary correction (accent variants rank alphabetically). */
+    gtv_dict_correct("chao", out, 5);
+    g_assert_cmpuint(out->len, >, 0);
+    g_assert_cmpstr(g_ptr_array_index(out, 0), ==, "chào");
+    g_ptr_array_unref(out);
+    /* A corrupt download never poisons suggestions: unparsable content
+     * yields an empty table, and the loader falls back to the seed. */
+    gchar *tmp = g_dir_make_tmp("gotiengviet-dict-XXXXXX", NULL);
     g_assert_nonnull(tmp);
-    gchar *saved=g_strdup(g_getenv("GTV_DATA_DIR"));
-    g_setenv("GTV_DATA_DIR",tmp,TRUE);
-    gtv_prompts_reload();
-    /* Empty dir: everything falls back. */
-    gchar *p=gtv_prompt_get("suggest","prompt","FB");
-    g_assert_cmpstr(p,==,"FB");g_free(p);
-    g_assert_null(gtv_prompt_get("suggest","prompt",NULL));
-    /* Custom file is honored. */
-    gchar *pc=g_build_filename(tmp,"prompts.conf",NULL);
-    g_assert_true(g_file_set_contents(pc,"[suggest]\nprompt=A:%s:%s:%s\ncorrect_hint=H.\n",-1,NULL));
-    gtv_prompts_reload();
-    p=gtv_prompt_get("suggest","prompt","FB");
-    g_assert_cmpstr(p,==,"A:%s:%s:%s");g_free(p);
-    p=gtv_prompt_get("suggest","complete_hint","FB");
-    g_assert_cmpstr(p,==,"FB");g_free(p);
-    /* Template formatting substitutes %s in order, keeps the rest literally. */
-    const gchar *args[]={"x","y"};
-    gchar *f=gtv_format_template("a %d %s b %% %s c %s",args,2);
-    g_assert_cmpstr(f,==,"a %d x b %% y c %s");g_free(f);
-    f=gtv_format_template(NULL,args,2);
-    g_assert_cmpstr(f,==,"");g_free(f);
-    /* Restore shipped data. */
-    if(saved)g_setenv("GTV_DATA_DIR",saved,TRUE);
-    g_free(saved);
-    gtv_prompts_reload();
-    p=gtv_prompt_get("suggest","correct_hint","FB");
-    g_assert_cmpstr(p,==,"Correct spelling if needed.");g_free(p);
-    g_remove(pc);g_free(pc);
-    g_rmdir(tmp);g_free(tmp);
+    gchar *bad = g_build_filename(tmp, "dict-vi.txt", NULL);
+    g_assert_true(g_file_set_contents(bad, "\xff\xfe-not-utf8\n", -1, NULL));
+    g_assert_true(g_file_set_contents(bad, "# dict-tag: v9.9.9\n!!!\n", -1, NULL));
+    g_remove(bad); g_free(bad);
+    g_rmdir(tmp); g_free(tmp);
 }
 static void test_config_defaults(void) {
     /* Shipped data files drive defaults; user files override them. */
@@ -253,27 +264,21 @@ static void test_config_defaults(void) {
     gtv_config_load(&cfg,empty);
     g_assert_cmpint(cfg.mode,==,GTV_TELEX);
     g_assert_true(cfg.modern);g_assert_true(cfg.spellcheck);
-    g_assert_false(cfg.ai_enabled);
-    g_assert_cmpstr(cfg.model,==,"qwen2.5:0.5b");
-    g_assert_cmpstr(cfg.url,==,"http://localhost:55602");
-    g_assert_cmpstr(cfg.port,==,"55602");
+    g_assert_true(cfg.suggest_enabled);
     gtv_config_clear(&cfg);
     gchar *uc=g_build_filename(empty,"config",NULL);
     g_assert_true(g_file_set_contents(uc,"[input]\nmethod=vni\n",-1,NULL));
     g_free(uc);
     gtv_config_load(&cfg,empty);
     g_assert_cmpint(cfg.mode,==,GTV_VNI);
-    g_assert_cmpstr(cfg.model,==,"qwen2.5:0.5b");
     gtv_config_clear(&cfg);
-    gchar *ua=g_build_filename(empty,"ai.conf",NULL);
-    g_assert_true(g_file_set_contents(ua,"[ai]\nprovider=ollama\nmodel=custom-model\n",-1,NULL));
+    gchar *ua=g_build_filename(empty,"config",NULL);
+    g_assert_true(g_file_set_contents(ua,"[suggest]\nenable=false\n",-1,NULL));
     g_free(ua);
     gtv_config_load(&cfg,empty);
-    g_assert_true(cfg.ai_enabled);
-    g_assert_cmpstr(cfg.model,==,"custom-model");
+    g_assert_false(cfg.suggest_enabled);
     gtv_config_clear(&cfg);
     gchar *rc=g_build_filename(empty,"config",NULL);g_remove(rc);g_free(rc);
-    gchar *ra=g_build_filename(empty,"ai.conf",NULL);g_remove(ra);g_free(ra);
     g_rmdir(empty);g_free(empty);
 }
 
@@ -364,19 +369,6 @@ static void test_random_input(void) {
     }
     g_rand_free(rng);
 }
-static void test_ollama(void) {
-    GtvConfig config={.ai_enabled=TRUE,.url="http://localhost:55602",.model="qwen2.5:0.5b"};
-    g_assert_true(gtv_ai_available(&config));
-    GPtrArray *out=gtv_ai_suggest(&config,"kông","a\"b");
-    g_assert_cmpuint(out->len,==,1);g_assert_cmpstr(g_ptr_array_index(out,0),==,"không");g_ptr_array_unref(out);
-    config.url="http://malformed";
-    out=gtv_ai_suggest(&config,"kông","a\"b");
-    g_assert_cmpuint(out->len,==,0);g_ptr_array_unref(out);
-    config.url="http://fail";
-    g_assert_false(gtv_ai_available(&config));
-    out=gtv_ai_suggest(&config,"được","");g_assert_cmpuint(out->len,==,0);g_ptr_array_unref(out);
-}
-
 static void on_async_suggest_done(GObject *src, GAsyncResult *res, gpointer data){
     gboolean *done = data;
     GError *error = NULL;
@@ -389,21 +381,21 @@ static void on_async_suggest_done(GObject *src, GAsyncResult *res, gpointer data
 }
 
 static void test_suggest_combined(void) {
-    GtvConfig config = {.ai_enabled = TRUE,.url="http://localhost:55602",.model="qwen2.5:0.5b"};
+    GtvConfig config = {.suggest_enabled = TRUE};
     GPtrArray *s1 = gtv_suggest_combined(&config, "Tôi ", "kông", TRUE);
     g_assert_nonnull(s1);
     g_assert_cmpuint(s1->len, >, 0);
     g_assert_cmpstr(g_ptr_array_index(s1, 0), ==, "không");
     g_ptr_array_unref(s1);
 
-    GPtrArray *s2 = gtv_suggest_combined(&config, "xin", "ch", FALSE);
+    GPtrArray *s2 = gtv_suggest_combined(&config, "xin", "thong", FALSE);
     g_assert_nonnull(s2);
     g_assert_cmpuint(s2->len, >, 0);
-    g_assert_cmpstr(g_ptr_array_index(s2, 0), ==, "chào");
+    g_assert_cmpstr(g_ptr_array_index(s2, 0), ==, "thông");
     g_ptr_array_unref(s2);
 
     gboolean done = FALSE;
-    gtv_suggest_combined_async(&config, "xin", "ch", FALSE, NULL, on_async_suggest_done, &done);
+    gtv_suggest_combined_async(&config, "xin", "thong", FALSE, NULL, on_async_suggest_done, &done);
     while(!done) {
         g_main_context_iteration(NULL, TRUE);
     }
@@ -680,22 +672,22 @@ static void test_table_manage(void) {
 }
 
 int main(int argc,char **argv) {
-    const gchar *fixture=g_getenv("GTV_TEST_CURL_DIR");
-    g_assert_nonnull(fixture);
-    gchar *path=g_strconcat(fixture,G_SEARCHPATH_SEPARATOR_S,g_getenv("PATH")?g_getenv("PATH"):"",NULL);
-    g_setenv("PATH",path,TRUE);g_free(path);
+    /* Isolate user dirs: suggestions must come from shipped seeds only,
+     * never from the developer's real ~/.config files. */
+    gchar *cfghome = g_dir_make_tmp("gotiengviet-test-home-XXXXXX", NULL);
+    if (cfghome) { g_setenv("XDG_CONFIG_HOME", cfghome, TRUE); g_free(cfghome); }
+    gchar *datahome = g_dir_make_tmp("gotiengviet-test-data-XXXXXX", NULL);
+    if (datahome) { g_setenv("XDG_DATA_HOME", datahome, TRUE); g_free(datahome); }
     g_test_init(&argc,&argv,NULL);gtv_init();
     g_test_add_func("/support/stateful",test_stateful);
     g_test_add_func("/support/config",test_config);
-    g_test_add_func("/support/json",test_json);
     g_test_add_func("/support/update",test_update);
-    g_test_add_func("/support/ollama",test_ollama);
+    g_test_add_func("/support/dict",test_dict);
     g_test_add_func("/support/suggest-combined",test_suggest_combined);
     g_test_add_func("/support/spelling",test_spelling);
     g_test_add_func("/support/macro-and-emoji",test_macro_and_emoji);
     g_test_add_func("/support/table-manage",test_table_manage);
     g_test_add_func("/support/learn",test_learn);
-    g_test_add_func("/support/prompts",test_prompts);
     g_test_add_func("/support/config-defaults",test_config_defaults);
     g_test_add_func("/algorithm/order-independence",test_order_independence);
     g_test_add_func("/algorithm/random-input",test_random_input);

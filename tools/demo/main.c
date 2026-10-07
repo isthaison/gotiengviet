@@ -16,18 +16,18 @@ int main(int argc, char **argv) {
         puts(out); g_free(out); gtv_config_clear(&config);
         return 0;
     }
-    if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--suggest")) {
-        GPtrArray *out = gtv_ai_suggest(&config,argv[2],argc == 4 ? argv[3] : "");
+    if (argc == 3 && !strcmp(argv[1], "--suggest")) {
+        GPtrArray *out = gtv_suggest_combined(&config, "", argv[2], FALSE);
         for(guint i=0;i<out->len;i++) puts(g_ptr_array_index(out,i));
         g_ptr_array_unref(out);gtv_config_clear(&config);return 0;
     }
-    if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--predict")) {
-        GPtrArray *out = gtv_predict_next(&config, argv[2], argc == 4 ? argv[3] : "");
+    if (argc == 3 && !strcmp(argv[1], "--correct")) {
+        GPtrArray *out = gtv_suggest_combined(&config, "", argv[2], TRUE);
         for(guint i=0;i<out->len;i++) puts(g_ptr_array_index(out,i));
         g_ptr_array_unref(out);gtv_config_clear(&config);return 0;
     }
     if (argc > 1) {
-        puts("GoTiengViet Demo (C)\nUsage: gotiengviet-demo [--transform telex|vni TEXT] [--suggest WORD [CONTEXT]] [--predict CONTEXT [PREFIX]]");
+        puts("GoTiengViet Demo (C)\nUsage: gotiengviet-demo [--transform telex|vni TEXT] [--suggest PREFIX] [--correct WORD]");
         gtv_config_clear(&config);
         return strcmp(argv[1], "--help") != 0;
     }

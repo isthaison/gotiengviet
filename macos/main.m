@@ -71,6 +71,8 @@ static void showAvailableAlert(NSString *tag, NSString *url) {
         gchar *tag = NULL, *url = NULL;
         GtvUpdateStatus st = gtv_update_check_full(NULL, [current UTF8String],
                                                    mac_asset_match, NULL, &tag, &url);
+        /* Dictionary refresh rides the same (throttled) check. */
+        gtv_dict_update_check(NULL);
         NSString *nstag = tag ? [NSString stringWithUTF8String:tag] : nil;
         NSString *nsurl = url ? [NSString stringWithUTF8String:url] : nil;
         g_free(tag);

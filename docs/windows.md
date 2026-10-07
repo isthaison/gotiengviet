@@ -19,17 +19,14 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (stub `gtv_tsf.dll` 
 
 - **Menu khay**: Bảng điều khiển, Bàn phím (Win+Space)..., Telex/VNI, chính tả, chuẩn dấu,
   tự khởi động (thường/admin), Kiểm tra cập nhật, Thoát.
-- **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm AI (Ollama, model chọn
-  trong dropdown như bản Linux — `qwen2.5:0.5b`/`qwen2.5:1.5b`/`rule`, gõ tay model khác vẫn được — URL,
-  dòng trạng thái + log `ollama serve` như bản Linux),
+- **Bảng điều khiển**: kiểu gõ, chuẩn dấu, chính tả, tự khởi động, cụm từ điển
+  (bật/tắt gợi ý, phiên bản + số từ, nút **Cập nhật từ điển**),
   nút **Bàn phím...** (xem [Quản lý danh sách bàn phím](#quản-lý-danh-sách-bàn-phím-winspace)),
-  nút **Dữ liệu...** — lưu ở `%LOCALAPPDATA%\gotiengviet\` như bản Linux. Log serve nằm ở `%TEMP%\ollama_serve.log`;
-  khi bật AI (tick checkbox hoặc lưu), app tự kiểm tra → tự động cài Ollama bằng lệnh chính thức (`irm https://ollama.com/install.ps1 | iex`) chạy nền hoàn toàn im lặng nếu thiếu →
-  chạy `ollama serve` nền → pull model nếu chưa có, chờ `/api/tags` tối đa 15s. Cần mạng lần đầu.
-- **Gợi ý AI dạng balloon**: TSF báo mỗi từ vừa commit về app khay; từ sai được hỏi Ollama nền (`"sai" co the ban muon go "dung"?`, chống spam 10 giây). Cần Ollama + `curl` (có sẵn từ Windows 10). **Click balloon** để nhận (chưa gõ tiếp thì thay tại chỗ, rồi thì copy vào clipboard); lựa chọn được học vào `learned-corrections.txt` nên offline vẫn gợi ý.
-- **Bảng gợi ý keyword inline (broker ngoài process)**: TSF trong app nhập liệu chỉ giữ composition/candidate và bắt phím, không tạo cửa sổ (an toàn với Electron/OpenCode); process tray riêng vẽ overlay cạnh caret, không lấy focus. Gõ `:sm` gợi ý emoji ngay không cần AI; từ thường gợi ý từ Ollama sau debounce 350 ms, rớt mạng dùng dữ liệu đã học. Phím: `Up/Down` di chuyển, `Tab` hoặc số `1-5` (Telex) để nhận, `Esc` bỏ (vẫn gõ tiếp), `Enter` chỉ commit nguyên chữ đang gõ (không nhận gợi ý), `Space` giữ nguyên chữ. Không lấy được tọa độ caret thật thì không hiện gì (không fallback góc màn hình). Từ trùng macro/emoji khớp tuyệt đối vẫn ưu tiên bung bằng `Tab` như cũ. Lựa chọn được học như balloon.
+  nút **Dữ liệu...** — lưu ở `%LOCALAPPDATA%\gotiengviet\` như bản Linux.
+- **Gợi ý từ điển dạng balloon**: TSF báo mỗi từ vừa commit về app khay; từ sai được tra từ điển nền (`"sai" có thể bạn muốn gõ "đúng"?`, chống spam 10 giây), offline 100%. **Click balloon** để nhận (chưa gõ tiếp thì thay tại chỗ, rồi thì copy vào clipboard); lựa chọn được học vào `learned-corrections.txt`.
+- **Bảng gợi ý keyword inline (broker ngoài process)**: TSF trong app nhập liệu chỉ giữ composition/candidate và bắt phím, không tạo cửa sổ (an toàn với Electron/OpenCode); process tray riêng vẽ overlay cạnh caret, không lấy focus. Gõ `:sm` gợi ý emoji ngay; từ thường gợi ý từ từ điển sau debounce ngắn. Phím: `Up/Down` di chuyển, `Tab` hoặc số `1-5` (Telex) để nhận, `Esc` bỏ (vẫn gõ tiếp), `Enter` chỉ commit nguyên chữ đang gõ (không nhận gợi ý), `Space` giữ nguyên chữ. Không lấy được tọa độ caret thật thì không hiện gì (không fallback góc màn hình). Từ trùng macro/emoji khớp tuyệt đối vẫn ưu tiên bung bằng `Tab` như cũ. Lựa chọn được học như balloon.
   Chẩn đoán vị trí hiển thị: `%LOCALAPPDATA%\gotiengviet\suggest.log` — ghi mỗi khi rect caret nhận về không nằm trong cửa sổ đang focus (tức lỗi ở phía TSF), kèm DPI và toạ độ popup; nhật ký tự cắt ở 64 KB.
-- Macro/emoji/prompts/config: chung lõi và file `data/` với bản Linux.
+- Macro/emoji/config: chung lõi và file `data/` với bản Linux.
 - Chữ Việt hiển thị đúng mọi locale: toàn bộ UI dùng Unicode API, dialog đặt chữ lúc chạy.
 
 ## Khởi động với quyền admin
@@ -85,7 +82,7 @@ hoặc Windows (Settings → Time & language → Typing → Highlight misspelt w
 
 ## Giới hạn đã biết
 
-- Gợi ý Ollama inline chạy qua overlay của process tray (không tạo cửa sổ trong app nhập liệu nên an toàn với Electron/OpenCode); macro/emoji vẫn bung bằng `Tab`.
+- Gợi ý từ điển inline chạy qua overlay của process tray (không tạo cửa sổ trong app nhập liệu nên an toàn với Electron/OpenCode); macro/emoji vẫn bung bằng `Tab`.
 - TSF chưa hỗ trợ trường mật khẩu đặc biệt.
 
 ## Build và release

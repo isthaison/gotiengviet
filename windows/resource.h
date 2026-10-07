@@ -15,17 +15,15 @@
 #define IDC_CHECK_STARTUP   206
 #define IDC_BTN_OK          207
 #define IDC_BTN_CANCEL      208
-#define IDC_CHECK_AI        209
-#define IDC_EDIT_MODEL      210 /* CBS_DROPDOWN ComboBox (was EDITTEXT) */
-#define IDC_EDIT_URL        211
+#define IDC_CHECK_SUGGEST  209
+#define IDC_BTN_DICT_UPDATE 210 /* PUSHBUTTON (was EDITTEXT model combo) */
 /* Labels need individual IDs: every visible string is set at runtime
  * (UTF-8 -> UTF-16) so the dialog never depends on how windres decodes
  * non-ASCII resource text. */
 #define IDC_GROUP_TYPE      212
 #define IDC_GROUP_OPTS      213
-#define IDC_GROUP_AI        214
-#define IDC_LBL_MODEL       215
-#define IDC_LBL_URL         216
+#define IDC_GROUP_DICT      214
+#define IDC_LBL_DICT_VER    215
 
 #define ID_TRAY_SETTINGS    302
 #define ID_TRAY_MODE_TELEX  303
@@ -40,9 +38,7 @@
 
 #define IDC_BTN_DATA        217
 #define IDC_BTN_KEYBOARD    253
-#define IDC_LBL_AI_STATUS   233
-#define IDC_LBL_AI_LOG      234
-#define IDC_EDIT_AI_LOG     235
+#define IDC_LBL_DICT_STATUS 233
 
 #define IDD_DATA_DIALOG     220
 #define IDC_DATA_MACRO      221

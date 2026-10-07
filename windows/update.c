@@ -68,6 +68,10 @@ static gpointer check_worker(gpointer data) {
     GtvUpdateStatus st = gtv_update_check(NULL, GTV_VERSION, &tag, &url);
     update_log("check done manual=%d status=%d tag=%s url=%s",
                    job->manual, (gint)st, tag ? tag : "-", url ? url : "-");
+    /* Dictionary refresh rides the same (throttled) check: the dict-vi.txt
+     * release asset upgrades the offline word list without an app update. */
+    if (gtv_dict_update_check(NULL))
+        update_log("dictionary refreshed from GitHub (tag %s)", gtv_dict_tag());
     if (st == GTV_UPDATE_ERROR)
         update_log("check error detail: %s", gtv_update_last_error());
     if (st == GTV_UPDATE_ERROR)

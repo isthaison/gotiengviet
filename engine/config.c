@@ -101,50 +101,6 @@ gchar *gtv_data_path(const gchar *name){
     return g_build_filename("data", name, NULL);
 }
 
-static GKeyFile *prompts_kf = NULL;
-static void prompts_load(void){
-    if(prompts_kf) return;
-    prompts_kf = g_key_file_new();
-    gchar *path = gtv_data_path("prompts.conf");
-    g_key_file_load_from_file(prompts_kf, path, G_KEY_FILE_NONE, NULL);
-    g_free(path);
-}
-void gtv_prompts_reload(void){
-    if(prompts_kf) g_key_file_unref(prompts_kf);
-    prompts_kf = NULL;
-}
-gchar *gtv_prompt_get(const gchar *group, const gchar *key, const gchar *fallback){
-    prompts_load();
-    gchar *v = g_key_file_get_string(prompts_kf, group, key, NULL);
-    if(!v && fallback) v = g_strdup(fallback);
-    return v;
-}
-/* Substitute the first n %s occurrences in order; every other byte
- * (including stray % or %%) is copied literally, so user templates with
- * extra % signs cannot crash or misbehave. */
-gchar *gtv_format_template(const gchar *templ, const gchar * const *args, guint n){
-    if(!templ) return g_strdup("");
-    GString *out = g_string_new("");
-    guint used = 0;
-    for(const gchar *p = templ; *p; ){
-        if(p[0] == '%' && p[1] == 's' && used < n){
-            const gchar *a = (args && args[used]) ? args[used] : "";
-            g_string_append(out, a);
-            used++;
-            p += 2;
-        }else{
-            g_string_append_unichar(out, g_utf8_get_char(p));
-            p = g_utf8_next_char(p);
-        }
-    }
-    return g_string_free(out, FALSE);
-}
-
-static void read_string(GKeyFile *file, const gchar *group, const gchar *key, gchar **value) {
-    gchar *next = g_key_file_get_string(file, group, key, NULL);
-    if (next && *g_strstrip(next)) { g_free(*value); *value = next; }
-    else g_free(next);
-}
 static void read_bool(GKeyFile *file, const gchar *group, const gchar *key, gboolean *value) {
     gchar *next = g_key_file_get_string(file,group,key,NULL);
     if (!next) return;
@@ -153,7 +109,28 @@ static void read_bool(GKeyFile *file, const gchar *group, const gchar *key, gboo
     if (!g_ascii_strcasecmp(next,"false") || !strcmp(next,"0")) *value=FALSE;
     g_free(next);
 }
-static void overlay_file(GKeyFile *file, GtvConfig *config, gboolean input, gboolean provider) {
+/* Suggestions used to live behind an [ai] section (Ollama provider).
+ * The dictionary backend reads [suggest] enable; legacy [ai] enable /
+ * provider values still migrate (provider=ollama implies on) so existing
+ * user configs keep working. */
+static void overlay_suggest(GKeyFile *file, GtvConfig *config) {
+    if (g_key_file_has_key(file, "suggest", "enable", NULL)) {
+        read_bool(file, "suggest", "enable", &config->suggest_enabled);
+        return;
+    }
+    if (g_key_file_has_key(file, "ai", "enable", NULL)) {
+        read_bool(file, "ai", "enable", &config->suggest_enabled);
+        return;
+    }
+    gchar *prov = g_key_file_get_string(file, "ai", "provider", NULL);
+    if (prov) {
+        g_strstrip(prov);
+        if (!g_strcmp0(prov, "ollama")) config->suggest_enabled = TRUE;
+        if (!g_strcmp0(prov, "rule")) config->suggest_enabled = FALSE;
+        g_free(prov);
+    }
+}
+static void overlay_file(GKeyFile *file, GtvConfig *config, gboolean input) {
     if (input) {
         gchar *method = g_key_file_get_string(file, "input", "method", NULL);
         config->mode = method && !g_ascii_strcasecmp(method, "vni") ? GTV_VNI : GTV_TELEX;
@@ -161,43 +138,24 @@ static void overlay_file(GKeyFile *file, GtvConfig *config, gboolean input, gboo
         read_bool(file, "input", "modern", &config->modern);
         read_bool(file, "input", "spellcheck", &config->spellcheck);
     }
-    read_bool(file, "ai", "enable", &config->ai_enabled);
-    read_string(file, "ai", "model", &config->model);
-    read_string(file, "ai", "url", &config->url);
-    read_string(file, "ai", "port", &config->port);
-    if (provider) {
-        gchar *prov = g_key_file_get_string(file, "ai", "provider", NULL);
-        if (g_strcmp0(prov, "ollama") == 0) config->ai_enabled = TRUE;
-        if (g_strcmp0(prov, "rule") == 0) config->ai_enabled = FALSE;
-        g_free(prov);
-    }
+    overlay_suggest(file, config);
 }
-static void overlay_path(GtvConfig *config, const gchar *path, gboolean input, gboolean provider) {
+static void overlay_path(GtvConfig *config, const gchar *path, gboolean input) {
     GKeyFile *file = g_key_file_new();
     if (g_key_file_load_from_file(file, path, G_KEY_FILE_NONE, NULL))
-        overlay_file(file, config, input, provider);
+        overlay_file(file, config, input);
     g_key_file_unref(file);
 }
 void gtv_config_load(GtvConfig *config, const gchar *directory) {
     *config = (GtvConfig){.mode = GTV_TELEX, .modern = TRUE, .spellcheck = TRUE,
-        .model = g_strdup("qwen2.5:0.5b"), .url = g_strdup("http://localhost:55602"), .port = g_strdup("55602")};
-    /* Shipped defaults first (data/config, data/ai.conf), then user files.
-     * ai.conf values take precedence over the [ai] section of config. */
+        .suggest_enabled = TRUE};
+    /* Shipped defaults first (data/config), then user files. */
     gchar *path = gtv_data_path("config");
-    overlay_path(config, path, TRUE, FALSE);
+    overlay_path(config, path, TRUE);
     g_free(path);
     path = g_build_filename(directory, "config", NULL);
-    overlay_path(config, path, TRUE, FALSE);
+    overlay_path(config, path, TRUE);
     g_free(path);
-    path = gtv_data_path("ai.conf");
-    overlay_path(config, path, FALSE, TRUE);
-    g_free(path);
-    path = g_build_filename(directory, "ai.conf", NULL);
-    overlay_path(config, path, FALSE, TRUE);
-    g_free(path);
-    /* Older setup versions stored the display label instead of the model ID. */
-    gchar *label=strstr(config->model," (~");
-    if(label && g_str_has_suffix(config->model,")"))*label='\0';
 }
 
 gboolean gtv_config_save(const GtvConfig *config, const gchar *directory, GError **error) {
@@ -212,26 +170,12 @@ gboolean gtv_config_save(const GtvConfig *config, const gchar *directory, GError
     g_key_file_set_boolean(file, "input", "modern", config->modern);
     g_key_file_set_boolean(file, "input", "spellcheck", config->spellcheck);
     g_key_file_set_string(file, "input", "charset", "unicode");
-    g_key_file_set_boolean(file, "ai", "enable", config->ai_enabled);
-    g_key_file_set_string(file, "ai", "model", config->model);
-    g_key_file_set_string(file, "ai", "url", config->url);
-    g_key_file_set_string(file, "ai", "port", config->port);
+    g_key_file_set_boolean(file, "suggest", "enable", config->suggest_enabled);
     gboolean ok = g_key_file_save_to_file(file, path, error);
-    g_free(path);
-    g_key_file_unref(file);
-    if (!ok) return FALSE;
-    file = g_key_file_new();
-    g_key_file_set_string(file, "ai", "provider", config->ai_enabled ? "ollama" : "rule");
-    g_key_file_set_string(file, "ai", "model", config->model);
-    g_key_file_set_string(file, "ai", "url", config->url);
-    g_key_file_set_string(file, "ai", "port", config->port);
-    path = g_build_filename(directory, "ai.conf", NULL);
-    ok = g_key_file_save_to_file(file, path, error);
     g_free(path);
     g_key_file_unref(file);
     return ok;
 }
 void gtv_config_clear(GtvConfig *config) {
-    g_free(config->model); g_free(config->url); g_free(config->port);
     *config = (GtvConfig){0};
 }

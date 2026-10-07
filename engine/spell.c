@@ -1,9 +1,9 @@
 #include "internal.h"
 
 /* Kiểm tra đúng/sai ngoại tuyến bằng quy tắc âm tiết (âm đầu, vần, phụ âm
- * cuối, thanh điệu), không dùng danh sách từ cứng. Từ vựng do người dùng và
- * Ollama dạy được lưu ở learned-words.txt / learned-corrections.txt (xem
- * ibus/engine.c); gợi ý sửa lỗi do Ollama xử lý (engine/ai.c). */
+ * cuối, thanh điệu), không dùng danh sách từ cứng. Từ vựng do người dùng
+ * chọn từ gợi ý được lưu ở learned-words.txt / learned-corrections.txt
+ * (xem ibus/engine.c); gợi ý sửa lỗi do từ điển xử lý (engine/dict.c). */
 
 gboolean is_valid_coda(const char *coda, int coda_len){
     if(coda_len == 0) return TRUE;
@@ -177,6 +177,7 @@ void add_candidate_unique(GPtrArray *out, const char *cand){
     g_ptr_array_add(out, g_strdup(cand));
 }
 
-/* Gợi ý từ/cụm từ do Ollama xử lý (engine/ai.c, bất đồng bộ, có hủy).
- * Kiểm tra đúng/sai ngoại tuyến vẫn dùng spell_word_valid() ở trên để
+/* Word suggestions come from the offline dictionary (engine/dict.c) plus
+ * learned vocabulary (engine/learn.c), orchestrated by engine/suggest.c.
+ * Đúng/sai ngoại tuyến vẫn dùng spell_word_valid() ở trên để
  * không chặn đường xử lý phím. */

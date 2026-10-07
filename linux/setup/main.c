@@ -325,6 +325,8 @@ static gpointer tray_update_check_thread(gpointer data){
     else u->status = GTV_UPDATE_ERROR;
     g_free(current); g_free(arch);
     g_idle_add(tray_update_checked_cb, u);
+    /* Dictionary refresh rides the same throttled check (tray + setup). */
+    gtv_dict_update_check(NULL);
     return NULL;
 }
 static void tray_update_start(gboolean manual){
@@ -404,20 +406,8 @@ int tray_run(int argc, char *argv[]){
 
 static GtkWidget *rb_telex, *rb_vni, *cb_modern, *cb_spell;
 static GtkWidget *lbl_preview;
-static GtkWidget *cb_ai, *combo_model, *entry_url, *spin_port, *lbl_ai_status, *progress_ai;
-static GtkWidget *log_scroll = NULL, *log_view = NULL;
-static GtkTextBuffer *log_buf = NULL;
-static guint log_timer_id = 0;
-static GPid serve_pid = 0;
-static GPid install_pid = 0;
-static char active_log_path[256] = "/tmp/ollama_serve.log";
-static int serve_wait_left = 0;
+static GtkWidget *cb_suggest, *lbl_dict_ver, *lbl_dict_status, *btn_dict_update;
 static char *config_path;
-static gboolean download_in_progress = FALSE;
-static int model_wait_left = 0;
-static void auto_install_ollama(void);
-static void ensure_model_present(void);
-static gboolean update_progress(gpointer data);
 
 static void update_preview(){
     gboolean modern = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_modern));
@@ -430,363 +420,53 @@ static void on_modern_toggled(GtkWidget *w, gpointer data){
     update_preview();
 }
 
-static void ai_log(const char *line){
-    if(!log_buf || !line) return;
-    GtkTextIter end;
-    gtk_text_buffer_get_end_iter(log_buf, &end);
-    gtk_text_buffer_insert(log_buf, &end, line, -1);
-    gtk_text_buffer_insert(log_buf, &end, "\n", -1);
-    int lines = gtk_text_buffer_get_line_count(log_buf);
-    if(lines > 200){
-        GtkTextIter start, cut;
-        gtk_text_buffer_get_start_iter(log_buf, &start);
-        gtk_text_buffer_get_iter_at_line(log_buf, &cut, lines - 200);
-        gtk_text_buffer_delete(log_buf, &start, &cut);
-    }
-    if(log_scroll){
-        GtkAdjustment *adj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(log_scroll));
-        if(adj) gtk_adjustment_set_value(adj, gtk_adjustment_get_upper(adj) - gtk_adjustment_get_page_size(adj));
-    }
+static void dict_ui_refresh(void){
+    if(!lbl_dict_ver) return;
+    guint n = gtv_dict_count();
+    const gchar *tag = gtv_dict_tag();
+    gchar *ver = (n > 0)
+        ? g_strdup_printf("Từ điển %s · %u từ", (tag && *tag) ? tag : "cài sẵn", n)
+        : g_strdup("Chưa có từ điển");
+    gtk_label_set_text(GTK_LABEL(lbl_dict_ver), ver);
+    g_free(ver);
 }
-
-static gboolean syncing_endpoint;
-static gboolean local_endpoint(GUri *uri){
-    const gchar *host=uri ? g_uri_get_host(uri) : NULL;
-    return host && (!g_ascii_strcasecmp(host,"localhost") || !strcmp(host,"127.0.0.1") || !strcmp(host,"::1"));
-}
-static void port_changed(GtkSpinButton *spin,gpointer data){
-    if(syncing_endpoint)return;
-    GUri *uri=g_uri_parse(gtk_entry_get_text(GTK_ENTRY(entry_url)),G_URI_FLAGS_NONE,NULL);
-    if(local_endpoint(uri)){
-        gchar *url=g_uri_join(G_URI_FLAGS_NONE,g_uri_get_scheme(uri),g_uri_get_userinfo(uri),g_uri_get_host(uri),
-            gtk_spin_button_get_value_as_int(spin),g_uri_get_path(uri),g_uri_get_query(uri),g_uri_get_fragment(uri));
-        syncing_endpoint=TRUE;gtk_entry_set_text(GTK_ENTRY(entry_url),url);syncing_endpoint=FALSE;g_free(url);
-    }
-    if(uri)g_uri_unref(uri);
-}
-static void url_changed(GtkEditable *entry,gpointer data){
-    if(syncing_endpoint)return;
-    GUri *uri=g_uri_parse(gtk_entry_get_text(GTK_ENTRY(entry)),G_URI_FLAGS_NONE,NULL);
-    if(local_endpoint(uri) && g_uri_get_port(uri)>=1024){
-        syncing_endpoint=TRUE;gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_port),g_uri_get_port(uri));syncing_endpoint=FALSE;
-    }
-    if(uri)g_uri_unref(uri);
-}
-static gboolean ollama_serving(int port){
-    char cmd[256];
-    snprintf(cmd, sizeof(cmd), "curl -s -m 2 http://localhost:%d/api/tags -o /dev/null 2>/dev/null", port);
-    int rc = run_shell(cmd);
-    return (rc == 0);
-}
-
-static gboolean poll_serve_log(gpointer data);
-static void start_log_poll(void){
-    if(log_timer_id==0 && (serve_pid!=0 || install_pid!=0 || serve_wait_left>0))
-        log_timer_id=g_timeout_add(800,poll_serve_log,NULL);
-}
-static gboolean poll_serve_log(gpointer data){
-    static long last_off = 0;
-    static char last_path[256] = "";
-    (void)data;
-    /* Idle steady state: stop tailing instead of waking every 800ms forever.
-     * Each wakeup appends AT-SPI text events that keep screen readers busy. */
-    if(serve_pid==0 && install_pid==0 && serve_wait_left<=0){
-        log_timer_id=0;
-        return FALSE;
-    }
-    if(strcmp(last_path, active_log_path) != 0){
-        snprintf(last_path, sizeof(last_path), "%s", active_log_path);
-        last_off = 0;
-    }
-    FILE *f = fopen(active_log_path, "r");
-    if(!f) return TRUE;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    if(sz < last_off) last_off = 0;
-    fseek(f, last_off, SEEK_SET);
-    char line[1024];
-    while(fgets(line, sizeof(line), f)){
-        line[strcspn(line, "\r\n")] = 0;
-        if(line[0]) ai_log(line);
-    }
-    last_off = ftell(f);
-    fclose(f);
-    return TRUE;
-}
-
-static void on_serve_exit(GPid pid, gint status, gpointer data){
-    (void)data;
-    g_spawn_close_pid(pid);
-    if(pid == serve_pid) serve_pid = 0;
-    char msg[160];
-    snprintf(msg, sizeof(msg), "ollama serve đã thoát (mã %d). Xem chi tiết: /tmp/ollama_serve.log", status);
-    if(lbl_ai_status) gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
-    ai_log(msg);
-}
-
-static gboolean check_serve_ready(gpointer data){
-    (void)data;
-    int port = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port));
-    if(ollama_serving(port)){
-        char msg[256];
-        snprintf(msg, sizeof(msg), "Ollama đã chạy ở port %d (pid %d) — sẵn sàng gợi ý.", port, (int)serve_pid);
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
-        ai_log(msg);
-        serve_wait_left=0;
-        ensure_model_present();
-        return FALSE;
-    }
-    if(--serve_wait_left <= 0){
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Sau 15s vẫn chưa kết nối được — xem log bên dưới (file /tmp/ollama_serve.log).");
-        ai_log("CẢNH BÁO: quá 15s chưa thấy /api/tags. Kiểm tra log, port có bị chiếm không.");
-        serve_wait_left=0;
-        return FALSE;
-    }
-    return TRUE;
-}
-
-static void ensure_ollama_serve(){
-    int port = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port));
-    if(ollama_serving(port)){
-        char msg[256];
-        snprintf(msg, sizeof(msg), "Ollama đang chạy ở port %d — sẵn sàng gợi ý.", port);
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
-        ai_log(msg);
-        ensure_model_present();
-        return;
-    }
-    if(!g_find_program_in_path("ollama")){
-        auto_install_ollama();
-        return;
-    }
-    char msg[256];
-    snprintf(msg, sizeof(msg), "Đang khởi động 'ollama serve' ở port %d...", port);
-    gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
-    ai_log(msg);
-    FILE *lf = fopen("/tmp/ollama_serve.log", "w");
-    if(lf){ fprintf(lf, "=== ollama serve port %d (GoTiengViet Setup tự khởi động) ===\n", port); fclose(lf); }
-    char shcmd[512];
-    snprintf(shcmd, sizeof(shcmd), "OLLAMA_HOST=0.0.0.0:%d exec ollama serve >>/tmp/ollama_serve.log 2>&1", port);
-    gchar *argv[] = {"sh", "-c", shcmd, NULL};
-    GError *err = NULL;
-    GPid pid = 0;
-    if(!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, &err)){
-        char em[256];
-        snprintf(em, sizeof(em), "LỖI khởi động ollama: %s", err ? err->message : "unknown");
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), em);
-        ai_log(em);
-        if(err) g_error_free(err);
-        return;
-    }
-    serve_pid = pid;
-    g_child_watch_add(pid, on_serve_exit, NULL);
-    ai_log("Đã chạy ollama serve, chờ /api/tags (tối đa 15s)...");
-    serve_wait_left = 15;
-    start_log_poll();
-    g_timeout_add(1000, check_serve_ready, NULL);
-}
-
-static void on_install_exit(GPid pid, gint status, gpointer data){
-    (void)data;
-    g_spawn_close_pid(pid);
-    if(pid == install_pid) install_pid = 0;
-    if(status == 0){
-        ai_log("Cài Ollama xong.");
-        if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai))){
-            ai_log("Tự khởi động serve...");
-            snprintf(active_log_path, sizeof(active_log_path), "/tmp/ollama_serve.log");
-            ensure_ollama_serve();
+static gboolean dict_update_done(gpointer data){
+    gboolean updated = GPOINTER_TO_INT(data);
+    if(btn_dict_update) gtk_widget_set_sensitive(btn_dict_update, TRUE);
+    dict_ui_refresh();
+    if(lbl_dict_status){
+        if(updated){
+            const gchar *tag = gtv_dict_tag();
+            gchar *msg = g_strdup_printf("Đã cập nhật từ điển %s (%u từ).",
+                (tag && *tag) ? tag : "", gtv_dict_count());
+            gtk_label_set_text(GTK_LABEL(lbl_dict_status), msg);
+            g_free(msg);
         } else {
-            ai_log("AI đã tắt trong lúc cài — bỏ qua khởi động serve.");
+            gtk_label_set_text(GTK_LABEL(lbl_dict_status),
+                "Từ điển đã mới nhất (hoặc không có mạng).");
         }
-    } else {
-        char msg[512];
-        snprintf(msg, sizeof(msg), "Cài Ollama thất bại (mã %d). Xem %s", status, active_log_path);
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
-        ai_log(msg);
     }
+    return G_SOURCE_REMOVE;
+}
+static gpointer dict_update_worker(gpointer data){
+    (void)data;
+    gboolean updated = gtv_dict_update_check(NULL);
+    g_idle_add(dict_update_done, GINT_TO_POINTER(updated));
+    return NULL;
+}
+static void on_dict_update(GtkWidget *w, gpointer data){
+    (void)w; (void)data;
+    if(btn_dict_update) gtk_widget_set_sensitive(btn_dict_update, FALSE);
+    if(lbl_dict_status)
+        gtk_label_set_text(GTK_LABEL(lbl_dict_status),
+            "Đang kiểm tra từ điển mới trên GitHub...");
+    GThread *th = g_thread_new("gtv-dict-update", dict_update_worker, NULL);
+    if(th) g_thread_unref(th);
+    else if(btn_dict_update) gtk_widget_set_sensitive(btn_dict_update, TRUE);
 }
 
-static void auto_install_ollama(void){
-    if(g_find_program_in_path("ollama")){
-        ai_log("Ollama đã được cài.");
-        return;
-    }
-    if(install_pid != 0){
-        ai_log("Đang cài Ollama, vui lòng đợi...");
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang cài Ollama — xem log bên dưới.");
-        return;
-    }
-    FILE *lf = fopen("/tmp/ollama_install.log", "w");
-    if(lf){ fprintf(lf, "=== Cài Ollama (GoTiengViet Setup) ===\n"); fclose(lf); }
-    snprintf(active_log_path, sizeof(active_log_path), "/tmp/ollama_install.log");
-    start_log_poll();
-    gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Đang cài Ollama (curl -fsSL https://ollama.com/install.sh | sh)...");
-    ai_log("Chạy lệnh: curl -fsSL https://ollama.com/install.sh | sh (pkexec có thể hỏi mật khẩu)...");
-    gchar *argv[] = {"pkexec", "sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh >>/tmp/ollama_install.log 2>&1", NULL};
-    GError *err = NULL;
-    GPid pid = 0;
-    gchar **final_argv = argv;
-    gchar *term = NULL;
-    FILE *tty = fopen("/dev/tty", "r");
-    if(!tty){
-        const char *terms[] = {"x-terminal-emulator","gnome-terminal","konsole","xfce4-terminal","xterm",NULL};
-        for(int i = 0; terms[i]; i++){
-            if(g_find_program_in_path(terms[i])){ term = g_strdup(terms[i]); break; }
-        }
-        if(term){
-            GString *cmd = g_string_new("");
-            for(int i = 0; argv[i]; i++){ if(i) g_string_append_c(cmd,' '); g_string_append(cmd, argv[i]); }
-            static gchar *wrapped[4];
-            wrapped[0] = term; wrapped[1] = "-e"; wrapped[2] = cmd->str; wrapped[3] = NULL;
-            final_argv = wrapped;
-        }
-    }else{ fclose(tty); }
-    if(!g_spawn_async(NULL, final_argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, &err)){
-        char em[256];
-        snprintf(em, sizeof(em), "LỖI gọi pkexec: %s", err ? err->message : "unknown");
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), em);
-        ai_log(em);
-        if(err) g_error_free(err);
-        if(term) g_free(term);
-        return;
-    }
-    if(term) g_free(term);
-    install_pid = pid;
-    g_child_watch_add(pid, on_install_exit, NULL);
-}
-
-/* Model id đang chọn, cắt nhãn hiển thị sau dấu cách. */
-static gchar *current_model_id(void){
-    const char *id = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)));
-    if(!id || !*id){ g_free((gpointer)id); return g_strdup("qwen2.5:0.5b"); }
-    char *sp = strchr(id, ' ');
-    if(sp) *sp = 0;
-    return (gchar *)id;
-}
-static gboolean model_name_ok(const char *model){
-    if(!model || !*model) return FALSE;
-    for(const char *p = model; *p; p++){
-        if(!g_ascii_isalnum(*p) && *p!=':' && *p!='.' && *p!='_' && *p!='-') return FALSE;
-    }
-    return TRUE;
-}
-/* Base URL từ ô URL, bỏ '/' thừa cuối. */
-static gchar *tags_url(void){
-    const char *raw = gtk_entry_get_text(GTK_ENTRY(entry_url));
-    if(!raw || !*raw) return NULL;
-    if(strpbrk(raw, "' \t\r\n")) return NULL;
-    gchar *base = g_strdup(raw);
-    gsize len = strlen(base);
-    while(len > 0 && base[len-1] == '/'){ base[--len] = 0; }
-    if(!*base){ g_free(base); return NULL; }
-    gchar *url = g_strconcat(base, "/api/tags", NULL);
-    g_free(base);
-    return url;
-}
-static void on_models_checked(GPid pid, gint status, gpointer data);
-static void query_models_async(void){
-    gchar *url = tags_url();
-    if(!url) return;
-    g_remove("/tmp/ollama_models.json"); /* tránh đọc kết quả cũ khi query fail */
-    gchar *quoted = g_shell_quote(url);
-    g_free(url);
-    char shcmd[1024];
-    snprintf(shcmd, sizeof(shcmd), "curl -s -m 5 %s -o /tmp/ollama_models.json 2>/dev/null", quoted);
-    g_free(quoted);
-    gchar *argv[] = {"sh", "-c", shcmd, NULL};
-    GError *err = NULL;
-    GPid pid = 0;
-    if(!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &pid, &err)){
-        g_clear_error(&err);
-        return;
-    }
-    g_child_watch_add(pid, on_models_checked, NULL);
-}
-static gboolean check_model_ready(gpointer data){
-    (void)data;
-    query_models_async();
-    return FALSE;
-}
-/* Tự kiểm tra model đã có chưa, thiếu thì pull nền rồi báo khi xong. */
-static void ensure_model_present(void){
-    if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai))) return;
-    if(download_in_progress) return;
-    gchar *model = current_model_id();
-    if(!strcmp(model, "rule")){ g_free(model); return; }
-    if(!model_name_ok(model)){
-        ai_log("Tên model không hợp lệ, bỏ qua tự tải.");
-        g_free(model);
-        return;
-    }
-    g_free(model);
-    model_wait_left = 40;
-    query_models_async();
-}
-static void on_models_checked(GPid pid, gint status, gpointer data){
-    (void)data;
-    g_spawn_close_pid(pid);
-    if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai))){ download_in_progress = FALSE; return; }
-    gchar *model = current_model_id();
-    if(!model || !strcmp(model, "rule")){ g_free(model); download_in_progress = FALSE; return; }
-    gboolean present = FALSE;
-    gchar *contents = NULL;
-    if(g_file_get_contents("/tmp/ollama_models.json", &contents, NULL, NULL)){
-        gchar *needle = g_strdup_printf("\"name\":\"%s", model);
-        present = strstr(contents, needle) != NULL;
-        g_free(needle);
-        g_free(contents);
-    }
-    if(present){
-        char msg[256];
-        snprintf(msg, sizeof(msg), "Model %s đã sẵn sàng.", model);
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
-        ai_log(msg);
-        download_in_progress = FALSE;
-        model_wait_left = 0;
-        g_free(model);
-        return;
-    }
-    if(!download_in_progress){
-        char msg[256];
-        snprintf(msg, sizeof(msg), "Model %s chưa có — tự tải nền, xong sẽ báo.", model);
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), msg);
-        ai_log(msg);
-        /* URL pull lấy từ ô URL để đúng port/host. */
-        char pull[1024];
-        {
-            const char *raw = gtk_entry_get_text(GTK_ENTRY(entry_url));
-            gchar *base = g_strdup(raw ? raw : "");
-            gsize blen = strlen(base);
-            while(blen > 0 && base[blen-1] == '/'){ base[--blen] = 0; }
-            snprintf(pull, sizeof(pull), "curl -s -X POST %s/api/pull -d '{\"name\":\"%s\"}' -H 'Content-Type: application/json' > /tmp/ollama_pull.log 2>&1 &",
-                *base ? base : "http://localhost:55602", model);
-            g_free(base);
-        }
-        run_shell(pull);
-        download_in_progress = TRUE;
-        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_ai), 0.0);
-        g_timeout_add(100, update_progress, NULL);
-    }
-    g_free(model);
-    if(--model_wait_left > 0){
-        g_timeout_add(15000, check_model_ready, NULL);
-    } else {
-        download_in_progress = FALSE;
-        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_ai), 1.0);
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "Chờ model quá lâu — kiểm tra mạng/dung lượng rồi bật AI lại.");
-        ai_log("Chờ model quá 10 phút, dừng kiểm tra. Bật AI lại để thử tiếp.");
-    }
-}
-
-static void on_ai_toggled(GtkWidget *w, gpointer data){
-    (void)data;
-    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w))){
-        ensure_ollama_serve();
-    } else {
-        gtk_label_set_text(GTK_LABEL(lbl_ai_status), "AI tắt — dùng rule có sẵn, không cần Ollama.");
-        ai_log("AI gợi ý: TẮT (ollama serve nền nếu đang chạy vẫn giữ nguyên).");
-    }
+static void on_suggest_toggled(GtkWidget *w, gpointer data){
+    (void)w; (void)data;
 }
 
 static void on_save(GtkWidget *w, gpointer data){
@@ -794,33 +474,24 @@ static void on_save(GtkWidget *w, gpointer data){
     const char *method = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(rb_vni)) ? "vni" : "telex";
     const char *modern = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_modern)) ? "true" : "false";
     const char *spell = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_spell)) ? "true" : "false";
-    const char *ai_enabled = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_ai)) ? "true" : "false";
-    const char *model = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_model)));
-    if(!model) model = g_strdup("qwen2.5:0.5b");
-    int port = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin_port));
-    const char *url = gtk_entry_get_text(GTK_ENTRY(entry_url));
-    // Nếu bật AI: đảm bảo ollama serve đang chạy rồi mới lưu
-    if(strcmp(ai_enabled,"true")==0){ ensure_ollama_serve(); }
+    const char *suggest = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cb_suggest)) ? "true" : "false";
     GtvConfig config = {.mode = strcmp(method,"vni") == 0 ? GTV_VNI : GTV_TELEX,
         .modern = strcmp(modern,"true") == 0, .spellcheck = strcmp(spell,"true") == 0,
-        .ai_enabled = strcmp(ai_enabled,"true") == 0, .model = (gchar *)model,
-        .url = (gchar *)url, .port = g_strdup_printf("%d",port)};
+        .suggest_enabled = strcmp(suggest,"true") == 0};
     gchar *directory = g_path_get_dirname(config_path);
     GError *error = NULL;
     gboolean saved = gtv_config_save(&config,directory,&error);
-    g_free(directory); g_free(config.port);
+    g_free(directory);
     if(!saved){
         GtkWidget *failure = gtk_message_dialog_new(win,GTK_DIALOG_MODAL,GTK_MESSAGE_ERROR,GTK_BUTTONS_OK,
             "Không lưu được cấu hình: %s",error->message);
         gtk_dialog_run(GTK_DIALOG(failure));gtk_widget_destroy(failure);g_error_free(error);
-        g_free((gpointer)model);
         return;
     }
     // Restart ibus
     run_shell("ibus restart 2>/dev/null &");
     GtkWidget *dlg = gtk_message_dialog_new(win, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
-        "Đã lưu %s, modern=%s, AI %s:%s. Đã restart ibus.", method, modern, ai_enabled, model);
-    g_free((gpointer)model);
+        "Đã lưu %s, modern=%s, gợi ý từ điển=%s. Đã restart ibus.", method, modern, suggest);
     gtk_dialog_run(GTK_DIALOG(dlg));
     gtk_widget_destroy(dlg);
     gtk_main_quit();
@@ -832,14 +503,7 @@ static void on_data(GtkWidget *w, gpointer data){
     (void)w;
     data_show(GTK_WINDOW(data));
 }
-static gboolean update_progress(gpointer data){
-    if(download_in_progress){
-        gtk_progress_bar_pulse(GTK_PROGRESS_BAR(progress_ai));
-        return TRUE;
-    }
-    return FALSE;
-}
-int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_modern, const char *cur_spell, const char *cur_ai_enable, const char *cur_model, const char *cur_url, const char *cur_port, const char *cfg){
+int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_modern, const char *cur_spell, const char *cur_suggest, const char *cfg){
     g_set_prgname("gotiengviet");
     g_set_application_name("GoTiengViet");
     config_path = strdup(cfg);
@@ -902,66 +566,28 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     gtk_widget_set_sensitive(w2, FALSE);
     gtk_box_pack_start(GTK_BOX(box2), w2, FALSE, FALSE, 0);
 
-    // AI Frame
-    GtkWidget *f_ai = gtk_frame_new("AI Local (Ollama) — Port 55602");
-    gtk_box_pack_start(GTK_BOX(vbox), f_ai, FALSE, FALSE, 0);
-    GtkWidget *box_ai = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-    gtk_container_set_border_width(GTK_CONTAINER(box_ai), 8);
-    gtk_container_add(GTK_CONTAINER(f_ai), box_ai);
-    cb_ai = gtk_check_button_new_with_label("Gợi ý Ollama — chờ ngừng gõ 350 ms (debounce)");
-    gtk_box_pack_start(GTK_BOX(box_ai), cb_ai, FALSE, FALSE, 0);
-    g_signal_connect(cb_ai, "toggled", G_CALLBACK(on_ai_toggled), NULL);
-    GtkWidget *hbox_ai = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_box_pack_start(GTK_BOX(box_ai), hbox_ai, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hbox_ai), gtk_label_new("Model:"), FALSE, FALSE, 0);
-    combo_model = gtk_combo_box_text_new();
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "qwen2.5:0.5b", "qwen2.5:0.5b (~400MB)");
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "qwen2.5:1.5b", "qwen2.5:1.5b (~1GB)");
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model), "rule", "rule (không model)");
-    gtk_combo_box_set_active(GTK_COMBO_BOX(combo_model), 0);
-    gtk_box_pack_start(GTK_BOX(hbox_ai), combo_model, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hbox_ai), gtk_label_new("Port:"), FALSE, FALSE, 0);
-    spin_port = gtk_spin_button_new_with_range(1024, 65535, 1);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_port), 55602);
-    gtk_widget_set_tooltip_text(spin_port, "Port Ollama, mặc định 55602 thay vì 11434");
-    gtk_box_pack_start(GTK_BOX(hbox_ai), spin_port, FALSE, FALSE, 0);
-    GtkWidget *hbox_url = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_box_pack_start(GTK_BOX(box_ai), hbox_url, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hbox_url), gtk_label_new("URL:"), FALSE, FALSE, 0);
-    entry_url = gtk_entry_new();
-    gtk_entry_set_text(GTK_ENTRY(entry_url), "http://localhost:55602");
-    gtk_entry_set_placeholder_text(GTK_ENTRY(entry_url), "http://localhost:55602");
-    gtk_box_pack_start(GTK_BOX(hbox_url), entry_url, TRUE, TRUE, 0);
-        progress_ai = gtk_progress_bar_new();
-    gtk_box_pack_start(GTK_BOX(box_ai), progress_ai, FALSE, FALSE, 0);
-    lbl_ai_status = gtk_label_new("Bật AI để Ollama và model tự động.");
-    gtk_label_set_line_wrap(GTK_LABEL(lbl_ai_status), TRUE);
-    gtk_label_set_xalign(GTK_LABEL(lbl_ai_status), 0.0);
-    gtk_box_pack_start(GTK_BOX(box_ai), lbl_ai_status, FALSE, FALSE, 0);
-    GtkWidget *lbl_log = gtk_label_new("Log Ollama serve (file /tmp/ollama_serve.log):");
-    gtk_label_set_xalign(GTK_LABEL(lbl_log), 0.0);
-    gtk_box_pack_start(GTK_BOX(box_ai), lbl_log, FALSE, FALSE, 0);
-    log_scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(log_scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_size_request(log_scroll, -1, 110);
-    gtk_box_pack_start(GTK_BOX(box_ai), log_scroll, FALSE, FALSE, 0);
-    log_view = gtk_text_view_new();
-    gtk_text_view_set_editable(GTK_TEXT_VIEW(log_view), FALSE);
-    gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(log_view), FALSE);
-    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(log_view), GTK_WRAP_WORD_CHAR);
-    log_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(log_view));
-    gtk_container_add(GTK_CONTAINER(log_scroll), log_view);
-    // Khởi tạo AI từ config
-    if(!gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo_model),cur_model)) {
-        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_model),cur_model,cur_model);
-        gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo_model),cur_model);
-    }
-    gtk_entry_set_text(GTK_ENTRY(entry_url), cur_url);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin_port), atoi(cur_port));
-    g_signal_connect(spin_port,"value-changed",G_CALLBACK(port_changed),NULL);
-    g_signal_connect(entry_url,"changed",G_CALLBACK(url_changed),NULL);
-    url_changed(GTK_EDITABLE(entry_url),NULL);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cb_ai), strcmp(cur_ai_enable,"true")==0);
+    // Dictionary frame (offline suggestions, GitHub-updated word list)
+    GtkWidget *f_dict = gtk_frame_new("Gợi ý từ điển (offline)");
+    gtk_box_pack_start(GTK_BOX(vbox), f_dict, FALSE, FALSE, 0);
+    GtkWidget *box_dict = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_container_set_border_width(GTK_CONTAINER(box_dict), 8);
+    gtk_container_add(GTK_CONTAINER(f_dict), box_dict);
+    cb_suggest = gtk_check_button_new_with_label("Bật gợi ý từ thông minh");
+    gtk_box_pack_start(GTK_BOX(box_dict), cb_suggest, FALSE, FALSE, 0);
+    g_signal_connect(cb_suggest, "toggled", G_CALLBACK(on_suggest_toggled), NULL);
+    lbl_dict_ver = gtk_label_new("Từ điển...");
+    gtk_label_set_xalign(GTK_LABEL(lbl_dict_ver), 0.0);
+    gtk_box_pack_start(GTK_BOX(box_dict), lbl_dict_ver, FALSE, FALSE, 0);
+    btn_dict_update = gtk_button_new_with_label("Cập nhật từ điển từ GitHub...");
+    g_signal_connect(btn_dict_update, "clicked", G_CALLBACK(on_dict_update), NULL);
+    gtk_box_pack_start(GTK_BOX(box_dict), btn_dict_update, FALSE, FALSE, 0);
+    lbl_dict_status = gtk_label_new("Gợi ý offline 100%, không cần mạng.");
+    gtk_label_set_line_wrap(GTK_LABEL(lbl_dict_status), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(lbl_dict_status), 0.0);
+    gtk_box_pack_start(GTK_BOX(box_dict), lbl_dict_status, FALSE, FALSE, 0);
+    // Khởi tạo gợi ý từ config
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cb_suggest), strcmp(cur_suggest,"true")==0);
+    dict_ui_refresh();
 
     GtkWidget *info = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(info), "<span size='small'>Cấu hình lưu tại <tt>~/.config/gotiengviet/config</tt>\nGõ lại ký tự để xóa dấu: <tt>as-&gt;á, á s-&gt;a</tt>, <tt>uw-&gt;ư, ư w-&gt;u</tt></span>");
@@ -1028,32 +654,24 @@ static void cli_choice(const gchar *label, gchar *buffer, gsize size) {
 
 static int setup_cli(GtvConfig *config, const gchar *directory) {
     gchar input[256];
-    g_print("GoTiengViet Setup (C) — %s, modern=%s, AI=%s\nEnter để giữ giá trị hiện tại.\n",
-        config->mode == GTV_VNI ? "vni" : "telex", config->modern ? "true" : "false", config->ai_enabled ? "true" : "false");
+    g_print("GoTiengViet Setup (C) — %s, modern=%s, gợi ý từ điển=%s\nEnter để giữ giá trị hiện tại.\n",
+        config->mode == GTV_VNI ? "vni" : "telex", config->modern ? "true" : "false", config->suggest_enabled ? "true" : "false");
     cli_choice("Kiểu gõ [telex/vni]", input, sizeof(input));
     if (!g_ascii_strcasecmp(input, "vni")) config->mode = GTV_VNI;
     if (!g_ascii_strcasecmp(input, "telex")) config->mode = GTV_TELEX;
     cli_choice("Modern [true/false]", input, sizeof(input));
     if (!g_ascii_strcasecmp(input, "true")) config->modern = TRUE;
     if (!g_ascii_strcasecmp(input, "false")) config->modern = FALSE;
-    cli_choice("AI enable [true/false]", input, sizeof(input));
-    if (!g_ascii_strcasecmp(input, "true")) config->ai_enabled = TRUE;
-    if (!g_ascii_strcasecmp(input, "false")) config->ai_enabled = FALSE;
-    cli_choice("AI port [1..65535]", input, sizeof(input));
-    if (*input) {
-        gchar *end;
-        guint64 port = g_ascii_strtoull(input, &end, 10);
-        if (*end || port < 1 || port > 65535) { g_printerr("Port không hợp lệ\n"); return 1; }
-        g_free(config->port); config->port = g_strdup(input);
-        g_free(config->url); config->url = g_strdup_printf("http://localhost:%s", input);
-    }
+    cli_choice("Gợi ý từ điển [true/false]", input, sizeof(input));
+    if (!g_ascii_strcasecmp(input, "true")) config->suggest_enabled = TRUE;
+    if (!g_ascii_strcasecmp(input, "false")) config->suggest_enabled = FALSE;
     GError *error = NULL;
     if (!gtv_config_save(config, directory, &error)) {
         g_printerr("Không lưu được cấu hình: %s\n", error->message);
         g_error_free(error);
         return 1;
     }
-    g_print("Đã lưu %s/config và ai.conf\n", directory);
+    g_print("Đã lưu %s/config\n", directory);
     return 0;
 }
 
@@ -1096,7 +714,7 @@ int main(int argc, char **argv) {
         gchar *path = g_build_filename(directory, "config", NULL);
         result = setup_ui(argc, argv, config.mode == GTV_VNI ? "vni" : "telex",
             config.modern ? "true" : "false", config.spellcheck ? "true" : "false",
-            config.ai_enabled ? "true" : "false", config.model, config.url, config.port, path);
+            config.suggest_enabled ? "true" : "false", path);
         g_free(path);
     }
     gtv_config_clear(&config);

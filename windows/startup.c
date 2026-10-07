@@ -71,24 +71,94 @@ static gboolean run_key_get(void) {
     return res == ERROR_SUCCESS;
 }
 
-/* schtasks without a shell or console window, like engine/ai.c runs curl. */
+/* schtasks with no window at all: GSubprocess leaves console flashing
+ * (each menu open used to blink twice), so spawn raw with CREATE_NO_WINDOW
+ * + SW_HIDE and capture stdout through a pipe (same pattern as the
+ * update downloader in engine/update.c).
+ * Returns TRUE only on exit code 0; stdout (raw bytes, may be UTF-16 XML)
+ * goes to *out_stdout when requested. Bounded 20s wait, never fatal. */
 static gboolean schtasks_run(char **args, gchar **out_stdout) {
     if (out_stdout) *out_stdout = NULL;
-    GSubprocess *proc = g_subprocess_newv((const gchar * const *)args,
-        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE, NULL);
-    if (!proc) return FALSE;
-    gchar *output = NULL;
-    gboolean ok = g_subprocess_communicate_utf8(proc, NULL, NULL, &output, NULL, NULL);
-    if (!ok) g_subprocess_force_exit(proc);
-    g_subprocess_wait(proc, NULL, NULL);
-    if (!ok || !g_subprocess_get_successful(proc)) {
-        g_free(output);
-        g_object_unref(proc);
+    if (!args || !args[0]) return FALSE;
+
+    /* Resolve the tool inside System32 (no PATH hijack, no shell). */
+    gchar *exe = args[0];
+    gchar *full = NULL;
+    if (!strchr(exe, '/') && !strchr(exe, '\\') && !strchr(exe, ':')) {
+        WCHAR sysdir[MAX_PATH];
+        if (GetSystemDirectoryW(sysdir, MAX_PATH)) {
+            gchar *sys8 = g_utf16_to_utf8((const gunichar2 *)sysdir, -1, NULL, NULL, NULL);
+            if (sys8) {
+                full = g_strdup_printf("%s\\%s", sys8, exe);
+                exe = full;
+            }
+        }
+    }
+    GString *line = g_string_new(exe);
+    for (int i = 1; args[i]; i++) {
+        g_string_append_c(line, ' ');
+        g_string_append(line, args[i]);
+    }
+    g_free(full);
+    gunichar2 *wline = g_utf8_to_utf16(line->str, -1, NULL, NULL, NULL);
+    g_string_free(line, TRUE);
+    if (!wline) return FALSE;
+
+    HANDLE hRead = NULL, hWrite = NULL;
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
+    if (!CreatePipe(&hRead, &hWrite, &sa, 0)) {
+        g_free(wline);
         return FALSE;
     }
-    g_object_unref(proc);
-    if (out_stdout) *out_stdout = output;
-    else g_free(output);
+    SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput = hWrite;
+    si.hStdError = hWrite;
+    si.hStdInput = NULL;
+    ZeroMemory(&pi, sizeof(pi));
+
+    BOOL started = CreateProcessW(NULL, (LPWSTR)wline, NULL, NULL, TRUE,
+                                  CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                                  NULL, NULL, &si, &pi);
+    g_free(wline);
+    CloseHandle(hWrite);
+    if (!started) {
+        CloseHandle(hRead);
+        return FALSE;
+    }
+    CloseHandle(pi.hThread);
+
+    DWORD wait_rc = WaitForSingleObject(pi.hProcess, 20000);
+    DWORD exit_code = 1;
+    if (wait_rc == WAIT_TIMEOUT)
+        TerminateProcess(pi.hProcess, 1);
+    else
+        GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hProcess);
+
+    GString *out = g_string_new("");
+    char buf[1024];
+    DWORD got = 0;
+    while (ReadFile(hRead, buf, sizeof(buf) - 1, &got, NULL) && got > 0) {
+        buf[got] = '\0';
+        g_string_append(out, buf);
+    }
+    CloseHandle(hRead);
+
+    if (exit_code != 0) {
+        g_string_free(out, TRUE);
+        return FALSE;
+    }
+    if (out_stdout)
+        *out_stdout = g_string_free(out, FALSE);
+    else
+        g_string_free(out, TRUE);
     return TRUE;
 }
 

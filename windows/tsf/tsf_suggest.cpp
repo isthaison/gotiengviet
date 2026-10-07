@@ -1,16 +1,16 @@
 /* Inline keyword suggestions for the Windows TSF service.
  *
  * Broker architecture (system-wide, Electron-safe): this DLL never creates
- * windows inside the host process. Candidates (emoji instantly, Ollama after
- * a 350 ms debounce, offline learned data as fallback) are forwarded to the
+ * windows inside the host process. Candidates (emoji instantly, dictionary
+ * after a short debounce, learned data first) are forwarded to the
  * tray process overlay via WM_COPYDATA (windows/suggest_ipc.h); the tray
  * draws them near the caret without stealing focus. Selection keys mirror
  * IBus/Linux and are handled here: Up/Down navigate, 1-5 accept (Telex
  * only), Tab accepts the highlight (exact macro/emoji match wins first),
  * Enter commits, Esc dismisses, Space commits literally.
  *
- * Threading: key events run on the host app thread; only the Ollama fetch
- * runs on a worker (synchronous engine API + GCancellable with a sleep
+ * Threading: key events run on the host app thread; only the dictionary
+ * query runs on a worker (synchronous engine API + GCancellable with a sleep
  * debounce). Shared state is CS-guarded. Stale results are dropped by
  * generation counter; the tray also drops out-of-order payloads per source.
  * No caret rect -> no overlay (never fall back to a screen corner).
@@ -25,7 +25,8 @@ extern "C" {
 #include <new>
 
 #define GTV_SUGGEST_MAX 5
-#define GTV_SUGGEST_DEBOUNCE_MS 350
+/* Local dictionary lookups are instant; a short coalescing delay is enough. */
+#define GTV_SUGGEST_DEBOUNCE_MS 50
 
 typedef struct {
     gchar *text;
@@ -445,9 +446,8 @@ static gpointer suggest_worker(gpointer data) {
     gtv_config_load(&cfg, dir);
     g_free(dir);
 
-    /* Debounce on the worker: AI calls wait 350ms, local offline completions only 50ms */
-    int debounce = cfg.ai_enabled ? GTV_SUGGEST_DEBOUNCE_MS : 50;
-    for (int waited = 0; waited < debounce; waited += 25) {
+    /* Debounce on the worker: short coalescing delay, then query. */
+    int debounce = GTV_SUGGEST_DEBOUNCE_MS;    for (int waited = 0; waited < debounce; waited += 25) {
         g_usleep(25 * 1000);
         if (g_cancellable_is_cancelled(job->cancel)) {
             gtv_config_clear(&cfg);
@@ -458,7 +458,7 @@ static gpointer suggest_worker(gpointer data) {
 
     GPtrArray *out = g_ptr_array_new_with_free_func(g_free);
     gboolean used_ai = FALSE;
-    if (cfg.ai_enabled && !g_cancellable_is_cancelled(job->cancel)) {
+    if (cfg.suggest_enabled && !g_cancellable_is_cancelled(job->cancel)) {
         GPtrArray *ai = gtv_suggest_combined(&cfg, "", job->query, job->bad);
         if (g_cancellable_is_cancelled(job->cancel)) {
             if (ai) g_ptr_array_unref(ai);
@@ -797,14 +797,14 @@ void gtv_suggest_on_key(CGtvTextService *service, ITfContext *pic) {
         return;
     }
 
-    /* Suggestions path: check if either AI suggestions or spellcheck/smart completions are enabled */
+    /* Suggestions path: dictionary suggestions or spellcheck completions */
     {
         GtvConfig cfg;
         memset(&cfg, 0, sizeof(cfg));
         gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
         gtv_config_load(&cfg, dir);
         g_free(dir);
-        gboolean enabled = cfg.ai_enabled || cfg.spellcheck;
+        gboolean enabled = cfg.suggest_enabled || cfg.spellcheck;
         gtv_config_clear(&cfg);
         if (!enabled) {
             g_free(buf);

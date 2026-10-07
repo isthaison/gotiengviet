@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GoTiengViet — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows, macOS</title>
-  <meta name="description" content="GoTiengViet là bộ gõ tiếng Việt mã nguồn mở (Telex/VNI) cho Linux (IBus), Windows 10/11 (TSF) và macOS (InputMethodKit). Nhẹ, riêng tư, chính tả ngoại tuyến (Linux), gợi ý AI Ollama local.">
-  <meta name="keywords" content="bộ gõ tiếng việt, go tieng viet, gotiengviet, telex, vni, vietnamese input method, vietnamese keyboard, ibus vietnamese, tsf vietnamese, inputmethodkit, unikey alternative, evkey, openkey, gõ tiếng việt linux, gõ tiếng việt windows, gõ tiếng việt macos, ollama vietnamese">
+  <meta name="description" content="GoTiengViet là bộ gõ tiếng Việt mã nguồn mở (Telex/VNI) cho Linux (IBus), Windows 10/11 (TSF) và macOS (InputMethodKit). Nhẹ, riêng tư, chính tả ngoại tuyến, gợi ý từ điển offline.">
+  <meta name="keywords" content="bộ gõ tiếng việt, go tieng viet, gotiengviet, telex, vni, vietnamese input method, vietnamese keyboard, ibus vietnamese, tsf vietnamese, inputmethodkit, unikey alternative, evkey, openkey, gõ tiếng việt linux, gõ tiếng việt windows, gõ tiếng việt macos, từ điển tiếng việt">
   <meta name="author" content="GoTiengViet Project">
   <link rel="canonical" href="https://isthaison.github.io/gotiengviet/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="GoTiengViet">
   <meta property="og:title" content="GoTiengViet — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows, macOS">
-  <meta property="og:description" content="Một lõi C duy nhất, gõ Telex/VNI mọi nền tảng. Chính tả ngoại tuyến (Linux), macro/emoji, AI Ollama local. MIT.">
+  <meta property="og:description" content="Một lõi C duy nhất, gõ Telex/VNI mọi nền tảng. Chính tả ngoại tuyến, macro/emoji, gợi ý từ điển offline. MIT.">
   <meta property="og:url" content="https://isthaison.github.io/gotiengviet/">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="GoTiengViet — Bộ gõ tiếng Việt mã nguồn mở">
@@ -62,8 +62,8 @@
       <h2>Tính năng</h2>
       <div class="grid">
         <article><h3>⌨️ Telex + VNI một lõi</h3><p>Một thuật toán chung, chỉ khác bảng phím. Kiểu đặt dấu hiện đại (<em>hòa</em>) hoặc truyền thống (<em>hoà</em>).</p></article>
-        <article><h3>🛰️ Chính tả không cần mạng</h3><p>Gạch đỏ ngay khi gõ trên Linux theo quy tắc âm tiết tiếng Việt. Bản Windows/macOS dùng gợi ý AI balloon thay thế.</p></article>
-        <article><h3>🤖 Gợi ý AI local</h3><p>Ollama chạy trên máy bạn — debounce 350&nbsp;ms, rớt mạng vẫn gợi ý từ dữ liệu đã học.</p></article>
+        <article><h3>🛰️ Chính tả không cần mạng</h3><p>Gạch đỏ ngay khi gõ trên Linux theo quy tắc âm tiết tiếng Việt. Bản Windows/macOS dùng balloon gợi ý thay thế.</p></article>
+        <article><h3>📖 Gợi ý từ điển offline</h3><p>Hoàn thành từ + sửa lỗi chính tả từ từ điển ~7000 từ, tự cập nhật từ GitHub. Không mạng, không server.</p></article>
         <article><h3>⚡ Macro &amp; emoji text</h3><p><code>cty=Công ty TNHH</code> (bấm Tab để bung macro/emoji), <code>:smile:</code>→😊, <code>(y)</code>→👍. Sửa file text là xong.</p></article>
         <article><h3>🪶 Nhẹ &amp; riêng tư</h3><p>Lõi C thuần + glib, không runtime ngoài, không gửi phím đi đâu. Cài per-user, không cần admin (Windows).</p></article>
         <article><h3>🔄 Tự cập nhật</h3><p>Kiểm tra release GitHub mỗi ngày, cài đè giữ nguyên cấu hình trên cả 3 nền tảng.</p></article>
@@ -110,8 +110,8 @@ sudo ./gtv.sh install</code></pre>
 
     <section id="faq">
       <h2>Câu hỏi thường gặp</h2>
-      <details><summary>Khác gì Unikey / EVKey?</summary><p>GoTiengViet dùng một lõi C chung cho cả 3 OS, có chính tả khi gõ (gạch đỏ trên Linux, AI balloon trên Windows/macOS) và gợi ý AI local (Ollama) — những thứ Unikey/EVKey không có. Unikey vẫn gọn nhẹ nếu bạn chỉ cần gõ cơ bản trên Windows.</p></details>
-      <details><summary>Có cần mạng không?</summary><p>Không. Gõ, chính tả, macro/emoji đều ngoại tuyến. Chỉ gợi ý AI online mới cần Ollama (chạy local) và chỉ khi bạn bật.</p></details>
+      <details><summary>Khác gì Unikey / EVKey?</summary><p>GoTiengViet dùng một lõi C chung cho cả 3 OS, có chính tả khi gõ (gạch đỏ trên Linux, balloon gợi ý trên Windows/macOS) và gợi ý từ điển offline — những thứ Unikey/EVKey không có. Unikey vẫn gọn nhẹ nếu bạn chỉ cần gõ cơ bản trên Windows.</p></details>
+      <details><summary>Có cần mạng không?</summary><p>Không. Gõ, chính tả, macro/emoji, gợi ý từ điển đều ngoại tuyến. Mạng chỉ dùng khi kiểm tra bản mới / cập nhật từ điển từ GitHub.</p></details>
       <details><summary>Gõ <code>1</code> ra <code>ă</code> trên Windows?</summary><p>Đó là layout VIE của Windows đặt chữ Việt ở hàng số. GoTiengViet đã ép dịch phím qua layout US nên gõ <code>1</code> ra <code>1</code> đúng. Nếu còn bị: kiểm tra đang dùng bàn phím <strong>GoTV</strong> (không phải Vietnamese Telex của Microsoft) và cập nhật bản mới nhất.</p></details>
       <details><summary>macOS báo “unidentified developer”?</summary><p>Bản preview chưa ký số Apple. Chuột phải vào app → Open để chấp nhận một lần. Bản ổn định sẽ được ký + notarize.</p></details>
       <details><summary>Cả câu bị gạch đỏ trong trình duyệt?</summary><p>Không phải GoTiengViet (bộ gõ không vẽ gạch đỏ). Đó là spellchecker tiếng Anh của trình duyệt hoặc Windows gặp chữ Việt — tắt spellcheck ở ô nhập đó hoặc thêm tiếng Việt vào trình duyệt là hết.</p></details>

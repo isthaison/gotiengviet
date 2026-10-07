@@ -4,7 +4,7 @@
 #include "update.h"
 #include "internal.h"
 
-typedef struct { gchar *word; gchar *model; gchar *url; } AiJob;
+typedef struct { gchar *word; } AiJob;
 
 static volatile LONG ai_in_flight = 0;
 static CRITICAL_SECTION learned_lock;
@@ -163,7 +163,7 @@ void gtv_tray_ai_word(gchar *word) {
         return;
     }
     InterlockedIncrement(&ai_word_generation);
-    if (g_app.config.spellcheck && g_app.config.ai_enabled && gtv_tray_should_check(word))
+    if (g_app.config.spellcheck && g_app.config.suggest_enabled && gtv_tray_should_check(word))
         gtv_tray_check_spelling_async(word);
     g_free(word);
 }
@@ -171,9 +171,7 @@ void gtv_tray_ai_word(gchar *word) {
 static gpointer ai_worker(gpointer data) {
     AiJob *job = data;
     GtvConfig cfg = {0};
-    cfg.ai_enabled = TRUE;
-    cfg.model = job->model;
-    cfg.url = job->url;
+    cfg.suggest_enabled = TRUE;
     GPtrArray *sugs = gtv_suggest_combined(&cfg, "", job->word, TRUE);
     gchar *fix = NULL;
     if (sugs && sugs->len > 0 && g_strcmp0(sugs->pdata[0], job->word) != 0)
@@ -199,8 +197,6 @@ static gpointer ai_worker(gpointer data) {
     }
     g_free(fix);
     g_free(job->word);
-    g_free(job->model);
-    g_free(job->url);
     g_free(job);
     InterlockedExchange(&ai_in_flight, 0);
     return NULL;
@@ -222,14 +218,7 @@ void gtv_tray_check_spelling_async(const gchar *word) {
     if (!word || InterlockedCompareExchange(&ai_in_flight, 1, 0) != 0) return;
     AiJob *job = g_new0(AiJob, 1);
     job->word = g_strdup(word);
-    gtv_config_strings_lock();
-    job->model = g_strdup(g_app.config.model);
-    job->url = g_strdup(g_app.config.url);
-    gtv_config_strings_unlock();
-    if (!job->model || !job->url) {
-        g_free(job->word);
-        g_free(job->model);
-        g_free(job->url);
+    if (!job->word) {
         g_free(job);
         InterlockedExchange(&ai_in_flight, 0);
         return;
@@ -237,8 +226,6 @@ void gtv_tray_check_spelling_async(const gchar *word) {
     GThread *th = g_thread_new("gtv-ai-check", ai_worker, job);
     if (!th) {
         g_free(job->word);
-        g_free(job->model);
-        g_free(job->url);
         g_free(job);
         InterlockedExchange(&ai_in_flight, 0);
         return;

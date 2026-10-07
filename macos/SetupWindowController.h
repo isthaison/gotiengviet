@@ -5,7 +5,7 @@
  * calls GoTiengVietShowSettings(); this stub keeps the target compiling
  * until the real preferences window lands. Mirrors the Linux setup
  * (linux/setup/main.c) and Windows dialog (windows/setup.c): input method,
- * tone placement, spellcheck, optional Ollama AI. */
+ * tone placement, spellcheck, dictionary suggestions. */
 void GoTiengVietShowSettings(void);
 
 #endif /* GTV_SETUP_WINDOW_CONTROLLER_H */

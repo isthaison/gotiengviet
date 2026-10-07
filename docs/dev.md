@@ -23,7 +23,7 @@ make help
 
 Mọi lệnh shell gom trong một file duy nhất: `./gtv.sh <build|test|vet|clean|install|uninstall|package|bump|help>`.
 
-`make test` gồm: Telex/VNI, stateful, config, JSON, Ollama (curl giả lập), chính tả, macro/emoji, prompts, config mặc định, từ điển học, so version/cập nhật, hoán vị thao tác, 20.000 chuỗi ngẫu nhiên.
+`make test` gồm: Telex/VNI, stateful, config, từ điển, gợi ý kết hợp, chính tả, macro/emoji, config mặc định, từ điển học, so version/cập nhật, hoán vị thao tác, 20.000 chuỗi ngẫu nhiên.
 
 Binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` trong IBus), `ibus-setup-gotiengviet` (GUI/`--tray`/`--cli`), `gotiengviet-demo`, `libgotiengviet.a`.
 
@@ -53,8 +53,8 @@ Giữ nguyên cấu hình người dùng; cuối cài đặt tự `ibus restart`
 
 ```text
 engine/           lõi dùng chung (C): compose, charset, phonology, config,
-                  spell, macro/emoji, ai+ollama, json, learn, update
-                  (check version GitHub), text, telex/vni adapter
+                  spell, macro/emoji, dict/suggest (từ điển offline),
+                  learn, update (check version GitHub), text, telex/vni adapter
 linux/
   ibus/           adapter IBus: engine.c, gotiengviet.xml/icons
   setup/          GTK, indicator, CLI
@@ -72,7 +72,7 @@ VERSION           số version duy nhất (Makefile/Makefile.win đọc từ đ�
 tools/
   demo/           demo terminal dùng chung mọi nền tảng
 tests/            kiểm thử C (+ fake curl)
-data/             macro, emoji, config/ai mẫu, prompts, seed từ điển
+data/             macro, emoji, config, dict-vi (từ điển), seed từ điển học
 ```
 
 Quy ước đa nền tảng: `engine/` không chứa code riêng OS nào
@@ -124,7 +124,7 @@ gchar *commit = gtv_engine_process(e, 's', &backspaces); // NULL khi đang soạ
 g_free(gtv_engine_buffer(e));
 gtv_engine_free(e);
 
-GPtrArray *fix = gtv_ai_suggest(&cfg, "kông", "công nghệ");    // cần Ollama
+GPtrArray *fix = gtv_suggest_combined(&cfg, "", "kông", TRUE); // offline: ["không", ...]
 gboolean ok = spell_word_valid("được"); // ngoại tuyến
 gint cmp = gtv_version_compare("v0.6.0", "0.5.3"); // > 0
 gtv_config_clear(&cfg);

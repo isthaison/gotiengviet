@@ -62,13 +62,13 @@ gboolean gtv_table_remove(gboolean emoji, const gchar *key);
 gchar *gtv_table_user_path(gboolean emoji);
 gboolean gtv_table_save(gboolean emoji, GError **error);
 
-gchar *gtv_json_quote(const gchar *text);
-gchar *gtv_json_response(const gchar *json);
 gchar *gtv_fold_accents(const gchar *text);
 gchar *gtv_data_path(const gchar *name);
-void gtv_prompts_reload(void);
-gchar *gtv_prompt_get(const gchar *group, const gchar *key, const gchar *fallback);
-gchar *gtv_format_template(const gchar *templ, const gchar * const *args, guint n);
+/* Bundled + GitHub-updated dictionary (engine/dict.c). */
+gchar *gtv_dict_user_path(void);
+void gtv_dict_invalidate(void);
+void gtv_dict_complete(const gchar *prefix, GPtrArray *out, guint max);
+void gtv_dict_correct(const gchar *word, GPtrArray *out, guint max);
 /* File-backed learned vocabulary (engine/learn.c), shared by all platforms. */
 #define GTV_LEARNED_WORDS_MAX 10000
 #define GTV_LEARNED_FIXES_MAX 2000

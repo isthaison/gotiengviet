@@ -1,6 +1,6 @@
 # GoTiengViet seed vocabulary: one word per line (UTF-8).
 # These common words are accepted from the first run, even offline.
-# When you accept Ollama suggestions, new words are appended to your own
+# Words you pick from dictionary suggestions are appended to your own
 # ~/.config/gotiengviet/learned-words.txt (this seed is copied there on
 # first save). Edit that file — never this one — to add or remove words.
 # Lines starting with '#' and blank lines are ignored.

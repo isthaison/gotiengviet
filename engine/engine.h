@@ -9,8 +9,7 @@ G_BEGIN_DECLS
 typedef enum { GTV_TELEX, GTV_VNI } GtvMode;
 typedef struct {
     GtvMode mode;
-    gboolean modern, spellcheck, ai_enabled;
-    gchar *model, *url, *port;
+    gboolean modern, spellcheck, suggest_enabled;
 } GtvConfig;
 typedef struct {
     GtvMode mode;
@@ -31,10 +30,13 @@ gchar *expand_emoji(const char *word);
 void gtv_config_load(GtvConfig *config, const gchar *directory);
 gboolean gtv_config_save(const GtvConfig *config, const gchar *directory, GError **error);
 void gtv_config_clear(GtvConfig *config);
-/* Ollama-only suggestions; disabled/unavailable providers return no candidates. */
-gboolean gtv_ai_available(const GtvConfig *config);
-GPtrArray *gtv_ai_suggest(const GtvConfig *config, const gchar *word, const gchar *context);
-GPtrArray *gtv_predict_next(const GtvConfig *config, const gchar *context, const gchar *prefix);
+/* Offline dictionary suggestions (bundled dict-vi.txt seed, refreshed
+ * from the dict-vi.txt asset of GitHub releases, plus the user's learned
+ * vocabulary). Disabled providers return no candidates. */
+gboolean gtv_dict_available(const GtvConfig *config);
+guint gtv_dict_count(void);
+const gchar *gtv_dict_tag(void);
+gboolean gtv_dict_update_check(const gchar *repo);
 /* Self-update against GitHub releases. Check/download need curl and network;
  * parse/compare/throttle are offline. Out strings belong to the caller. */
 typedef enum { GTV_UPDATE_AVAILABLE, GTV_UPDATE_CURRENT, GTV_UPDATE_ERROR } GtvUpdateStatus;

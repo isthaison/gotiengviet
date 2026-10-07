@@ -4,7 +4,7 @@
 /* File-backed learned vocabulary shared by all platforms (IBus engine and
  * the Windows hook). Two files in the user config dir:
  *   learned-words.txt       one valid word per line (taught by accepting
- *                           Ollama candidates),
+ *                           dictionary suggestions),
  *   learned-corrections.txt bad=good pairs (taught by accepting corrections).
  * When the user file does not exist yet, the shipped seed of the same name
  * (resolved with gtv_data_path) is used, so the data works offline from the

@@ -9,12 +9,12 @@ class CGtvTextService;
 
 /* Inline keyword suggestions for the Windows TSF service (parity with the
  * Linux IBus lookup table): while composing, a small popup near the caret
- * offers up to 5 candidates from Ollama (350 ms debounce), falling back to
- * offline learned data; ":xx" prefixes offer emoji instantly without AI.
+ * offers up to 5 candidates from the offline dictionary (50 ms debounce),
+ * falling back to learned data; ":xx" prefixes offer emoji instantly.
  *
  * Threading: everything UI lives on the app thread that owns the key
  * events (one popup window per thread, recreated on thread change). Only
- * the Ollama fetch runs on a worker thread (synchronous engine API +
+ * the dictionary query runs on a worker thread (synchronous engine API +
  * GCancellable); results come back via PostMessage and are dropped when
  * stale (generation counter + live-buffer match, like IBus pending_query).
  *

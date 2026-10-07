@@ -84,7 +84,6 @@ TSF_ENGINE_TARGET = build/win/gtv_engine.dll
 TEST_ENGINE = build/win/test-engine.exe
 TEST_SUPPORT = build/win/test-support.exe
 TEST_VERDIR = build/win/test-verdir.exe
-FAKE_CURL = build/win/fixtures/curl.exe
 
 TEST_CFLAGS ?= -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Iengine $(shell $(PKG_CONFIG) --cflags gio-2.0)
 TEST_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs gio-2.0) -lm
@@ -157,13 +156,9 @@ $(TEST_VERDIR): tests/test_verdir.c $(CORE_LIB)
 	@mkdir -p $(dir $@)
 	$(CC) $(TEST_CFLAGS) $< $(CORE_LIB) $(TEST_LDFLAGS) -o $@
 
-$(FAKE_CURL): tests/fake_curl.c
-	@mkdir -p $(dir $@)
-	$(CC) $(TEST_CFLAGS) $< $(TEST_LDFLAGS) -o $@
-
-test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(TEST_VERDIR) $(FAKE_CURL) check-tsf-isolated
+test: $(CORE_LIB) $(TEST_ENGINE) $(TEST_SUPPORT) $(TEST_VERDIR) check-tsf-isolated
 	GTV_DATA_DIR="$(CURDIR)/data" ./$(TEST_ENGINE)
-	GTV_DATA_DIR="$(CURDIR)/data" GTV_TEST_CURL_DIR="$(CURDIR)/build/win/fixtures" ./$(TEST_SUPPORT)
+	GTV_DATA_DIR="$(CURDIR)/data" ./$(TEST_SUPPORT)
 	./$(TEST_VERDIR)
 
 # Guard for the injected-DLL contract: Windows loads gtv_tsf.dll and
@@ -226,7 +221,7 @@ staging: $(TARGET) $(TSF_TARGET) $(TSF_ENGINE_TARGET) check-tsf-isolated
 	cp -f /mingw64/bin/gspawn-win64-helper*.exe $(VERDIR)/ 2>/dev/null || true
 	printf '%s' "$(VERSION)" > $(STAGE)/current.txt
 	cp README.md LICENSE $(STAGE)/
-	cp data/macros.txt data/emojis.txt data/config data/ai.conf data/prompts.conf data/learned-corrections.txt data/learned-words.txt $(VERDIR)/data/
+	cp data/macros.txt data/emojis.txt data/config data/dict-vi.txt data/learned-corrections.txt data/learned-words.txt $(VERDIR)/data/
 
 # Versioned installer (Windows-only: needs Inno Setup's iscc.exe).
 # SourceDir is relative to windows/installer.iss (script dir), not to make.

@@ -45,7 +45,7 @@ Usage: $PROG <command> [args]   (OS detected: $OS)
                       linux: sudo $PROG install (DESTDIR=... to stage only)
                       windows: build setup.exe + silent install + start app
                       mac: copy GoTiengViet.app to ~/Library/Input Methods
-  install-ollama    install official Ollama (linux/mac: curl...|sh | windows: irm...|iex)
+  install-ollama    legacy alias (Ollama suggestions removed; dictionary is built in)
   uninstall         remove installed files + registry/task/profile leftovers
   package [VER]     OS-native installer (linux: .deb | windows: setup.exe | mac: .zip)
   bump X.Y.Z ["notes"]  bump version everywhere (single writer)
@@ -355,7 +355,6 @@ cmd_uninstall_windows() {
 # ---------------- macOS ----------------
 
 cmd_build_mac() {
-    mkdir -p build/macos/fixtures
     # shellcheck disable=SC2046
     clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
         $(pkg-config --cflags glib-2.0 gio-2.0) -Iengine \
@@ -366,12 +365,8 @@ cmd_build_mac() {
         $(pkg-config --cflags glib-2.0 gio-2.0) -Iengine \
         tests/test_support.c engine/*.c $(pkg-config --libs glib-2.0 gio-2.0) -lm \
         -o build/macos/test-support
-    clang -O2 -g -std=gnu11 -Wall -Wextra \
-        $(pkg-config --cflags glib-2.0 gio-2.0) tests/fake_curl.c \
-        $(pkg-config --libs glib-2.0 gio-2.0) -lm -o build/macos/fixtures/curl
     GTV_DATA_DIR="$PWD/data" ./build/macos/test-engine
-    GTV_DATA_DIR="$PWD/data" GTV_TEST_CURL_DIR="$PWD/build/macos/fixtures" \
-        ./build/macos/test-support
+    GTV_DATA_DIR="$PWD/data" ./build/macos/test-support
     mac_build_app
 }
 
@@ -386,8 +381,8 @@ mac_build_app() {
         -o "$app/MacOS/GoTiengViet"
     cp macos/Info.plist "$app/Info.plist"
     printf 'APPL????' > "$app/PkgInfo"
-    cp data/macros.txt data/emojis.txt data/config data/ai.conf \
-        data/prompts.conf data/learned-corrections.txt \
+    cp data/macros.txt data/emojis.txt data/config data/dict-vi.txt \
+        data/learned-corrections.txt \
         data/learned-words.txt "$app/Resources/data/"
     echo "Đã build: build/macos/GoTiengViet.app"
 }
@@ -395,8 +390,7 @@ mac_build_app() {
 cmd_test_mac() {
     [[ -x build/macos/test-engine ]] || cmd_build_mac
     GTV_DATA_DIR="$PWD/data" ./build/macos/test-engine
-    GTV_DATA_DIR="$PWD/data" GTV_TEST_CURL_DIR="$PWD/build/macos/fixtures" \
-        ./build/macos/test-support
+    GTV_DATA_DIR="$PWD/data" ./build/macos/test-support
 }
 
 cmd_vet_mac() {
@@ -530,8 +524,7 @@ cmd_install_linux() {
     install -Dm644 data/macros.txt "$DESTDIR/usr/share/gotiengviet/macros.txt"
     install -Dm644 data/emojis.txt "$DESTDIR/usr/share/gotiengviet/emojis.txt"
     install -Dm644 data/config "$DESTDIR/usr/share/gotiengviet/config"
-    install -Dm644 data/ai.conf "$DESTDIR/usr/share/gotiengviet/ai.conf"
-    install -Dm644 data/prompts.conf "$DESTDIR/usr/share/gotiengviet/prompts.conf"
+    install -Dm644 data/dict-vi.txt "$DESTDIR/usr/share/gotiengviet/dict-vi.txt"
     install -Dm644 data/learned-corrections.txt "$DESTDIR/usr/share/gotiengviet/learned-corrections.txt"
     install -Dm644 data/learned-words.txt "$DESTDIR/usr/share/gotiengviet/learned-words.txt"
     for size in 16 22 24 32 48 64 128 256; do
@@ -683,7 +676,7 @@ cmd_uninstall_linux() {
 }
 
 cmd_package_linux() {
-    version=${1:-0.8.26-1}
+    version=${1:-0.8.28-1}
     architecture=$(dpkg --print-architecture)
     dpkg --validate-version "$version"
     make build test
@@ -702,9 +695,9 @@ Depends: ibus, libibus-1.0-5, libglib2.0-0, libgtk-3-0, libgdk-pixbuf-2.0-0, lib
 Recommends: curl, libnotify-bin
 Maintainer: GoTiengViet Project <https://github.com/isthaison/gotiengviet>
 Homepage: https://github.com/isthaison/gotiengviet
-Description: Vietnamese Telex/VNI input method in native C
- Shared C input engine, GTK settings, indicator, spelling and macro support.
- Optional local Ollama suggestions use curl; no Go runtime is required.
+ Description: Vietnamese Telex/VNI input method in native C
+  Shared C input engine, GTK settings, indicator, spelling and macro support.
+  Offline dictionary suggestions, updated from GitHub; no Go runtime is required.
 CONTROL
     cat > "$staging/DEBIAN/postinst" <<'POST'
 #!/bin/sh
@@ -791,15 +784,8 @@ cmd_bump() {
 }
 
 cmd_install_ollama() {
-    echo "Installing Ollama (official) for $OS..."
-    case "$OS" in
-        windows)
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "if (\$env:USERPROFILE) { \$env:TEMP = Join-Path \$env:USERPROFILE 'Downloads'; \$env:TMP = \$env:TEMP }; irm https://ollama.com/install.ps1 | iex"
-            ;;
-        linux|mac)
-            curl -fsSL https://ollama.com/install.sh | sh
-            ;;
-    esac
+    echo "gtv.sh: Ollama suggestions were removed; word suggestions now come"
+    echo "from the built-in offline dictionary (data/dict-vi.txt). Nothing to install."
 }
 
 command="${1:-help}"

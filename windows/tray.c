@@ -149,10 +149,14 @@ void gtv_tray_show_menu(HWND hwnd) {
     UINT modern_flag = g_app.config.modern ? MF_CHECKED : MF_UNCHECKED;
     gtv_win_menu_add_utf8(hmenu, "Đặt dấu chuẩn mới", modern_flag, ID_TRAY_MODERN);
 
-    UINT start_flag = (gtv_startup_get() == GTV_STARTUP_USER) ? MF_CHECKED : MF_UNCHECKED;
+    /* One startup-mode query per menu open: gtv_startup_get() shells out
+     * to schtasks, so calling it twice (once per flag) used to blink two
+     * consoles and stall the menu. */
+    GtvStartupMode startup_mode = gtv_startup_get();
+    UINT start_flag = (startup_mode == GTV_STARTUP_USER) ? MF_CHECKED : MF_UNCHECKED;
     gtv_win_menu_add_utf8(hmenu, "Khởi động cùng Windows", start_flag, ID_TRAY_STARTUP);
 
-    UINT admin_flag = (gtv_startup_get() == GTV_STARTUP_ADMIN) ? MF_CHECKED : MF_UNCHECKED;
+    UINT admin_flag = (startup_mode == GTV_STARTUP_ADMIN) ? MF_CHECKED : MF_UNCHECKED;
     gtv_win_menu_add_utf8(hmenu, "Khởi động với quyền admin", admin_flag, ID_TRAY_STARTUP_ADMIN);
 
     gtv_win_menu_add_utf8(hmenu, "Kiểm tra cập nhật...", 0, ID_TRAY_UPDATE);

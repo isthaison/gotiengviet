@@ -34,6 +34,16 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.28" date="2026-10-07">
+      <description>
+        <p>Thay</p>
+      </description>
+    </release>
+    <release version="0.8.27" date="2026-10-07">
+      <description>
+        <p>Menu</p>
+      </description>
+    </release>
     <release version="0.8.26" date="2026-10-07">
       <description>
         <p>Enter chi commit nguyen chu dang go: khong con ap goi y AI, emoji hay macro. Truoc 0.8.26 nhanh Enter chay truoc nhanh commit literal nen go "vn" + Enter ra "van", go ":)" + Enter ra emoji. Goi y/emoji/macro gio chi nhan bang Tab, so 1-5 hoac click (IBus + TSF).</p>

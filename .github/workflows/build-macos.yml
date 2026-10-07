@@ -27,6 +27,7 @@ jobs:
         # Same suites as Windows (engine + support + algorithm):
         # the IBus/GTK tests stay Linux-only.
         run: |
+          mkdir -p build/macos
           CORE_CFLAGS="$(pkg-config --cflags glib-2.0 gio-2.0) -Iengine"
           CORE_LIBS="$(pkg-config --libs glib-2.0 gio-2.0) -lm"
           clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \

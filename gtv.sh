@@ -355,6 +355,7 @@ cmd_uninstall_windows() {
 # ---------------- macOS ----------------
 
 cmd_build_mac() {
+    mkdir -p build/macos
     # shellcheck disable=SC2046
     clang -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
         $(pkg-config --cflags glib-2.0 gio-2.0) -Iengine \

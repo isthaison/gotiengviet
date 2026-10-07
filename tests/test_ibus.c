@@ -181,6 +181,54 @@ int main(int argc,char **argv) {
     g_assert_cmpstr(e->preedit->str,==,":)");
     g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_space,0,0));
     g_assert_cmpstr(e->preedit->str,==,"");
+    /* Enter never expands: it commits the typed text and dismisses the popup.
+     * Emoji triggers always keep a suggestion list loaded, so this used to
+     * expand ":)" to an emoji instead of committing it. */
+    ibus_gotiengviet_engine_reset(e);
+    hide_suggest(e,engine);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_colon,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_parenright,0,0));
+    g_assert_cmpstr(e->preedit->str,==,":)");
+    g_assert_cmpint(e->n_candidates,>,0);
+    pump(); /* drain commits from earlier cases: D-Bus delivery is async */
+    guint before=commit_count;g_free(last_commit);last_commit=NULL;
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Return,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"");
+    g_assert_cmpint(e->n_candidates,==,0);
+    pump_until(before+1);
+    g_assert_cmpuint(commit_count,==,before+1);
+    g_assert_cmpstr(last_commit,==,":)");
+    /* Enter also commits a macro key literally, popup or not. */
+    ibus_gotiengviet_engine_reset(e);hide_suggest(e,engine);
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_v,0,0));
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_n,0,0));
+    GPtrArray *fake=g_ptr_array_new_with_free_func(g_free);
+    g_ptr_array_add(fake,g_strdup("văn"));
+    show_candidates(e,engine,fake);
+    g_ptr_array_unref(fake);
+    g_assert_cmpstr(e->preedit->str,==,"vn");
+    pump();
+    before=commit_count;g_free(last_commit);last_commit=NULL;
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Return,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"");
+    g_assert_cmpint(e->n_candidates,==,0);
+    pump_until(before+1);
+    g_assert_cmpuint(commit_count,==,before+1);
+    g_assert_cmpstr(last_commit,==,"vn");
+    /* Enter must not pick a highlighted suggestion either: Tab owns that. */
+    ibus_gotiengviet_engine_reset(e);hide_suggest(e,engine);
+    g_string_assign(e->preedit,"khong");
+    fake=g_ptr_array_new_with_free_func(g_free);
+    g_ptr_array_add(fake,g_strdup("không"));
+    show_candidates(e,engine,fake);
+    g_ptr_array_unref(fake);
+    pump();
+    before=commit_count;g_free(last_commit);last_commit=NULL;
+    g_assert_true(ibus_gotiengviet_engine_process_key_event(engine,IBUS_Return,0,0));
+    g_assert_cmpstr(e->preedit->str,==,"");
+    pump_until(before+1);
+    g_assert_cmpuint(commit_count,==,before+1);
+    g_assert_cmpstr(last_commit,==,"khong");
     g_clear_pointer(&e->learned_words,g_hash_table_unref);
     g_assert_true(word_valid(e,"kông"));
     /* Modifier/lock keys must pass through without committing the syllable. */

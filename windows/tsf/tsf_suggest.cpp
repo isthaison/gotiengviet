@@ -691,25 +691,6 @@ void gtv_suggest_accept_cursor(CGtvTextService *service, ITfContext *pic) {
     g_free(typed);
 }
 
-void gtv_suggest_commit_cursor(CGtvTextService *service, ITfContext *pic) {
-    if (!service) return;
-    gchar *text = NULL;
-    gboolean from_ai = FALSE;
-    gchar *typed = NULL;
-    EnterCriticalSection(&g_suggest.cs);
-    if (g_suggest.shown && g_suggest.cursor >= 0 &&
-        g_suggest.cursor < (gint)g_suggest.shown->len) {
-        SuggestItem *it = (SuggestItem *)g_ptr_array_index(g_suggest.shown, g_suggest.cursor);
-        text = g_strdup(it->text);
-        from_ai = it->from_ai;
-        typed = g_strdup(g_suggest.pending_query);
-    }
-    LeaveCriticalSection(&g_suggest.cs);
-    if (text) accept_locked(service, pic, text, from_ai, typed, FALSE);
-    g_free(text);
-    g_free(typed);
-}
-
 void gtv_suggest_accept_index(CGtvTextService *service, ITfContext *pic, gint index) {
     if (!service) return;
     gchar *text = NULL;

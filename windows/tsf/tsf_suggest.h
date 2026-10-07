@@ -45,8 +45,7 @@ gint gtv_suggest_count(void);
 void gtv_suggest_move_cursor(gint delta);
 /* Tab semantics: replace the buffer with the highlight, keep composing. */
 void gtv_suggest_accept_cursor(CGtvTextService *service, ITfContext *pic);
-/* Enter/digit/click semantics: commit the highlight. */
-void gtv_suggest_commit_cursor(CGtvTextService *service, ITfContext *pic);
+/* Digit/click semantics: commit the highlight. */
 void gtv_suggest_accept_index(CGtvTextService *service, ITfContext *pic, gint index);
 
 /* Exact macro/emoji match for the live buffer (Tab keeps macro priority).

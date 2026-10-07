@@ -20,7 +20,8 @@ Ký hiệu: ✅ có · ⚠️ một phần · ❌ chưa có · ➖ hệ điều 
 |---|---|---|---|
 | Gạch đỏ chính tả khi gõ | ✅ | ❌ | ❌ |
 | Bảng gợi ý AI inline | ✅ | ✅ (overlay tray) | ❌ |
-| Nhận gợi ý + học từ đã chọn | ✅ (Tab/số/Enter) | ✅ (Tab/số/Enter + click balloon) | ❌ |
+| Nhận gợi ý + học từ đã chọn | ✅ (Tab/số) | ✅ (Tab/số + click balloon) | ❌ |
+| Enter không áp gợi ý/emoji/macro (chỉ commit chữ) | ✅ | ✅ | ✅ |
 | Gợi ý emoji khi gõ `:sm` | ✅ | ✅ (overlay tray) | ❌ |
 
 ## Cấu hình (cùng định dạng file cả 3 nền tảng)

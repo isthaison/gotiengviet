@@ -404,7 +404,10 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         }
         return FALSE;
     }
-    // 1..5 chọn nhanh, Up/Down di chuyển, Enter commit gợi ý, Esc bỏ bảng gợi ý
+    // 1..5 chọn nhanh, Up/Down di chuyển, Esc bỏ bảng gợi ý.
+    // Không có Enter ở đây: Enter phải commit nguyên chữ đang gõ, không
+    // được áp gợi ý/emoji (xem nhánh commit literal cuối hàm). Nhánh này chạy
+    // trước nên chỉ cần bỏ Enter là Enter rơi xuống đúng chỗ đó.
     if(e->n_candidates>0 && e->candidates){
         if(e->mode_telex && ((keyval>=IBUS_1 && keyval<=IBUS_5) || (keyval>=IBUS_KP_1 && keyval<=IBUS_KP_5))){
             int idx = (keyval>=IBUS_1 && keyval<=IBUS_5) ? (keyval - IBUS_1) : (keyval - IBUS_KP_1);
@@ -433,21 +436,6 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
                 ibus_lookup_table_append_candidate(table, ibus_text_new_from_string(e->candidates[i]));
             ibus_engine_update_lookup_table(engine, table, TRUE);
             g_object_unref(table);
-            return TRUE;
-        }
-        if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
-            learn_candidate(e,e->candidates[e->cand_cursor]);
-            g_string_assign(e->preedit, e->candidates[e->cand_cursor]);
-            gchar *word=expand_emoji(e->preedit->str);
-            if(!word) word=g_strdup(e->preedit->str);
-            update_context(e, word);
-            IBusText *t=ibus_text_new_from_string(word);
-            g_free(word);
-            commit_and_remember(engine,t);
-            ibus_gotiengviet_engine_reset(e);
-            IBusText *empty=ibus_text_new_from_string("");
-            ibus_engine_update_preedit_text(engine,empty,0,FALSE);
-            hide_suggest(e, engine);
             return TRUE;
         }
         if(keyval==IBUS_Escape){
@@ -506,7 +494,9 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         gtv_engine_free(composer);
         return TRUE;
     }
-    // Enter -> commit literally (Tab-only expansion)
+    // Enter -> commit literally, kể cả khi bảng gợi ý đang hiện.
+    // Nhánh này nằm sau khối xử lý 1..5/Up/Down nên Enter không còn bị bảng
+    // gợi ý "cướp": gợi ý/emoji/macro chỉ nhận bằng Tab, số 1-5 hoặc click.
     if(keyval==IBUS_Return || keyval==IBUS_KP_Enter){
         if(e->preedit->len>0){
             gchar *word=g_strdup(e->preedit->str);
@@ -777,7 +767,7 @@ static void bus_connected_cb(IBusBus *b, gpointer user_data){
         c = ibus_component_new_from_file("/usr/share/ibus/component/gotiengviet.xml");
     }
     if(!c){
-        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.8.25","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
+        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.8.26","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
         IBusEngineDesc *d = ibus_engine_desc_new_varargs(
             "name", "gotiengviet",
             "longname", "GoTiengViet",

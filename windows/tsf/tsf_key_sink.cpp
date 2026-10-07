@@ -210,21 +210,19 @@ STDMETHODIMP CGtvTextService::OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM l
         return S_OK;
     }
 
-    // Return commits composition (or the highlighted suggestion)
+    // Return commits the composition literally. The suggestion popup is
+    // dismissed, never accepted: suggestions/emoji/macro are Tab-only
+    // (or 1-5 / click), so Enter must not swap the typed word out.
     if (wParam == VK_RETURN) {
         if (IsComposing()) {
-            if (gtv_suggest_visible()) {
-                gtv_suggest_commit_cursor(this, pic);
-            } else {
-                gchar *commit = gtv_engine_process(m_pEngine, '\n', NULL);
-                if (commit) {
-                    UpdateCompositionUtf8(this, pic, commit);
-                    NotifyWordFromCommit(commit);
-                    g_free(commit);
-                }
-                EndComposition(pic, TRUE);
-                gtv_engine_reset(m_pEngine);
+            gchar *commit = gtv_engine_process(m_pEngine, '\n', NULL);
+            if (commit) {
+                UpdateCompositionUtf8(this, pic, commit);
+                NotifyWordFromCommit(commit);
+                g_free(commit);
             }
+            EndComposition(pic, TRUE);
+            gtv_engine_reset(m_pEngine);
             gtv_suggest_hide();
             *pfEaten = TRUE;
         }

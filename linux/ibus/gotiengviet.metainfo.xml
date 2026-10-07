@@ -34,6 +34,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.25" date="2026-10-07">
+      <description>
+        <p>Windows: updater chet vi Schannel khong kiem tra duoc revocation (curl exit 35) - them --ssl-revoke-best-effort; Makefile.win co dependency tracking cho header nen bump version khong con tao binary stale trong thu muc payload sai ten.</p>
+      </description>
+    </release>
     <release version="0.8.24" date="2026-10-06">
       <description>
         <p>Windows: sửa updater tự cập nhật (ShellExecuteW trả ERROR_ACCESS_DENIED nên tự cập không bao giờ chạy được — giờ có fallback CreateProcessW và log trong thư mục temp); sửa rect caret collapsed bị loại sai nên bảng gợi ý có thể không hiện.</p>

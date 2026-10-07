@@ -23,6 +23,10 @@ extern GtvWindowsApp g_app;
 
 void gtv_app_set_input_method(GtvMode mode);
 void gtv_app_save_config(void);
+/* Caller frees. The per-user config dir (logs, learned words, config file).
+ * Single place that resolves it, so user-facing messages can name the real
+ * path instead of guessing an environment variable. */
+gchar *gtv_app_config_dir(void);
 gchar *gtv_app_config_path(void);
 
 #endif /* APP_H */

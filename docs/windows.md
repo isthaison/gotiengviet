@@ -13,7 +13,7 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (stub `gtv_tsf.dll` 
 - Cập nhật không chạm app đang chạy, không cần đăng xuất/reboot: mỗi bản nằm trong thư mục version riêng (`ver\<bản>\`), stub TSF (`gtv_tsf.dll`) đăng ký đúng một lần nên không cài lại, không UAC. App đang mở giữ bản cũ tới khi thoát; app mở mới dùng bản mới ngay; app khay tự tiếp quản bản mới trong ~1 giây. Chỉ giữ bản hiện tại + 1 bản rollback, cũ hơn tự dọn.
 - App tự kiểm tra release mới nhất mỗi ngày; menu tray **Kiểm tra cập nhật...** để kiểm tra tay. Có bản mới thì hiện balloon — **click vào balloon** để tải và chạy bộ cài silent. So sánh semver, chỉ cài đúng asset `gotiengviet-<version>-x64-setup.exe`.
 - Code signing: bản release ký self-signed cert (RSA 4096, 1 năm) — bypass SmartScreen trên大部分 Windows. Nếu cert chưa cấu hình, bản unsigned vẫn hoạt động bình thường nhưng SmartScreen có thể hiện cảnh báo lần đầu chạy.
-- Chẩn đoán: `%APPDATA%\gotiengviet\update.log` (mọi bước check/tải/cài của updater).
+- Chẩn đoán: `%LOCALAPPDATA%\gotiengviet\update.log` (mọi bước check/tải/cài của updater).
 
 ## Dùng hằng ngày
 
@@ -23,12 +23,12 @@ Native Windows 10/11 (x64). Gõ bằng **TSF Text Service** (stub `gtv_tsf.dll` 
   trong dropdown như bản Linux — `qwen2.5:0.5b`/`qwen2.5:1.5b`/`rule`, gõ tay model khác vẫn được — URL,
   dòng trạng thái + log `ollama serve` như bản Linux),
   nút **Bàn phím...** (xem [Quản lý danh sách bàn phím](#quản-lý-danh-sách-bàn-phím-winspace)),
-  nút **Dữ liệu...** — lưu ở `%APPDATA%\gotiengviet\` như bản Linux. Log serve nằm ở `%TEMP%\ollama_serve.log`;
+  nút **Dữ liệu...** — lưu ở `%LOCALAPPDATA%\gotiengviet\` như bản Linux. Log serve nằm ở `%TEMP%\ollama_serve.log`;
   khi bật AI (tick checkbox hoặc lưu), app tự kiểm tra → tự động cài Ollama bằng lệnh chính thức (`irm https://ollama.com/install.ps1 | iex`) chạy nền hoàn toàn im lặng nếu thiếu →
   chạy `ollama serve` nền → pull model nếu chưa có, chờ `/api/tags` tối đa 15s. Cần mạng lần đầu.
 - **Gợi ý AI dạng balloon**: TSF báo mỗi từ vừa commit về app khay; từ sai được hỏi Ollama nền (`"sai" co the ban muon go "dung"?`, chống spam 10 giây). Cần Ollama + `curl` (có sẵn từ Windows 10). **Click balloon** để nhận (chưa gõ tiếp thì thay tại chỗ, rồi thì copy vào clipboard); lựa chọn được học vào `learned-corrections.txt` nên offline vẫn gợi ý.
 - **Bảng gợi ý keyword inline (broker ngoài process)**: TSF trong app nhập liệu chỉ giữ composition/candidate và bắt phím, không tạo cửa sổ (an toàn với Electron/OpenCode); process tray riêng vẽ overlay cạnh caret, không lấy focus. Gõ `:sm` gợi ý emoji ngay không cần AI; từ thường gợi ý từ Ollama sau debounce 350 ms, rớt mạng dùng dữ liệu đã học. Phím: `Up/Down` di chuyển, `Tab`/`Enter` hoặc số `1-5` (Telex) để nhận, `Esc` bỏ (vẫn gõ tiếp), `Space` giữ nguyên chữ. Không lấy được tọa độ caret thật thì không hiện gì (không fallback góc màn hình). Từ trùng macro/emoji khớp tuyệt đối vẫn ưu tiên bung bằng `Tab` như cũ. Lựa chọn được học như balloon.
-  Chẩn đoán vị trí hiển thị: `%APPDATA%\gotiengviet\suggest.log` — ghi mỗi khi rect caret nhận về không nằm trong cửa sổ đang focus (tức lỗi ở phía TSF), kèm DPI và toạ độ popup; nhật ký tự cắt ở 64 KB.
+  Chẩn đoán vị trí hiển thị: `%LOCALAPPDATA%\gotiengviet\suggest.log` — ghi mỗi khi rect caret nhận về không nằm trong cửa sổ đang focus (tức lỗi ở phía TSF), kèm DPI và toạ độ popup; nhật ký tự cắt ở 64 KB.
 - Macro/emoji/prompts/config: chung lõi và file `data/` với bản Linux.
 - Chữ Việt hiển thị đúng mọi locale: toàn bộ UI dùng Unicode API, dialog đặt chữ lúc chạy.
 
@@ -44,7 +44,7 @@ cũng cần UAC một lần. Hai mục khởi động loại trừ nhau: chỉ m
 Bảng điều khiển → **Dữ liệu...**: chuyển Macro/Emoji, chọn dòng để sửa, **Lưu** để thêm/cập nhật,
 **Xóa** để gỡ, **Mở thư mục** để sửa file text tay. Khóa không chứa dấu cách hay `=`,
 giá trị không rỗng. Lưu ghi đè file riêng của bạn (`macros.txt`/`emojis.txt` trong
-`%APPDATA%\gotiengviet\`, thay thế hoàn toàn file hệ thống) — **app đang mở phải khởi
+`%LOCALAPPDATA%\gotiengviet\`, thay thế hoàn toàn file hệ thống) — **app đang mở phải khởi
 động lại mới nhận bảng mới** (TSF đọc bảng lúc app khởi động).
 
 Macro và emoji đều kích hoạt bằng phím **Tab** (gõ từ tắt/trigger rồi nhấn Tab để bung; bấm Space hoặc dấu câu giữ nguyên, không tự động bung ngoài ý muốn).

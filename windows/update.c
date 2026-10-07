@@ -148,7 +148,18 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
             MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
         } else {
             update_log("check result: check error");
-            MessageBoxW(g_app.hwnd_main, L"Không kiểm tra được bản mới. Có thể do mạng, proxy hoặc GitHub API đang giới hạn truy cập.\n\nChi tiết trong %APPDATA%\\gotiengviet\\update.log (chạy: curl --fail https://api.github.com/repos/isthaison/gotiengviet/releases/latest để kiểm tra).", L"Cập nhật GoTiengViet", MB_OK | MB_ICONWARNING | MB_TOPMOST);
+            /* Name the real directory instead of guessing %APPDATA%: glib
+             * resolves the user config dir elsewhere on Windows, so the
+             * hardcoded path pointed at a folder that does not exist. */
+            gchar *dir = gtv_app_config_dir();
+            WCHAR wmsg[512];
+            swprintf(wmsg, 512,
+                     L"Không kiểm tra được bản mới. Có thể do mạng, proxy hoặc "
+                     L"GitHub API đang giới hạn truy cập.\n\nChi tiết trong "
+                     L"%hs\\update.log\n(chạy: curl --fail https://api.github.com/repos/isthaison/gotiengviet/releases/latest để kiểm tra).",
+                     dir ? dir : "?");
+            g_free(dir);
+            MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_OK | MB_ICONWARNING | MB_TOPMOST);
         }
     }
     g_free(res->tag); g_free(res->url); g_free(res);
@@ -300,9 +311,23 @@ void gtv_update_on_downloaded(gchar *installer_path) {
     gtv_tray_balloon_force("GoTiengViet cập nhật", "Đang cài đặt phiên bản mới...");
     if (!update_launch_installer(installer_path)) {
         update_log("installer could not be launched; see hint below");
-        gtv_tray_balloon_force("GoTiengViet cập nhật",
-            "Không chạy được bộ cài. Mở %LOCALAPPDATA%\\Temp\\gtv-update-install.log "
-            "hoặc tải thủ công từ trang Releases.");
+        /* Resolve the real temp dir: GetTempPathW can point at
+         * C:\Windows\Temp for some accounts, so a hardcoded
+         * %LOCALAPPDATA%\Temp would again name a folder that does not
+         * hold the log. */
+        WCHAR tdir[MAX_PATH];
+        gchar *logpath;
+        if (GetTempPathW(MAX_PATH, tdir))
+            logpath = g_utf16_to_utf8(tdir, -1, NULL, NULL, NULL);
+        else
+            logpath = g_strdup("");
+        gchar *msg = g_strdup_printf(
+            "Không chạy được bộ cài. Mở %sgtv-update-install.log "
+            "hoặc tải thủ công từ trang Releases.",
+            logpath ? logpath : "");
+        gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
+        g_free(msg);
+        g_free(logpath);
         g_free(installer_path);
         Sleep(500);
         PostQuitMessage(0);

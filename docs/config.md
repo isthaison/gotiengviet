@@ -1,6 +1,6 @@
 # Cấu hình
 
-Thư mục cấu hình: `$XDG_CONFIG_HOME/gotiengviet/` (Linux, mặc định `~/.config/gotiengviet/`) và `%APPDATA%\gotiengviet\` (Windows).
+Thư mục cấu hình: `$XDG_CONFIG_HOME/gotiengviet/` (Linux, mặc định `~/.config/gotiengviet/`) và `%LOCALAPPDATA%\gotiengviet\` (Windows).
 
 | File | Nội dung |
 |---|---|

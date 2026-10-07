@@ -683,7 +683,7 @@ cmd_uninstall_linux() {
 }
 
 cmd_package_linux() {
-    version=${1:-0.8.25-1}
+    version=${1:-0.8.26-1}
     architecture=$(dpkg --print-architecture)
     dpkg --validate-version "$version"
     make build test

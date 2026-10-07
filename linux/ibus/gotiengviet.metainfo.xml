@@ -34,6 +34,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.8.26" date="2026-10-07">
+      <description>
+        <p>Enter chi commit nguyen chu dang go: khong con ap goi y AI, emoji hay macro. Truoc 0.8.26 nhanh Enter chay truoc nhanh commit literal nen go "vn" + Enter ra "van", go ":)" + Enter ra emoji. Goi y/emoji/macro gio chi nhan bang Tab, so 1-5 hoac click (IBus + TSF).</p>
+      </description>
+    </release>
     <release version="0.8.25" date="2026-10-07">
       <description>
         <p>Windows: updater chet vi Schannel khong kiem tra duoc revocation (curl exit 35) - them --ssl-revoke-best-effort; Makefile.win co dependency tracking cho header nen bump version khong con tao binary stale trong thu muc payload sai ten.</p>

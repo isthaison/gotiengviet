@@ -42,8 +42,10 @@ typedef struct {
     guint generation;
     RECT caret;          /* captured on the app thread at trigger time */
     gboolean caret_valid;
+    GTV_CARET_SOURCE caret_source; /* probe that produced `caret` */
     RECT last_caret;
     gboolean last_caret_valid;
+    GTV_CARET_SOURCE last_caret_source; /* which probe produced last_caret */
     GCancellable *cancellable;
     GHashTable *learned_words;
     GHashTable *learned_fixes;
@@ -184,7 +186,7 @@ static BOOL caret_rect_usable(const RECT *r) {
     return TRUE;
 }
 
-BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc) {
+BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc, GTV_CARET_SOURCE *src) {
     if (!pic || !rc) return FALSE;
     /* Read-only caret probe: open a tiny sync session through the context.
      * Both candidate rects are reported separately so the caller can pick the
@@ -298,14 +300,19 @@ BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc) {
     }
 
     /* Prefer the real caret, fall back to the composition box only when the
-     * selection probe did not yield a usable rect. */
+     * selection probe did not yield a usable rect. `source` is diagnostic:
+     * it travels to the tray so a misplaced popup can be attributed to a probe
+     * instead of guessed at. */
     RECT out = {0, 0, 0, 0};
     BOOL ok = FALSE;
+    GTV_CARET_SOURCE source = GTV_CARET_SRC_NONE;
     if (sel_ok && caret_rect_usable(&sel)) {
         out = sel;
+        source = GTV_CARET_SRC_SELECTION;
         ok = TRUE;
     } else if (comp_ok && caret_rect_usable(&comp)) {
         out = comp;
+        source = GTV_CARET_SRC_COMPOSITION;
         ok = TRUE;
     }
 
@@ -344,6 +351,7 @@ BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc) {
             }
             if (caret_rect_usable(&r)) {
                 out = r;
+                source = GTV_CARET_SRC_WIN32;
                 ok = TRUE;
             }
         }
@@ -357,7 +365,10 @@ BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc) {
         if (g_suggest.last_caret_valid) {
             RECT cached = g_suggest.last_caret;
             ok = caret_rect_usable(&cached);
-            if (ok) out = cached;
+            if (ok) {
+                out = cached;
+                source = GTV_CARET_SRC_CACHED;
+            }
         }
         LeaveCriticalSection(&g_suggest.cs);
     }
@@ -370,8 +381,10 @@ BOOL CGtvTextService::GetCaretRect(ITfContext *pic, RECT *rc) {
         EnterCriticalSection(&g_suggest.cs);
         g_suggest.last_caret = out;
         g_suggest.last_caret_valid = TRUE;
+        g_suggest.last_caret_source = source;
         LeaveCriticalSection(&g_suggest.cs);
         *rc = out;
+        *src = source;
         return TRUE;
     }
     return FALSE;
@@ -403,7 +416,7 @@ static void broker_send_hide(guint generation) {
 }
 
 static void broker_send_show(guint generation, gchar **candidates, guint count,
-                             gint selected, RECT caret) {
+                             gint selected, RECT caret, GTV_CARET_SOURCE source) {
     GtvSuggestIpcPayload payload;
     memset(&payload, 0, sizeof(payload));
     payload.version = GTV_SUGGEST_IPC_VERSION;
@@ -411,6 +424,7 @@ static void broker_send_show(guint generation, gchar **candidates, guint count,
     payload.source_pid = GetCurrentProcessId();
     payload.generation = generation;
     payload.caret_screen = caret;
+    payload.caret_source = (DWORD)source;
     guint n = count > GTV_SUGGEST_IPC_MAX_CANDIDATES ? GTV_SUGGEST_IPC_MAX_CANDIDATES : count;
     for (guint i = 0; i < n; i++)
         g_strlcpy(payload.candidates[i], candidates[i] ? candidates[i] : "",
@@ -493,6 +507,7 @@ static gpointer suggest_worker(gpointer data) {
     gint cursor = 0;
     guint cur_gen = 0;
     gboolean stale = TRUE;
+    GTV_CARET_SOURCE caret_source = GTV_CARET_SRC_NONE;
     memset(&caret, 0, sizeof(caret));
     EnterCriticalSection(&g_suggest.cs);
     stale = g_cancellable_is_cancelled(job->cancel) || job->generation != g_suggest.generation;
@@ -511,6 +526,7 @@ static gpointer suggest_worker(gpointer data) {
         cursor = g_suggest.cursor;
         caret = g_suggest.caret;
         have_caret = g_suggest.caret_valid;
+        caret_source = g_suggest.caret_source;
         n = g_suggest.shown->len > GTV_SUGGEST_MAX ? GTV_SUGGEST_MAX
                                                   : (guint)g_suggest.shown->len;
         for (guint i = 0; i < n; i++) {
@@ -530,7 +546,7 @@ static gpointer suggest_worker(gpointer data) {
          * always wins over older shows. */
         broker_send_hide(cur_gen);
     } else {
-        broker_send_show(cur_gen, snapshot, n, cursor, caret);
+        broker_send_show(cur_gen, snapshot, n, cursor, caret, caret_source);
     }
     for (guint i = 0; i < n; i++)
         g_free(snapshot[i]);
@@ -636,6 +652,7 @@ void gtv_suggest_move_cursor(gint delta) {
     gboolean have_caret = FALSE;
     gint cursor = 0;
     guint gen = 0;
+    GTV_CARET_SOURCE caret_source = GTV_CARET_SRC_NONE;
     memset(&caret, 0, sizeof(caret));
     EnterCriticalSection(&g_suggest.cs);
     if (g_suggest.shown && g_suggest.shown->len > 0) {
@@ -644,6 +661,7 @@ void gtv_suggest_move_cursor(gint delta) {
         cursor = g_suggest.cursor;
         caret = g_suggest.caret;
         have_caret = g_suggest.caret_valid;
+        caret_source = g_suggest.caret_source;
         gen = g_suggest.generation;
         n = (guint)count > GTV_SUGGEST_MAX ? GTV_SUGGEST_MAX : (guint)count;
         for (guint i = 0; i < n; i++) {
@@ -653,7 +671,7 @@ void gtv_suggest_move_cursor(gint delta) {
     }
     LeaveCriticalSection(&g_suggest.cs);
     if (n > 0 && have_caret)
-        broker_send_show(gen, snapshot, n, cursor, caret);
+        broker_send_show(gen, snapshot, n, cursor, caret, caret_source);
     for (guint i = 0; i < n; i++)
         g_free(snapshot[i]);
 }
@@ -756,7 +774,8 @@ void gtv_suggest_on_key(CGtvTextService *service, ITfContext *pic) {
     /* Caret is captured on the app thread now; the worker only forwards it.
      * No rect -> no overlay (never fall back to a screen corner). */
     RECT caret;
-    gboolean have_caret = (gboolean)service->GetCaretRect(pic, &caret);
+    GTV_CARET_SOURCE caret_source = GTV_CARET_SRC_NONE;
+    gboolean have_caret = (gboolean)service->GetCaretRect(pic, &caret, &caret_source);
 
     gunichar first = g_utf8_get_char(buf);
     if ((first == ':' || first == ';' || first == '<' || first == '(') && len >= 2) {
@@ -777,8 +796,9 @@ void gtv_suggest_on_key(CGtvTextService *service, ITfContext *pic) {
             g_free(g_suggest.pending_query);
             g_suggest.pending_query = g_strdup(buf);
             g_suggest.pending_bad = FALSE;
-            g_suggest.caret = caret;
-            g_suggest.caret_valid = TRUE;
+        g_suggest.caret = caret;
+        g_suggest.caret_source = caret_source;
+        g_suggest.caret_valid = TRUE;
             n = g_suggest.shown->len > GTV_SUGGEST_MAX ? GTV_SUGGEST_MAX
                                                       : (guint)g_suggest.shown->len;
             for (guint i = 0; i < n; i++) {
@@ -786,7 +806,7 @@ void gtv_suggest_on_key(CGtvTextService *service, ITfContext *pic) {
                 snapshot[i] = g_strdup(it->text ? it->text : "");
             }
             LeaveCriticalSection(&g_suggest.cs);
-            broker_send_show(gen, snapshot, n, 0, caret);
+            broker_send_show(gen, snapshot, n, 0, caret, caret_source);
             for (guint i = 0; i < n; i++)
                 g_free(snapshot[i]);
         } else {
@@ -820,6 +840,7 @@ void gtv_suggest_on_key(CGtvTextService *service, ITfContext *pic) {
         g_suggest.pending_query = g_strdup(buf);
         g_suggest.pending_bad = bad;
         g_suggest.caret = caret;
+        g_suggest.caret_source = caret_source;
         g_suggest.caret_valid = have_caret;
         g_suggest.cancellable = g_cancellable_new();
         if (g_suggest.cancellable)

@@ -140,7 +140,29 @@ static void overlay_measure(int *width, int *height) {
     *height = (int)s_overlay.count * row_height + MulDiv(4, (int)s_overlay.dpi, 96);
 }
 
-static void overlay_show(RECT caret) {
+/* Position every show, not only the anomalies. A popup that is inside the
+     * focused window can still be visually wrong, and logging only failures
+     * hid exactly that case for three releases. Throttled to one line per
+     * second: this runs on the tray UI thread once per keystroke. */
+static void overlay_log_show(DWORD caret_source, RECT caret, RECT fr,
+                             int x, int y, int width, int height) {
+    static DWORD last = 0;
+    DWORD now = GetTickCount();
+    if (last && now - last < 1000) return;
+    last = now;
+    const char *names[] = { "none", "selection", "composition", "win32", "cached" };
+    const char *src = (caret_source < 5) ? names[caret_source] : "?";
+    overlay_log("show src=%s caret=%ld,%ld,%ld,%ld focus=%ld,%ld,%ld,%ld "
+                "popup=%d,%d %dx%d dpi=%u",
+                src,
+                (long)caret.left, (long)caret.top,
+                (long)caret.right, (long)caret.bottom,
+                (long)fr.left, (long)fr.top,
+                (long)fr.right, (long)fr.bottom, x, y, width, height,
+                (unsigned)s_overlay.dpi);
+}
+
+static void overlay_show(RECT caret, DWORD caret_source) {
     UINT dpi = overlay_dpi();
     if (dpi != s_overlay.dpi) {
         overlay_log("dpi %u -> %u", (unsigned)s_overlay.dpi, (unsigned)dpi);
@@ -182,35 +204,27 @@ static void overlay_show(RECT caret) {
         if (y + height > work.bottom) y = work.bottom - height;
     }
 
-    /* A caret rect that misses the focused window was produced upstream in the
-     * text service; record it, since that is the signature of the popup
-     * appearing in the wrong place. Throttled: this runs on the tray UI thread
-     * once per keystroke, so a persistent fault must not turn into a file write
-     * per character. */
-    static DWORD last_anomaly = 0;
+    /* Log where the popup went and why. `src` says which probe produced the
+     * rect, `focus` is the window the user is actually typing in: together
+     * they separate "the host answered with the wrong box" from "we placed it
+     * wrong", which is the one distinction a silent popup cannot make. */
     HWND focus = GetForegroundWindow();
     RECT fr;
     if (focus && GetWindowRect(focus, &fr)) {
-        /* A caret is normally zero pixels wide (collapsed selection), and
-         * IntersectRect reports "no overlap" for such a rect even when it sits
-         * inside the window. Widen before intersecting or every keystroke
-         * looks like an anomaly. */
+        overlay_log_show(caret_source, caret, fr, x, y, width, height);
+
+        /* A rect that misses the focused window entirely is produced upstream
+         * in the text service -- the clearest sign of a wrong position. */
         RECT probe = caret;
         if (probe.right == probe.left) probe.right = probe.left + 1;
         if (probe.bottom == probe.top) probe.bottom = probe.top + 1;
         RECT hit;
         if (!IntersectRect(&hit, &probe, &fr)) {
-            DWORD now = GetTickCount();
-            if (!last_anomaly || now - last_anomaly >= 2000) {
-                last_anomaly = now;
-                overlay_log("caret %ld,%ld,%ld,%ld outside focus window "
-                            "%ld,%ld,%ld,%ld -> popup at %d,%d dpi %u",
-                            (long)caret.left, (long)caret.top,
-                            (long)caret.right, (long)caret.bottom,
-                            (long)fr.left, (long)fr.top,
-                            (long)fr.right, (long)fr.bottom, x, y,
-                            (unsigned)s_overlay.dpi);
-            }
+            overlay_log("ANOMALY caret outside focus window "
+                        "%ld,%ld,%ld,%ld -> popup at %d,%d dpi %u",
+                        (long)caret.left, (long)caret.top,
+                        (long)caret.right, (long)caret.bottom, x, y,
+                        (unsigned)s_overlay.dpi);
         }
     }
 
@@ -346,6 +360,6 @@ BOOL gtv_suggest_overlay_handle_copydata(const COPYDATASTRUCT *copydata) {
     s_overlay.selected = payload->selected < payload->candidate_count
                          ? payload->selected : 0;
     memcpy(s_overlay.candidates, candidates, sizeof(candidates));
-    overlay_show(payload->caret_screen);
+    overlay_show(payload->caret_screen, payload->caret_source);
     return TRUE;
 }

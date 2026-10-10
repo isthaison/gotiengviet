@@ -5,6 +5,7 @@
 #include <msctf.h>
 #include "tsf_defs.h"
 #include "engine.h"
+#include "../suggest_ipc.h"
 
 /* Process-wide DLL refcount backing DllCanUnloadNow (defined in
  * tsf_register.cpp). Every live service/factory object holds one. */
@@ -59,7 +60,7 @@ public:
     BOOL IsComposing() const { return m_pComposition != NULL; }
     GtvEngine *GetEngine() { return m_pEngine; }
     TfClientId GetClientId() const { return m_tfClientId; }
-    BOOL GetCaretRect(ITfContext *pic, RECT *rc);
+    BOOL GetCaretRect(ITfContext *pic, RECT *rc, GTV_CARET_SOURCE *src);
 
     void ReloadConfig();
 

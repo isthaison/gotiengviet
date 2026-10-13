@@ -18,6 +18,7 @@
  *     layout variant (00000409 = US, 00020409 = US-International), so the
  *     KLID already tells us which language it belongs to. */
 #include "keyboard.h"
+#include "engine.h"
 
 #include <windows.h>
 /* These are used directly (wcstoul / wcsncpy / swprintf / strtoul / strchr /
@@ -48,7 +49,7 @@ static const wchar_t *KBD_LAYOUTS_KEY =
 static LANGID tip_langid(const gchar *tip);
 
 static void kbd_log(const gchar *fmt, ...) {
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
     g_mkdir_with_parents(dir, 0755);
     gchar *path = g_build_filename(dir, "keyboard.log", NULL);
     g_free(dir);
@@ -772,7 +773,7 @@ void gtv_kbd_list_set_default(GtvKbdList *list) {
 /* ------------------------------------------------------------ config flag */
 
 static gchar *kbd_state_path(const gchar *name) {
-    return g_build_filename(g_get_user_config_dir(), "gotiengviet", name, NULL);
+    return gtv_user_path(g_get_user_config_dir(), name);
 }
 
 gboolean gtv_kbd_is_custom(void) {

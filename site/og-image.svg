@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-  <title id="title">GoTiengViet</title>
+  <title id="title">GoTV</title>
   <desc id="desc">Bộ gõ tiếng Việt Telex và VNI cho Windows, Linux và macOS</desc>
   <rect width="1200" height="630" fill="#faf7f2"/>
   <circle cx="1050" cy="80" r="240" fill="#f4e5dc"/>
   <circle cx="90" cy="610" r="260" fill="#efe1d5"/>
   <rect x="96" y="106" width="112" height="112" rx="24" fill="#b22222"/>
   <text x="152" y="188" text-anchor="middle" font-family="Arial, sans-serif" font-size="76" font-weight="700" fill="#fff">T</text>
-  <text x="240" y="184" font-family="Arial, sans-serif" font-size="68" font-weight="700" fill="#2b2320">GoTiengViet</text>
+  <text x="240" y="184" font-family="Arial, sans-serif" font-size="68" font-weight="700" fill="#2b2320">GoTV</text>
   <text x="96" y="320" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#2b2320">Bộ gõ tiếng Việt Telex/VNI</text>
   <text x="96" y="392" font-family="Arial, sans-serif" font-size="38" fill="#6f625c">Windows · Linux · macOS</text>
   <rect x="96" y="458" width="540" height="70" rx="35" fill="#b22222"/>

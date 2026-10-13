@@ -17,6 +17,7 @@ extern GtvWindowsApp g_app;
 
 /* Message-only window class shared with gtv_tsf.dll (it notifies the
  * tray about committed words for AI checks). */
+/* Loaded TSF hosts from older releases still look up this window class. */
 #define GTV_TRAY_WINDOW_CLASS "GoTiengViet_Message_Window"
 /* WM_COPYDATA dwData for a committed word (NUL-terminated UTF-8). */
 #define GTV_AI_COPYDATA_ID 0x47545641

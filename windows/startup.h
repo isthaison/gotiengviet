@@ -4,7 +4,7 @@
 #include <windows.h>
 #include <glib.h>
 
-/* How GoTiengViet starts with Windows. USER = HKCU Run value (no UAC,
+/* How GoTV starts with Windows. USER = HKCU Run value (no UAC,
  * cannot reach elevated windows). ADMIN = Task Scheduler logon task with
  * highest privileges (needs one UAC consent to set up), so typing helpers
  * keep working inside admin windows. */

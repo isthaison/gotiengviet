@@ -32,7 +32,7 @@ gchar *gtv_ver_current(const gchar *appdir);
 gchar *gtv_ver_dir(const gchar *appdir, const gchar *ver);
 
 /* Tray exe of a NEWER payload to forward to: {appdir}/ver/<current>/
- * gotiengviet.exe when current.txt names a version strictly newer than
+ * gotv.exe when current.txt names a version strictly newer than
  * own_ver (stale shortcut/Run/self-heal). NULL when current, missing or
  * unreadable (dev/legacy layouts). Caller g_free. */
 gchar *gtv_forward_target(const gchar *appdir, const gchar *own_ver);

@@ -3,9 +3,10 @@
 
 #include <gio/gio.h>
 
+/* Preserve the elevated task identity so upgrades do not create two tasks. */
 #define GTV_TASK_NAME "GoTiengViet"
 #define GTV_RUN_KEY "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
-#define GTV_RUN_VALUE "GoTiengViet"
+#define GTV_RUN_VALUE "GoTV"
 
 /* Startup entries point at the running (current) payload exe; a stale
  * entry heals itself because old payloads forward to current.txt. */
@@ -16,10 +17,10 @@ static void run_key_set(gboolean enable) {
     if (enable) {
         WCHAR path[MAX_PATH];
         GetModuleFileNameW(NULL, path, MAX_PATH);
-        RegSetValueExW(hkey, L"GoTiengViet", 0, REG_SZ, (const BYTE *)path,
+        RegSetValueExW(hkey, L"GoTV", 0, REG_SZ, (const BYTE *)path,
                        (DWORD)(lstrlenW(path) + 1) * sizeof(WCHAR));
     } else {
-        RegDeleteValueW(hkey, L"GoTiengViet");
+        RegDeleteValueW(hkey, L"GoTV");
     }
     RegCloseKey(hkey);
 }
@@ -34,9 +35,23 @@ void gtv_startup_repoint(void) {
     gchar *appdir = gtv_app_dir_for_module(exe);
     HKEY hkey;
     if (RegOpenKeyEx(HKEY_CURRENT_USER, GTV_RUN_KEY, 0, KEY_READ | KEY_SET_VALUE, &hkey) == ERROR_SUCCESS) {
+        WCHAR legacy[MAX_PATH];
+        DWORD legacy_size = sizeof(legacy), legacy_type = 0;
+        if (RegQueryValueExW(hkey, L"GoTiengViet", NULL, &legacy_type,
+                            (LPBYTE)legacy, &legacy_size) == ERROR_SUCCESS && legacy_type == REG_SZ) {
+            legacy[MAX_PATH - 1] = 0;
+            gchar *legacy8 = g_utf16_to_utf8((const gunichar2 *)legacy, -1, NULL, NULL, NULL);
+            gchar *legacy_dir = legacy8 ? gtv_app_dir_for_module(legacy8) : NULL;
+            if (legacy_dir && !g_ascii_strcasecmp(legacy_dir, appdir)) {
+                if (RegSetValueExW(hkey, L"GoTV", 0, REG_SZ, (const BYTE *)wexe,
+                                  (DWORD)(lstrlenW(wexe) + 1) * sizeof(WCHAR)) == ERROR_SUCCESS)
+                    RegDeleteValueW(hkey, L"GoTiengViet");
+            }
+            g_free(legacy_dir); g_free(legacy8);
+        }
         WCHAR cur[MAX_PATH];
         DWORD size = sizeof(cur), type = 0;
-        if (RegQueryValueExW(hkey, L"GoTiengViet", NULL, &type, (LPBYTE)cur, &size) == ERROR_SUCCESS
+        if (RegQueryValueExW(hkey, L"GoTV", NULL, &type, (LPBYTE)cur, &size) == ERROR_SUCCESS
             && type == REG_SZ) {
             gchar *cur8 = g_utf16_to_utf8((const gunichar2 *)cur, -1, NULL, NULL, NULL);
             if (cur8 && strcmp(cur8, exe) != 0) {
@@ -46,7 +61,7 @@ void gtv_startup_repoint(void) {
                 if (same_app) {
                     gunichar2 *wpath = g_utf8_to_utf16(exe, -1, NULL, NULL, NULL);
                     if (wpath) {
-                        RegSetValueExW(hkey, L"GoTiengViet", 0, REG_SZ, (const BYTE *)wpath,
+                        RegSetValueExW(hkey, L"GoTV", 0, REG_SZ, (const BYTE *)wpath,
                                        (DWORD)((lstrlenW((LPCWSTR)wpath) + 1) * sizeof(WCHAR)));
                         g_free(wpath);
                     }
@@ -196,7 +211,7 @@ gboolean gtv_startup_is_elevated(void) {
 
 static void worker_error(const gchar *utf8) {
     gunichar2 *w = g_utf8_to_utf16(utf8 ? utf8 : "Lỗi không rõ.", -1, NULL, NULL, NULL);
-    gunichar2 *t = g_utf8_to_utf16("GoTiengViet", -1, NULL, NULL, NULL);
+    gunichar2 *t = g_utf8_to_utf16("GoTV", -1, NULL, NULL, NULL);
     if (w && t) MessageBoxW(NULL, (LPCWSTR)w, (LPCWSTR)t, MB_OK | MB_ICONWARNING);
     g_free(w);
     g_free(t);

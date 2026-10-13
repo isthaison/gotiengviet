@@ -26,12 +26,12 @@ STUB_LDFLAGS ?= -shared windows/tsf/gtv_tsf.def -lole32 -loleaut32 -luuid -ladva
 #
 # So glib/gio/zlib/intl/iconv/pcre2/libffi/libstdc++/libgcc/winpthread are all
 # linked INTO the engine DLL; it then imports system DLLs only (the `test`
-# target and `check-tsf-isolated` below enforce that). gotiengviet.exe keeps
+# target and `check-tsf-isolated` below enforce that). gotv.exe keeps
 # the shared glib: it is a normal process and may ship the MSYS2 runtime.
 #
 # Static and shared glib disagree on the ABI (dllimport vs direct calls), so
 # the engine objects are compiled into a separate tree, never shared with the
-# objects that go into gotiengviet.exe.
+# objects that go into gotv.exe.
 GLIB_STATIC_DEFS = -DGLIB_STATIC_COMPILATION -DGOBJECT_STATIC_COMPILATION \
                    -DGIO_STATIC_COMPILATION -DGMODULE_STATIC_COMPILATION
 STATIC_CFLAGS ?= $(CFLAGS) $(GLIB_STATIC_DEFS)
@@ -71,14 +71,14 @@ WIN_OBJS = $(WIN_SRCS:%.c=build/win/%.o)
 TSF_STUB_OBJS = $(TSF_STUB_SRCS:%.cpp=build/win/%.o)
 # Separate tree for the injected engine (see GLIB_STATIC_DEFS above): the same
 # C sources compiled against the static glib ABI must not be mixed with the
-# shared-glib objects that end up in gotiengviet.exe.
+# shared-glib objects that end up in gotv.exe.
 STATIC_ENGINE_OBJS = $(ENGINE_SRCS:%.c=build/win-static/%.o)
 STATIC_TSF_ENGINE_OBJS = $(TSF_ENGINE_SRCS:%.cpp=build/win-static/%.o)
 RC_OBJ = build/win/windows/resource.o
 STUB_RC_OBJ = build/win/windows/stub.o
-CORE_LIB = build/win/libgotiengviet.a
+CORE_LIB = build/win/libgotv.a
 
-TARGET = build/win/gotiengviet.exe
+TARGET = build/win/gotv.exe
 TSF_TARGET = build/win/gtv_tsf.dll
 TSF_ENGINE_TARGET = build/win/gtv_engine.dll
 TEST_ENGINE = build/win/test-engine.exe
@@ -202,9 +202,11 @@ staging: $(TARGET) $(TSF_TARGET) $(TSF_ENGINE_TARGET) check-tsf-isolated
 	done
 	# Drop flat-layout leftovers from pre-side-by-side packages (the real
 	# payload now lives under ver/<V>/; root keeps the stub only).
-	rm -rf $(STAGE)/data $(STAGE)/gspawn-win64-helper*.exe $(STAGE)/lib*.dll $(STAGE)/zlib1.dll $(STAGE)/gotiengviet.exe
+	rm -rf $(STAGE)/data $(STAGE)/gspawn-win64-helper*.exe $(STAGE)/lib*.dll $(STAGE)/zlib1.dll $(STAGE)/gotv.exe
 	cp $(TSF_TARGET) $(STAGE)/gtv_tsf.dll
 	cp $(TARGET) $(TSF_ENGINE_TARGET) $(VERDIR)/
+	# Older payloads forward to this basename; same binary, no second implementation.
+	cp $(TARGET) $(VERDIR)/gotiengviet.exe
 	changed=1; \
 	while [ "$$changed" = 1 ]; do \
 	  changed=0; \

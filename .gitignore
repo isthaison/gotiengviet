@@ -19,7 +19,7 @@ core.*
 *.d
 *.a
 # Installer outputs (built at repo root by `make -f Makefile.win setup`)
-gotiengviet-*-setup.exe
+gotv-*-setup.exe
 # macOS / IDE clutter
 .DS_Store
 *.dSYM/

@@ -3,7 +3,7 @@
 #include <glib/gstdio.h>
 
 gchar *gtv_app_config_dir(void) {
-    return g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    return gtv_user_path(g_get_user_config_dir(), NULL);
 }
 
 gchar *gtv_app_config_path(void) {

@@ -3,7 +3,7 @@
 
 #include <windows.h>
 
-/* Fixed WM_COPYDATA contract between the TSF host and gotiengviet.exe.
+/* Fixed WM_COPYDATA contract between the TSF host and gotv.exe.
  * Candidate strings are UTF-8 and include their trailing NUL in the slot.
  *
  * Version 2 adds caret_source: the TSF DLL says which probe produced the

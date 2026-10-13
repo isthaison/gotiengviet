@@ -1,5 +1,5 @@
-# GoTiengViet default configuration.
-# Copy to ~/.config/gotiengviet/config to customize.
+# GoTV default configuration.
+# Copy to ~/.config/gotv/config to customize.
 [input]
 method=telex
 modern=true

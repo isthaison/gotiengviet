@@ -85,7 +85,7 @@ gint gtv_version_compare(const gchar *a, const gchar *b) {
 }
 
 gchar *gtv_update_asset_name(const gchar *version) {
-    return g_strdup_printf("gotiengviet-%s-x64-setup.exe", strip_tag(version));
+    return g_strdup_printf("gotv-%s-x64-setup.exe", strip_tag(version));
 }
 
 /* --- Minimal JSON string scanner for the GitHub release payload. --- */
@@ -440,7 +440,7 @@ static gchar *curl_get_win32(const gchar *url, glong max_bytes, glong max_secs) 
     const WCHAR *tls = curl_tls_flags();
     size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) + wcslen(tls) + 256;
     WCHAR *cmd = g_new0(WCHAR, cmdlen);
-    wsprintfW(cmd, L"\"%ls\" %ls--silent --show-error --fail --location --proto =https --connect-timeout 10 --max-time %ld --max-filesize %ld --header \"Accept: application/vnd.github+json\" --header \"User-Agent: GoTiengViet-Updater\" --url \"%ls\"",
+    wsprintfW(cmd, L"\"%ls\" %ls--silent --show-error --fail --location --proto =https --connect-timeout 10 --max-time %ld --max-filesize %ld --header \"Accept: application/vnd.github+json\" --header \"User-Agent: GoTV-Updater\" --url \"%ls\"",
               prog_cmd, tls, max_secs, max_bytes, (LPCWSTR)wurl);
     g_free(wprog);
     g_free(wurl);
@@ -546,7 +546,7 @@ static gboolean gtv_update_download_win32(const gchar *url, const gchar *dest_pa
     size_t cmdlen = (wprog ? wcslen(prog_cmd) : 8) + wcslen((LPCWSTR)wurl) +
                      wcslen((LPCWSTR)wtmp) + wcslen(tls) + 256;
     WCHAR *cmd = g_new0(WCHAR, cmdlen);
-    wsprintfW(cmd, L"\"%ls\" %ls--silent --show-error --fail --location --proto =https --max-time 300 --max-filesize 157286400 --header \"User-Agent: GoTiengViet-Updater\" --output \"%ls\" --url \"%ls\"",
+    wsprintfW(cmd, L"\"%ls\" %ls--silent --show-error --fail --location --proto =https --max-time 300 --max-filesize 157286400 --header \"User-Agent: GoTV-Updater\" --output \"%ls\" --url \"%ls\"",
               prog_cmd, tls, (LPCWSTR)wtmp, (LPCWSTR)wurl);
     g_free(wprog);
     g_free(wurl);
@@ -605,7 +605,7 @@ static gchar *curl_get(const gchar *url, glong max_bytes, glong max_secs) {
     const gchar *args[] = {"curl", "--silent", "--show-error", "--fail", "--location",
         "--proto", "=https", "--connect-timeout", "10", "--max-time", secs, "--max-filesize", bytes,
         "--header", "Accept: application/vnd.github+json",
-        "--header", "User-Agent: GoTiengViet-Updater",
+        "--header", "User-Agent: GoTV-Updater",
         "--url", url, NULL};
     GSubprocess *proc = g_subprocess_newv(args,
         G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE, NULL);
@@ -671,7 +671,7 @@ gboolean gtv_update_download(const gchar *url, const gchar *dest_path) {
     gchar *tmp = g_strdup_printf("%s.part", dest_path);
     const gchar *args[] = {"curl", "--silent", "--show-error", "--fail", "--location",
         "--proto", "=https", "--max-time", "300", "--max-filesize", "157286400",
-        "--header", "User-Agent: GoTiengViet-Updater",
+        "--header", "User-Agent: GoTV-Updater",
         "--output", tmp, "--url", url, NULL};
     GSubprocess *proc = g_subprocess_newv(args,
         G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_SILENCE, NULL);
@@ -695,7 +695,7 @@ gboolean gtv_update_download(const gchar *url, const gchar *dest_path) {
 }
 
 static gchar *update_stamp_path(void) {
-    return g_build_filename(g_get_user_config_dir(), "gotiengviet", "update-check", NULL);
+    return gtv_user_path(g_get_user_config_dir(), "update-check");
 }
 
 gboolean gtv_update_should_autocheck(void) {

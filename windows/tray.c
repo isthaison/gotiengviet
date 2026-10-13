@@ -92,7 +92,7 @@ static void tray_apply_icon_tip(void) {
     }
     nid.hIcon = icon_current;
     gtv_win_copy_utf8(nid.szTip, G_N_ELEMENTS(nid.szTip),
-                      g_app.config.mode == GTV_VNI ? "GoTiengViet — VNI" : "GoTiengViet — Telex");
+                      g_app.config.mode == GTV_VNI ? "GoTV — VNI" : "GoTV — Telex");
 }
 
 gboolean gtv_tray_init(HWND hwnd) {
@@ -224,7 +224,7 @@ void gtv_tray_show_menu(HWND hwnd) {
 static void balloon_show(const gchar *title, const gchar *msg) {
     nid.uFlags |= NIF_INFO;
     nid.dwInfoFlags = NIIF_INFO;
-    gtv_win_copy_utf8(nid.szInfoTitle, G_N_ELEMENTS(nid.szInfoTitle), title ? title : "GoTiengViet");
+    gtv_win_copy_utf8(nid.szInfoTitle, G_N_ELEMENTS(nid.szInfoTitle), title ? title : "GoTV");
     gtv_win_copy_utf8(nid.szInfo, G_N_ELEMENTS(nid.szInfo), msg ? msg : "");
     Shell_NotifyIconW(NIM_MODIFY, &nid);
 }

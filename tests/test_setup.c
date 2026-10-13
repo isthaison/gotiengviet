@@ -26,7 +26,7 @@ int main(int argc,char **argv) {
     for(int i=0;i<30 && !connected;i++) {g_usleep(100000);connected=gtk_init_check(&argc,&argv);}
     if(!connected) {g_subprocess_force_exit(display);g_subprocess_wait(display,NULL,NULL);g_object_unref(display);g_error("Cannot open isolated Broadway display");}
     g_timeout_add(100,verify_setup,NULL);
-    int result=setup_ui(argc,argv,"vni","false","false","false","/tmp/gotiengviet-ui-test-config");
+    int result=setup_ui(argc,argv,"vni","false","false","false","/tmp/gotv-ui-test-config");
     g_subprocess_force_exit(display);g_subprocess_wait(display,NULL,NULL);g_object_unref(display);
     return result;
 }

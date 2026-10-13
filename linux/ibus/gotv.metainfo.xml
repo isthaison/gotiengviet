@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.isthaison.gotiengviet</id>
+  <id>io.github.isthaison.gotv</id>
   <metadata_license>FSFAP</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>GoTiengViet</name>
+  <name>GoTV</name>
   <summary>Bộ gõ tiếng Việt Telex/VNI thuần hệ thống</summary>
   <description>
     <p>
-      GoTiengViet là bộ gõ tiếng Việt cho Linux viết hoàn toàn bằng C thuần hệ thống, hỗ trợ kiểu gõ Telex và VNI, kiểm tra chính tả và khay hệ thống.
+      GoTV là bộ gõ tiếng Việt cho Linux viết hoàn toàn bằng C thuần hệ thống, hỗ trợ kiểu gõ Telex và VNI, kiểm tra chính tả và khay hệ thống.
     </p>
   </description>
   <developer id="io.github.isthaison">
-    <name>GoTiengViet Project</name>
+    <name>GoTV Project</name>
   </developer>
-  <launchable type="desktop-id">gotiengviet.desktop</launchable>
+  <launchable type="desktop-id">gotv.desktop</launchable>
   <provides>
-    <binary>gotiengviet</binary>
-    <binary>gotiengviet-demo</binary>
+    <binary>gotv</binary>
+    <binary>gotv-demo</binary>
   </provides>
   <url type="homepage">https://github.com/isthaison/gotiengviet</url>
   <screenshots>
@@ -25,7 +25,7 @@
       <image>https://raw.githubusercontent.com/isthaison/gotiengviet/main/linux/ibus/screenshots/screenshot-main.png</image>
     </screenshot>
     <screenshot>
-      <caption>Hộp thoại thiết lậpibus engine GoTiengViet</caption>
+      <caption>Hộp thoại thiết lậpibus engine GoTV</caption>
       <image>https://raw.githubusercontent.com/isthaison/gotiengviet/main/linux/ibus/screenshots/screenshot-setup.png</image>
     </screenshot>
     <screenshot>
@@ -34,6 +34,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.9.0" date="2026-10-13">
+      <description>
+        <p>Rename project to GoTV</p>
+      </description>
+    </release>
     <release version="0.8.29" date="2026-10-10">
       <description>
         <p>Windows: log vi tri bang goi y ke ca truong hop rect hop le nhung hien thi sai (truoc chi ghi khi rect sai) + gui them nguon rect len tray, de lan sau phan biet duoc app tra rect sai voi popup dat sai cho.</p>

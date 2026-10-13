@@ -1,4 +1,4 @@
-# GoTiengViet Vietnamese dictionary: one word per line (UTF-8 NFC lowercase).
+# GoTV Vietnamese dictionary: one word per line (UTF-8 NFC lowercase).
 # Seed sources, curated/filtered/merged by tools/mkdict.sh:
 #   - duyet/vietnamese-wordlist Viet22K + Viet74K (GPL-2.0; Ho Ngoc Duc wordlist)
 #   - data/learned-words.txt (this repo, MIT)

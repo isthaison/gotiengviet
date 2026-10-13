@@ -246,7 +246,7 @@ gboolean gtv_table_remove(gboolean emoji, const gchar *key){
 gchar *gtv_table_user_path(gboolean emoji){
     const gchar *filename = NULL;
     table_pick(emoji, NULL, NULL, NULL, &filename);
-    return g_build_filename(g_get_user_config_dir(), "gotiengviet", filename, NULL);
+    return gtv_user_path(g_get_user_config_dir(), filename);
 }
 
 gboolean gtv_table_save(gboolean emoji, GError **error){
@@ -257,7 +257,7 @@ gboolean gtv_table_save(gboolean emoji, GError **error){
     gchar *dir = g_path_get_dirname(path);
     g_mkdir_with_parents(dir, 0755);
     g_free(dir);
-    GString *out = g_string_new("# GoTiengViet user table (managed in Settings; edits here win)\n");
+    GString *out = g_string_new("# GoTV user table (managed in Settings; edits here win)\n");
     for(guint i = 0; i < entries->len; i++){
         TableEntry *e = entries->pdata[i];
         g_string_append_printf(out, "%s=%s\n", e->key, e->value);

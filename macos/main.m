@@ -3,13 +3,13 @@
 #include "engine.h"
 #include "SetupWindowController.h"
 
-static const char *kConnectionName = "GoTiengViet_Connection";
+static const char *kConnectionName = "GoTV_Connection";
 
 static gboolean mac_asset_match(const gchar *asset, const gchar *tagver, gpointer unused) {
     (void)unused;
-    gchar *want_dmg = g_strdup_printf("gotiengviet-%s-macos.dmg", tagver);
-    gchar *want_pkg = g_strdup_printf("gotiengviet-%s-macos.pkg", tagver);
-    gchar *want_zip = g_strdup_printf("gotiengviet-%s-macos.zip", tagver);
+    gchar *want_dmg = g_strdup_printf("gotv-%s-macos.dmg", tagver);
+    gchar *want_pkg = g_strdup_printf("gotv-%s-macos.pkg", tagver);
+    gchar *want_zip = g_strdup_printf("gotv-%s-macos.zip", tagver);
     gboolean ok = (strcmp(asset, want_dmg) == 0 || strcmp(asset, want_pkg) == 0 || strcmp(asset, want_zip) == 0);
     g_free(want_dmg);
     g_free(want_pkg);
@@ -27,20 +27,20 @@ static void showAvailableAlert(NSString *tag, NSString *url) {
         @"Có bản mới %@. Tải về file cài đặt ngay?",
         tag];
     NSAlert *alert = [[[NSAlert alloc] init] autorelease];
-    [alert setMessageText:@"GoTiengViet cập nhật"];
+    [alert setMessageText:@"GoTV cập nhật"];
     [alert setInformativeText:msg];
     [alert addButtonWithTitle:@"Tải về"];
     [alert addButtonWithTitle:@"Để sau"];
     if ([alert runModal] != NSAlertFirstButtonReturn) return;
     NSString *ext = [url pathExtension];
     if (![ext length]) ext = @"dmg";
-    NSString *dest = [NSString stringWithFormat:@"/tmp/gotiengviet-%@-macos.%@", tag, ext];
+    NSString *dest = [NSString stringWithFormat:@"/tmp/gotv-%@-macos.%@", tag, ext];
     if (gtv_update_download([url UTF8String], [dest UTF8String])) {
         [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:
             [NSArray arrayWithObject:[NSURL fileURLWithPath:dest]]];
     } else {
         NSAlert *err = [[[NSAlert alloc] init] autorelease];
-        [err setMessageText:@"GoTiengViet cập nhật"];
+        [err setMessageText:@"GoTV cập nhật"];
         [err setInformativeText:@"Không tải được bản mới (cần mạng và curl)."];
         [err runModal];
     }
@@ -99,7 +99,7 @@ static void showAvailableAlert(NSString *tag, NSString *url) {
         showAvailableAlert(nstag, nsurl);
     } else if (manual) {
         NSAlert *alert = [[[NSAlert alloc] init] autorelease];
-        [alert setMessageText:@"GoTiengViet cập nhật"];
+        [alert setMessageText:@"GoTV cập nhật"];
         [alert setInformativeText:(st == GTV_UPDATE_CURRENT)
             ? [NSString stringWithFormat:@"Đang dùng bản mới nhất (%@).", current]
             : @"Không kiểm tra được bản mới. Thử lại sau."];
@@ -109,7 +109,7 @@ static void showAvailableAlert(NSString *tag, NSString *url) {
 
 - (void)showSettingsNotification:(NSNotification *)note {
     (void)note;
-    GoTiengVietShowSettings();
+    GoTVShowSettings();
 }
 
 @end
@@ -130,7 +130,7 @@ static void checkForUpdates(BOOL manual) {
                            withObject:args];
 }
 
-void GoTiengVietCheckForUpdates(BOOL manual) {
+void GoTVCheckForUpdates(BOOL manual) {
     checkForUpdates(manual);
 }
 
@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
     gtv_init();
 
     /* Bundled tables live in Contents/Resources/data (packaged by make);
-     * user files in ~/.config/gotiengviet win as usual. */
+     * user files in ~/.config/gotv win as usual. */
     NSString *res = [[NSBundle mainBundle] resourcePath];
     if (res) {
         setenv("GTV_DATA_DIR",
@@ -152,13 +152,13 @@ int main(int argc, char *argv[]) {
     NSArray *running = [NSRunningApplication runningApplicationsWithBundleIdentifier:bid];
     if ([running count] > 1) {
         [[NSDistributedNotificationCenter defaultCenter]
-            postNotificationName:@"vn.gotiengviet.ShowSettings" object:nil];
+            postNotificationName:@"vn.gotv.ShowSettings" object:nil];
         return 0;
     }
     [[NSDistributedNotificationCenter defaultCenter]
         addObserver:[GtvUpdater sharedUpdater]
            selector:@selector(showSettingsNotification:)
-               name:@"vn.gotiengviet.ShowSettings"
+               name:@"vn.gotv.ShowSettings"
              object:nil];
 
     IMKServer *server = [[IMKServer alloc]

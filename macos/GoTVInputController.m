@@ -1,7 +1,7 @@
-#import "GoTiengVietInputController.h"
+#import "GoTVInputController.h"
 #include "engine.h"
 
-@interface GoTiengVietInputController ()
+@interface GoTVInputController ()
 {
     GtvEngine *engine;
     BOOL composing;
@@ -11,13 +11,13 @@
 - (void)clearComposition:(id)sender;
 @end
 
-@implementation GoTiengVietInputController
+@implementation GoTVInputController
 
 - (id)initWithServer:(id)server delegate:(id)delegate client:(id)inputClient
 {
     self = [super initWithServer:server delegate:delegate client:inputClient];
     if (self) {
-        gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+        gchar *config_dir = gtv_user_path(g_get_user_config_dir(), NULL);
         GtvConfig config;
         gtv_config_load(&config, config_dir);
         g_free(config_dir);
@@ -42,7 +42,7 @@
     /* Fresh state on every activation; also picks up settings saved by
      * the preferences window (same files the Linux build uses). */
     if (engine) {
-        gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+        gchar *config_dir = gtv_user_path(g_get_user_config_dir(), NULL);
         GtvConfig config;
         gtv_config_load(&config, config_dir);
         g_free(config_dir);

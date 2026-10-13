@@ -113,7 +113,7 @@ static void on_delete(GtkWidget *w, gpointer data) {
 static void on_folder(GtkWidget *w, gpointer data) {
     DataUi *u = data;
     (void)w;
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
     gchar *uri = g_filename_to_uri(dir, NULL, NULL);
     if (uri) {
         gtk_show_uri_on_window(GTK_WINDOW(u->dlg), uri, GDK_CURRENT_TIME, NULL);
@@ -124,7 +124,7 @@ static void on_folder(GtkWidget *w, gpointer data) {
 
 void data_show(GtkWindow *parent) {
     DataUi u = {0};
-    u.dlg = gtk_dialog_new_with_buttons("GoTiengViet — Dữ liệu",
+    u.dlg = gtk_dialog_new_with_buttons("GoTV — Dữ liệu",
         parent, GTK_DIALOG_MODAL, "_Đóng", GTK_RESPONSE_CLOSE, NULL);
     gtk_window_set_default_size(GTK_WINDOW(u.dlg), 520, 430);
     GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(u.dlg));

@@ -9,7 +9,7 @@ void gtv_tsf_install_ensure_registered(void);
  * AddLanguageProfile (Vietnamese only), EnableLanguageProfile, plus
  * ITfCategoryMgr::RegisterCategory for the keyboard categories.
  * Needs admin (HKLM writes); returns TRUE when the profile enumerates
- * afterwards. Invoked as: gotiengviet.exe --register-tsf (elevated). */
+ * afterwards. Invoked as: gotv.exe --register-tsf (elevated). */
 gboolean gtv_tsf_register_elevated(void);
 
 #endif /* GTV_TSF_INSTALL_H */

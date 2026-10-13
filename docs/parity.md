@@ -54,7 +54,7 @@ Ký hiệu: ✅ có · ⚠️ một phần · ❌ chưa có · ➖ hệ điều 
 ## Backlog rút từ bảng trên (ưu tiên giảm dần)
 
 1. **macOS: chọn Telex/VNI + cấu hình AI trong Setup** — engine đã đọc config, chỉ thiếu UI ghi (editor macro đã có sẵn pattern).
-2. **macOS: nút Kiểm tra cập nhật** — hàm `GoTiengVietCheckForUpdates` đã có, chỉ thiếu chỗ bấm.
+2. **macOS: nút Kiểm tra cập nhật** — hàm `GoTVCheckForUpdates` đã có, chỉ thiếu chỗ bấm.
 3. **Gạch đỏ + gợi ý inline cho macOS** — việc lớn (display attributes / marked-text attrs; Windows dùng overlay tray ngoài process).
 4. **macOS: autostart + gỡ cài đặt** (docs trước, code sau nếu cần).
 5. Gợi ý emoji `:sm` cho macOS.

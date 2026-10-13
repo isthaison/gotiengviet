@@ -33,13 +33,13 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName", "GoTiengViet Open Source Project\0"
-            VALUE "FileDescription", "GoTiengViet TSF stub (stable)\0"
+            VALUE "CompanyName", "GoTV Open Source Project\0"
+            VALUE "FileDescription", "GoTV TSF stub (stable)\0"
             VALUE "FileVersion", GTV_STUB_VERSION ".0\0"
             VALUE "InternalName", "gtv_tsf\0"
             VALUE "LegalCopyright", "Copyright (C) 2026\0"
             VALUE "OriginalFilename", "gtv_tsf.dll\0"
-            VALUE "ProductName", "GoTiengViet\0"
+            VALUE "ProductName", "GoTV\0"
             VALUE "ProductVersion", GTV_STUB_VERSION ".0\0"
         END
     END

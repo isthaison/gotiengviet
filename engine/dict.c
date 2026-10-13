@@ -106,7 +106,7 @@ static DictStore *dict_parse_file(const gchar *path) {
 }
 
 gchar *gtv_dict_user_path(void) {
-    return g_build_filename(g_get_user_data_dir(), "gotiengviet", GTV_DICT_NAME, NULL);
+    return gtv_user_path(g_get_user_data_dir(), GTV_DICT_NAME);
 }
 
 /* Downloaded copy wins when it parses to a non-empty table; otherwise the

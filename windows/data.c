@@ -72,7 +72,7 @@ static void fields_from_selection(HWND hwnd) {
 
 static void warn(HWND hwnd, const gchar *utf8) {
     gunichar2 *w = g_utf8_to_utf16(utf8, -1, NULL, NULL, NULL);
-    gunichar2 *t = g_utf8_to_utf16("GoTiengViet", -1, NULL, NULL, NULL);
+    gunichar2 *t = g_utf8_to_utf16("GoTV", -1, NULL, NULL, NULL);
     if (w && t) MessageBoxW(hwnd, (LPCWSTR)w, (LPCWSTR)t, MB_OK | MB_ICONWARNING);
     g_free(w);
     g_free(t);
@@ -116,7 +116,7 @@ static void on_delete(HWND hwnd) {
 }
 
 static void on_folder(void) {
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
     gunichar2 *w = g_utf8_to_utf16(dir ? dir : "", -1, NULL, NULL, NULL);
     if (w) {
         ShellExecuteW(NULL, L"open", (LPCWSTR)w, NULL, NULL, SW_SHOWNORMAL);
@@ -139,7 +139,7 @@ static INT_PTR CALLBACK DataDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 { IDC_DATA_CLOSE, "Đóng" },
                 { IDC_DATA_NOTE, "Thay đổi lưu vào file riêng của bạn. App đang mở phải khởi động lại mới nhận bảng mới." },
             };
-            gtv_win_set_window_text(hwnd, "GoTiengViet - Dữ liệu");
+            gtv_win_set_window_text(hwnd, "GoTV - Dữ liệu");
             for (guint i = 0; i < G_N_ELEMENTS(labels); i++) {
                 gtv_win_set_dlg_item_text(hwnd, labels[i].id, labels[i].text);
             }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component>
+  <name>org.freedesktop.IBus.GoTV</name>
+  <description>GoTV - Gõ Telex/VNI thuần hệ thống (không lib ngoài)</description>
+  <exec>/usr/libexec/ibus-engine-gotv --ibus</exec>
+  <version>0.9.0</version>
+  <author>GoTV Project</author>
+  <license>GPL</license>
+  <homepage>https://github.com/isthaison/gotiengviet</homepage>
+  <textdomain>gotv</textdomain>
+  <engines>
+    <engine>
+      <name>gotv</name>
+      <longname>GoTV</longname>
+      <description>GoTV: Telex/VNI</description>
+      <language>vi</language>
+      <icon>gotv</icon>
+      <layout>us</layout>
+      <rank>99</rank>
+      <setup>/usr/libexec/ibus-setup-gotv</setup>
+    </engine>
+  </engines>
+</component>

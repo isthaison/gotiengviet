@@ -1,6 +1,7 @@
 #include "tsf_install.h"
 
 #include <windows.h>
+#include "engine.h"
 #include <stdio.h>
 #include <glib.h>
 #include <wchar.h>
@@ -42,8 +43,7 @@ static gchar *s_log_path = NULL;
 
 static const gchar *get_log_path(void) {
     if (!s_log_path)
-        s_log_path = g_build_filename(g_get_user_data_dir(), "gotiengviet",
-                                      "tsf_install.log", NULL);
+        s_log_path = gtv_user_path(g_get_user_data_dir(), "tsf_install.log");
     return s_log_path;
 }
 
@@ -507,7 +507,7 @@ void gtv_tsf_install_ensure_registered(void) {
      * GoTV from the vi language, so point the user at the one command that
      * fixes it instead of leaving an empty language in the switcher. */
     if (!machine_profile_registered())
-        log_msg("WARNING: machine profile missing - run: gotiengviet.exe --register-tsf "
+        log_msg("WARNING: machine profile missing - run: gotv.exe --register-tsf "
                 "(admin) or reinstall; vi-VN will show no keyboard until then");
 }
 

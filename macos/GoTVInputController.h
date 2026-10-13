@@ -4,7 +4,7 @@
 #import <Cocoa/Cocoa.h>
 #import <InputMethodKit/InputMethodKit.h>
 
-@interface GoTiengVietInputController : IMKInputController
+@interface GoTVInputController : IMKInputController
 @end
 
 #endif

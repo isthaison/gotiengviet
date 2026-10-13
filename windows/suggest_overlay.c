@@ -1,4 +1,5 @@
 #include "suggest_overlay.h"
+#include "engine.h"
 #include "suggest_ipc.h"
 
 #include <glib.h>
@@ -8,7 +9,7 @@
 #include <string.h>
 #include <wchar.h>
 
-#define GTV_SUGGEST_OVERLAY_CLASS L"GoTiengVietSuggestionOverlay"
+#define GTV_SUGGEST_OVERLAY_CLASS L"GoTVSuggestionOverlay"
 
 typedef struct {
     HWND hwnd;
@@ -26,10 +27,10 @@ typedef struct {
 static GtvSuggestOverlay s_overlay;
 
 /* Misplaced caret is invisible from the outside, so leave a short trail in
- * %APPDATA%\gotiengviet\suggest.log. Enough to tell a bad rect arriving from
+ * %APPDATA%\gotv\suggest.log. Enough to tell a bad rect arriving from
  * the text service apart from bad placement done here. Bounded size. */
 static void overlay_log(const gchar *fmt, ...) {
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
     g_mkdir_with_parents(dir, 0755);
     gchar *path = g_build_filename(dir, "suggest.log", NULL);
     g_free(dir);
@@ -296,7 +297,7 @@ BOOL gtv_suggest_overlay_init(HINSTANCE instance, HWND owner) {
         return FALSE;
 
     s_overlay.hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-                                     GTV_SUGGEST_OVERLAY_CLASS, L"GoTiengViet",
+                                     GTV_SUGGEST_OVERLAY_CLASS, L"GoTV",
                                      WS_POPUP, 0, 0, 1, 1, owner, NULL, instance, NULL);
     if (s_overlay.hwnd) s_overlay.dpi = overlay_dpi();
     return s_overlay.hwnd != NULL;

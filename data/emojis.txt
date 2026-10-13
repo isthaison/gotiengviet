@@ -1,6 +1,6 @@
-# GoTiengViet emojis: code=emoji, one per line (UTF-8), order matters
+# GoTV emojis: code=emoji, one per line (UTF-8), order matters
 # (first match wins for expansion, first 5 prefix matches for suggestions).
-# A user file at ~/.config/gotiengviet/emojis.txt replaces this file entirely.
+# A user file at ~/.config/gotv/emojis.txt replaces this file entirely.
 # Faces & Emotions
 :smile:=😊
 :smiley:=😃

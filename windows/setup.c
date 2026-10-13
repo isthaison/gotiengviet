@@ -82,7 +82,7 @@ static INT_PTR CALLBACK SetupDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 { IDC_BTN_DATA, "Dữ liệu..." },
                 { IDC_BTN_KEYBOARD, "Bàn phím..." },
             };
-            gtv_win_set_window_text(hwnd, "GoTiengViet - Cài đặt");
+            gtv_win_set_window_text(hwnd, "GoTV - Cài đặt");
             for (guint i = 0; i < G_N_ELEMENTS(labels); i++) {
                 gtv_win_set_dlg_item_text(hwnd, labels[i].id, labels[i].text);
             }

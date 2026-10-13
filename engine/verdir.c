@@ -84,7 +84,7 @@ gchar *gtv_forward_target(const gchar *appdir, const gchar *own_ver) {
     gchar *target = NULL;
     if (gtv_ver_cmp(current, own_ver ? own_ver : "") > 0) {
         gchar *dir = gtv_ver_dir(appdir, current);
-        gchar *exe = g_build_filename(dir, "gotiengviet.exe", NULL);
+        gchar *exe = g_build_filename(dir, "gotv.exe", NULL);
         if (g_file_test(exe, G_FILE_TEST_IS_REGULAR))
             target = exe;
         else
@@ -194,7 +194,7 @@ void gtv_legacy_cleanup(const gchar *appdir) {
      * plus the rename-aside spare from friendly migrations
      * (gtv_tsf.prev.dll never blocks an install; deleted when free). */
     static const gchar *legacy_files[] = {
-        "gotiengviet.exe",
+        "gotv.exe",
         "gtv_tsf.prev.dll",
         "gspawn-win64-helper.exe", "gspawn-win64-helper-console.exe",
         "libffi-8.dll", "libgcc_s_seh-1.dll", "libgio-2.0-0.dll",

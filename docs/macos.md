@@ -4,29 +4,29 @@
 > ký số vẫn trong roadmap. Dùng hàng ngày nên chờ bản ổn định; dev/test mời dùng thử và góp ý.
 
 Native macOS qua [InputMethodKit](https://developer.apple.com/documentation/inputmethodkit):
-`GoTiengViet.app` chạy nền (agent, không icon Dock), dùng chung lõi C với bản Linux/Windows —
-cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotiengviet/`.
+`GoTV.app` chạy nền (agent, không icon Dock), dùng chung lõi C với bản Linux/Windows —
+cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotv/`.
 
 ## Cài bản preview
 
-1. Tải file cài đặt `gotiengviet-<version>-macos.dmg` hoặc `gotiengviet-<version>-macos.pkg` ở trang
+1. Tải file cài đặt `gotv-<version>-macos.dmg` hoặc `gotv-<version>-macos.pkg` ở trang
    [Releases](https://github.com/isthaison/gotiengviet/releases/latest)
    (do CI build, chưa ký số Apple).
 2. **Cài đặt**:
    - Nếu dùng file `.pkg`: Click đúp để chạy trình cài đặt chuẩn của macOS, ứng dụng sẽ được tự động cài vào `/Library/Input Methods/`.
-   - Nếu dùng file `.dmg`: Mở file và kéo thả `GoTiengViet.app` vào thư mục `Input Methods`.
+   - Nếu dùng file `.dmg`: Mở file và kéo thả `GoTV.app` vào thư mục `Input Methods`.
 3. Mở app một lần (chuột phải → Open, chấp nhận cảnh báo "unidentified developer"),
    rồi đăng xuất/đăng nhập lại.
-4. Vào **System Settings → Keyboard → Text Input → Edit → Add** → chọn **GoTiengViet**,
+4. Vào **System Settings → Keyboard → Text Input → Edit → Add** → chọn **GoTV**,
    chuyển bằng `Fn/Caps Lock` hoặc `Control+Space`.
 
 ## Dùng hằng ngày
 
 - Gõ Telex/VNI như bản Linux/Windows (kiểu gõ, chuẩn dấu, chính tả đọc từ
-  `~/.config/gotiengviet/config` — xem [Cấu hình](config.md)).
+  `~/.config/gotv/config` — xem [Cấu hình](config.md)).
 - Mở app lần nữa để mở cửa sổ **Dữ liệu** (bảng Macro/Emoji: xem, thêm/sửa/xóa,
   mở thư mục — chung API với bản Windows/Linux; lưu xong khởi động lại app để nhận).
-  Chưa có tùy chỉnh kiểu gõ/chuẩn dấu/gợi ý trong UI — hiện chỉ sửa được qua file `~/.config/gotiengviet/config`.
+  Chưa có tùy chỉnh kiểu gõ/chuẩn dấu/gợi ý trong UI — hiện chỉ sửa được qua file `~/.config/gotv/config`.
 - Tự kiểm tra cập nhật mỗi ngày; bản mới tải về `/tmp` rồi mở Finder để cài thủ công
   (khác Windows/Linux: tự cài silent).
 - Macro/emoji/config: chung lõi và file `data/` với mọi nền tảng (macro/emoji kích hoạt bằng phím Tab; Space giữ nguyên).
@@ -53,17 +53,17 @@ CI (`.github/workflows/build-macos.yml`) làm ba việc, bạn chạy lại y h�
     GTV_DATA_DIR="$PWD/data" ./build/macos/test-support
     ```
 
-2. **Link bundle** `GoTiengViet.app` (lõi C + ObjC, manual-retain, frameworks
+2. **Link bundle** `GoTV.app` (lõi C + ObjC, manual-retain, frameworks
    Cocoa + InputMethodKit), copy `macos/Info.plist` + `data/` vào `Resources`.
-3. Trên tag `v*`: zip thành `gotiengviet-<version>-macos.zip`, đính kèm release
+3. Trên tag `v*`: zip thành `gotv-<version>-macos.zip`, đính kèm release
    (app chưa ký số Apple — mở lần đầu bằng chuột phải → Open).
 
 Cấu trúc bundle do CI tạo:
 
 ```text
-GoTiengViet.app/Contents/
-  Info.plist            Bundle ID vn.gotiengviet.GoTiengViet, LSUIElement (agent)
-  MacOS/GoTiengViet     binary (lõi C + IMK controller)
+GoTV.app/Contents/
+  Info.plist            Bundle ID vn.gotv.GoTV, LSUIElement (agent)
+  MacOS/GoTV     binary (lõi C + IMK controller)
   Resources/data/       macro, emoji, config, từ điển, seed từ điển học
 ```
 
@@ -73,7 +73,7 @@ GoTiengViet.app/Contents/
 - Chưa ký số + notarize → macOS chặn mở trực tiếp lần đầu (chuột phải → Open).
 - Chưa hỗ trợ trường mật khẩu đặc biệt.
 
-Báo lỗi kèm macOS version + log Console.app chứa `GoTiengViet`.
+Báo lỗi kèm macOS version + log Console.app chứa `GoTV`.
 
 ---
 Xem thêm: [README](../README.md) · [Cấu hình](config.md) · [Phát triển](dev.md) ·

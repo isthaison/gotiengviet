@@ -3,33 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GoTiengViet — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows, macOS</title>
-  <meta name="description" content="GoTiengViet là bộ gõ tiếng Việt mã nguồn mở (Telex/VNI) cho Linux (IBus), Windows 10/11 (TSF) và macOS (InputMethodKit). Nhẹ, riêng tư, chính tả ngoại tuyến, gợi ý từ điển offline.">
+  <title>GoTiengViet — Bộ gõ Telex/VNI cho Windows, Linux, macOS</title>
+  <meta name="description" content="Bộ gõ tiếng Việt Telex/VNI mã nguồn mở cho Windows, Linux và macOS. Nhẹ, riêng tư, có kiểm tra chính tả và gợi ý từ điển ngoại tuyến.">
   <meta name="keywords" content="bộ gõ tiếng việt, go tieng viet, gotiengviet, telex, vni, vietnamese input method, vietnamese keyboard, ibus vietnamese, tsf vietnamese, inputmethodkit, unikey alternative, evkey, openkey, gõ tiếng việt linux, gõ tiếng việt windows, gõ tiếng việt macos, từ điển tiếng việt">
   <meta name="author" content="GoTiengViet Project">
+  <meta name="theme-color" content="#b22222">
   <link rel="canonical" href="https://isthaison.github.io/gotiengviet/">
+  <link rel="alternate" hreflang="vi" href="https://isthaison.github.io/gotiengviet/">
+  <link rel="alternate" hreflang="x-default" href="https://isthaison.github.io/gotiengviet/">
   <meta property="og:type" content="website">
+  <meta property="og:locale" content="vi_VN">
   <meta property="og:site_name" content="GoTiengViet">
-  <meta property="og:title" content="GoTiengViet — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows, macOS">
+  <meta property="og:title" content="GoTiengViet — Bộ gõ Telex/VNI đa nền tảng">
   <meta property="og:description" content="Một lõi C duy nhất, gõ Telex/VNI mọi nền tảng. Chính tả ngoại tuyến, macro/emoji, gợi ý từ điển offline. MIT.">
   <meta property="og:url" content="https://isthaison.github.io/gotiengviet/">
-  <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="GoTiengViet — Bộ gõ tiếng Việt mã nguồn mở">
-  <meta name="twitter:description" content="Telex/VNI cho Linux, Windows, macOS. Nhẹ, riêng tư, AI local.">
+  <meta property="og:image" content="https://isthaison.github.io/gotiengviet/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="GoTiengViet — bộ gõ tiếng Việt Telex và VNI cho Windows, Linux và macOS">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="GoTiengViet — Bộ gõ Telex/VNI đa nền tảng">
+  <meta name="twitter:description" content="Bộ gõ tiếng Việt nhẹ, riêng tư cho Windows, Linux và macOS, có chính tả và gợi ý từ điển ngoại tuyến.">
+  <meta name="twitter:image" content="https://isthaison.github.io/gotiengviet/og-image.png">
+  <meta name="twitter:image:alt" content="GoTiengViet — bộ gõ tiếng Việt Telex và VNI cho Windows, Linux và macOS">
   <link rel="stylesheet" href="styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23b22222'/><text x='8' y='12' font-size='10' font-weight='bold' text-anchor='middle' fill='white' font-family='sans-serif'>T</text></svg>">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "GoTiengViet",
-    "applicationCategory": "UtilitiesApplication",
-    "operatingSystem": ["Linux", "Windows 10", "Windows 11", "macOS"],
-    "license": "https://opensource.org/licenses/MIT",
-    "inLanguage": "vi",
-    "description": "Bộ gõ tiếng Việt Telex/VNI mã nguồn mở cho Linux, Windows và macOS.",
-    "downloadUrl": "https://github.com/isthaison/gotiengviet/releases/latest",
-    "codeRepository": "https://github.com/isthaison/gotiengviet"
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://isthaison.github.io/gotiengviet/#website",
+        "url": "https://isthaison.github.io/gotiengviet/",
+        "name": "GoTiengViet",
+        "inLanguage": "vi"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://isthaison.github.io/gotiengviet/#software",
+        "name": "GoTiengViet",
+        "url": "https://isthaison.github.io/gotiengviet/",
+        "image": "https://isthaison.github.io/gotiengviet/og-image.png",
+        "applicationCategory": "UtilitiesApplication",
+        "applicationSubCategory": "Vietnamese input method",
+        "operatingSystem": ["Linux", "Windows 10", "Windows 11", "macOS"],
+        "softwareVersion": "0.8.29",
+        "license": "https://opensource.org/licenses/MIT",
+        "inLanguage": "vi",
+        "description": "Bộ gõ tiếng Việt Telex/VNI mã nguồn mở cho Windows, Linux và macOS.",
+        "downloadUrl": "https://github.com/isthaison/gotiengviet/releases/latest",
+        "codeRepository": "https://github.com/isthaison/gotiengviet",
+        "sameAs": "https://github.com/isthaison/gotiengviet",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    ]
   }
   </script>
 </head>

@@ -1,13 +1,13 @@
-﻿; GoTiengViet versioned installer (Inno Setup 6).
+﻿; GoTV versioned installer (Inno Setup 6).
 ; Built by CI: make -f Makefile.win setup VERSION=<x.y.z>
 ;   iscc.exe /Q "/DAppVersion=<x.y.z>" "/DAppVerNum=<x.y.z.0>" /DSourceDir=..\release-pkg windows/installer.iss
-; Output: gotiengviet-<x.y.z>-x64-setup.exe (per-user, no admin needed).
+; Output: gotv-<x.y.z>-x64-setup.exe (per-user, no admin needed).
 
 #ifndef AppVersion
-  #define AppVersion "0.8.29"
+  #define AppVersion "0.9.0"
 #endif
 #ifndef AppVerNum
-  #define AppVerNum "0.8.29.0"
+  #define AppVerNum "0.9.0.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\release-pkg"
@@ -16,24 +16,26 @@
 
 [Setup]
 AppId={#AppId}
-AppName=GoTiengViet
+AppName=GoTV
 AppVersion={#AppVersion}
 VersionInfoVersion={#AppVerNum}
-VersionInfoCompany=GoTiengViet Open Source Project
-VersionInfoDescription=GoTiengViet Setup
+VersionInfoCompany=GoTV Open Source Project
+VersionInfoDescription=GoTV Setup
 VersionInfoTextVersion={#AppVersion}
-VersionInfoCopyright=Copyright (C) 2026 GoTiengViet Project
-VersionInfoProductName=GoTiengViet
+VersionInfoCopyright=Copyright (C) 2026 GoTV Project
+VersionInfoProductName=GoTV
 VersionInfoProductVersion={#AppVersion}
-AppVerName=GoTiengViet {#AppVersion}
-AppPublisher=GoTiengViet Project
+AppVerName=GoTV {#AppVersion}
+AppPublisher=GoTV Project
 AppPublisherURL=https://github.com/isthaison/gotiengviet
 AppSupportURL=https://github.com/isthaison/gotiengviet
 AppUpdatesURL=https://github.com/isthaison/gotiengviet/releases
-DefaultDirName={localappdata}\Programs\GoTiengViet
+DefaultDirName={localappdata}\Programs\GoTV
+; Same AppId keeps the existing install root/stub on upgrades.
+UsePreviousAppDir=yes
 PrivilegesRequired=lowest
 OutputDir=..
-OutputBaseFilename=gotiengviet-{#AppVersion}-x64-setup
+OutputBaseFilename=gotv-{#AppVersion}-x64-setup
 Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -46,9 +48,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=no
 WizardStyle=modern
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\ver\{#AppVersion}\gotiengviet.exe
+UninstallDisplayIcon={app}\ver\{#AppVersion}\gotv.exe
 LicenseFile=..\LICENSE
-SetupIconFile=icons\gotiengviet.ico
+SetupIconFile=icons\gotv.ico
 ShowLanguageDialog=no
 
 [Languages]
@@ -80,14 +82,14 @@ Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{userprograms}\GoTiengViet\GoTiengViet"; Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"
-Name: "{userprograms}\GoTiengViet\Gõ Tiếng Việt"; Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Comment: "Mở GoTiengViet"
-Name: "{userprograms}\GoTiengViet\Gỡ bỏ cài đặt"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\GoTiengViet"; Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Tasks: desktopicon
+Name: "{userprograms}\GoTV\GoTV"; Filename: "{app}\ver\{#AppVersion}\gotv.exe"
+Name: "{userprograms}\GoTV\Gõ Tiếng Việt"; Filename: "{app}\ver\{#AppVersion}\gotv.exe"; Comment: "Mở GoTV"
+Name: "{userprograms}\GoTV\Gỡ bỏ cài đặt"; Filename: "{uninstallexe}"
+Name: "{userdesktop}\GoTV"; Filename: "{app}\ver\{#AppVersion}\gotv.exe"; Tasks: desktopicon
 
 [Registry]
 ; Same Run value the tray menu manages, so both stay in sync.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GoTiengViet"; ValueData: """{app}\ver\{#AppVersion}\gotiengviet.exe"""; Flags: uninsdeletevalue; Tasks: startup
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GoTV"; ValueData: """{app}\ver\{#AppVersion}\gotv.exe"""; Flags: uninsdeletevalue; Tasks: startup
 
 [Run]
 ; regsvr32 loads from System32, so its DLL search misses our bundled glib
@@ -99,22 +101,24 @@ Filename: "{cmd}"; Parameters: "/c set ""PATH={app};%PATH%"" && regsvr32.exe /s 
 ; per-user Register/AddLanguageProfile always fail, leaving the keyboard
 ; invisible to Windows. Verb "runas" prompts for admin once.
 ; Skipped on updates (Check): no UAC prompt for day-to-day updates.
-Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Parameters: "--register-tsf"; Verb: "runas"; Flags: runhidden waituntilterminated shellexec; StatusMsg: "Dang ky keyboard GoTV voi he thong..."; Check: NeedsTsfProfile
+Filename: "{app}\ver\{#AppVersion}\gotv.exe"; Parameters: "--register-tsf"; Verb: "runas"; Flags: runhidden waituntilterminated shellexec; StatusMsg: "Dang ky keyboard GoTV voi he thong..."; Check: NeedsTsfProfile
 ; Takeover: the new payload asks any running tray to exit gracefully.
-Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Parameters: "--takeover"; Description: "{cm:LaunchProgram,GoTiengViet}"; Flags: nowait postinstall
+Filename: "{app}\ver\{#AppVersion}\gotv.exe"; Parameters: "--takeover"; Description: "{cm:LaunchProgram,GoTV}"; Flags: nowait postinstall
 
 [UninstallRun]
 ; Ask the running tray to exit gracefully first (takeover event).
-Filename: "{app}\ver\{#AppVersion}\gotiengviet.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated skipifdoesntexist
+Filename: "{app}\ver\{#AppVersion}\gotv.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{cmd}"; Parameters: "/c set ""PATH={app};%PATH%"" && regsvr32.exe /s /u ""{app}\gtv_tsf.dll"""; Flags: runhidden
 ; The tray menu manages this same value independently of the installer's
 ; [Tasks]/[Registry] entry, so delete it explicitly (stale autostart would
 ; point at the removed {app} after uninstall).
-Filename: "{cmd}"; Parameters: "/c reg delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v GoTiengViet /f >nul 2>nul & exit /b 0"; Flags: runhidden; RunOnceId: "DelRun"
+Filename: "{cmd}"; Parameters: "/c reg delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v GoTV /f >nul 2>nul & exit /b 0"; Flags: runhidden; RunOnceId: "DelRun"
 ; The elevated logon task is created by the app via schtasks (admin mode),
 ; never by the installer, so remove it here (needs elevation itself when the
 ; task is elevated; best-effort when running asInvoker).
-Filename: "schtasks.exe"; Parameters: "/Delete /TN GoTiengViet /F"; Flags: runhidden; RunOnceId: "DelTask"
+Filename: "schtasks.exe"; Parameters: "/Delete /TN GoTV /F"; Flags: runhidden; RunOnceId: "DelTask"
+Filename: "schtasks.exe"; Parameters: "/Delete /TN GoTiengViet /F"; Flags: runhidden; RunOnceId: "DelLegacyTask"
+Filename: "{cmd}"; Parameters: "/c reg delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v GoTiengViet /f >nul 2>nul & exit /b 0"; Flags: runhidden; RunOnceId: "DelLegacyRun"
 
 [UninstallDelete]
 ; Catch strays the [Files] list never owned (downloaded deps, update

@@ -1,4 +1,4 @@
-# GoTiengViet — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows & macOS
+# GoTV — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows & macOS
 
 [![Build Linux](https://github.com/isthaison/gotiengviet/actions/workflows/build-linux.yml/badge.svg)](https://github.com/isthaison/gotiengviet/actions/workflows/build-linux.yml)
 [![Build Windows](https://github.com/isthaison/gotiengviet/actions/workflows/build-windows.yml/badge.svg)](https://github.com/isthaison/gotiengviet/actions/workflows/build-windows.yml)
@@ -7,18 +7,22 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 🌐 Trang chủ: **<https://isthaison.github.io/gotiengviet/>**
 
+Từ phiên bản 0.9.0, dự án của **isthaison** đổi tên từ GoTiengViet thành **GoTV**
+để tránh nhầm với phần mềm GoTiengViet của Trần Kỳ Nam. Hai dự án độc lập.
+Xem [hướng dẫn chuyển đổi](docs/rename-gotv.md) cho người đang dùng bản cũ.
+
 Bộ gõ tiếng Việt mã nguồn mở: một **lõi gõ duy nhất viết bằng C** (không Go, không CGO, không runtime ngoài),
 chạy trên cả ba hệ điều hành qua adapter mỏng của từng nền tảng —
 [IBus](https://github.com/ibus/ibus) trên Linux, [TSF Text Service](https://learn.microsoft.com/en-us/windows/win32/tsf/text-services-framework) trên Windows,
 [InputMethodKit](https://developer.apple.com/documentation/inputmethodkit) trên macOS.
 
-> **English:** GoTiengViet is a free, open-source **Vietnamese input method (Telex & VNI)** for
+> **English:** GoTV is a free, open-source **Vietnamese input method (Telex & VNI)** for
 > Linux (IBus), Windows 10/11 (TSF) and macOS (InputMethodKit) — a lightweight Unikey/EVKey
 > alternative with offline spellcheck, text macros/emoji and an offline dictionary
 > (word suggestions + typo corrections, auto-updated from GitHub).
 
 ```text
-$ build/gotiengviet-demo --transform telex duocjwd
+$ build/gotv-demo --transform telex duocjwd
 được
 ```
 
@@ -36,7 +40,7 @@ $ build/gotiengviet-demo --transform telex duocjwd
 | Nền tảng | Cách gõ | Trạng thái |
 |---|---|---|
 | Linux (Ubuntu/GNOME) | IBus engine + app khay (indicator) | ✅ Ổn định — `.deb` ở [Releases](https://github.com/isthaison/gotiengviet/releases/latest) |
-| Windows 10/11 | TSF Text Service + app khay | ✅ Ổn định — `gotiengviet-*-x64-setup.exe` ở [Releases](https://github.com/isthaison/gotiengviet/releases/latest) |
+| Windows 10/11 | TSF Text Service + app khay | ✅ Ổn định — `gotv-*-x64-setup.exe` ở [Releases](https://github.com/isthaison/gotiengviet/releases/latest) |
 | macOS | InputMethodKit `.app` | 🧪 Preview (đang hoàn thiện) — xem [docs/macos.md](docs/macos.md) |
 
 ## Bắt đầu nhanh
@@ -50,16 +54,16 @@ sudo apt install build-essential pkg-config libibus-1.0-dev libgtk-3-dev \
 sudo ./gtv.sh install
 ```
 
-Rồi vào **Settings → Keyboard → Input Sources** thêm **GoTiengViet**
+Rồi vào **Settings → Keyboard → Input Sources** thêm **GoTV**
 (một nguồn duy nhất; chuyển Telex/VNI trong app indicator hoặc Setup),
 chuyển bằng `Super+Space`. Chi tiết: [docs/dev.md](docs/dev.md).
 
-**Windows 10/11**: tải `gotiengviet-<version>-x64-setup.exe` ở trang
+**Windows 10/11**: tải `gotv-<version>-x64-setup.exe` ở trang
 [Releases](https://github.com/isthaison/gotiengviet/releases/latest) và chạy
 (cài per-user, không cần admin) → đăng xuất/đăng nhập lại → chọn **GoTV** bằng `Win+Space`.
 Chi tiết: [docs/windows.md](docs/windows.md).
 
-**macOS**: tải `gotiengviet-<version>-macos.dmg` hoặc `.pkg` ở trang Releases (bản preview),
+**macOS**: tải `gotv-<version>-macos.dmg` hoặc `.pkg` ở trang Releases (bản preview),
 cài vào `~/Library/Input Methods` (`.pkg` tự cài, `.dmg` kéo thả), đăng xuất/đăng nhập lại.
 Chuyển bằng `Fn/Caps Lock` hoặc `Control+Space`. Chi tiết: [docs/macos.md](docs/macos.md).
 
@@ -78,7 +82,7 @@ Ví dụ: `bawst` → `bắt`, `duocjwd` → `được`, `hoaf` → `hoà`/`hòa
 
 ## So với Unikey / EVKey / OpenKey
 
-|  | GoTiengViet | Unikey | EVKey/OpenKey |
+|  | GoTV | Unikey | EVKey/OpenKey |
 |---|---|---|---|
 | Telex + VNI | ✅ | ✅ | ✅ |
 | Linux (IBus) / Windows / macOS | ✅ cả 3 | Win + Linux | Win + macOS |
@@ -96,12 +100,12 @@ Ví dụ: `bawst` → `bắt`, `duocjwd` → `được`, `hoaf` → `hoà`/`hòa
 ## Lệnh thường dùng
 
 ```sh
-build/gotiengviet-demo --transform telex duocjwd   # thử thuật toán
-build/gotiengviet-demo --suggest thong            # hoàn thành tiền tố (offline)
-build/gotiengviet-demo --correct kông            # sửa lỗi (offline)
-ibus-setup-gotiengviet            # GUI Linux (tự bật tray nền)
-ibus-setup-gotiengviet --tray     # chỉ indicator
-ibus-setup-gotiengviet --cli      # terminal
+build/gotv-demo --transform telex duocjwd   # thử thuật toán
+build/gotv-demo --suggest thong            # hoàn thành tiền tố (offline)
+build/gotv-demo --correct kông            # sửa lỗi (offline)
+ibus-setup-gotv            # GUI Linux (tự bật tray nền)
+ibus-setup-gotv --tray     # chỉ indicator
+ibus-setup-gotv --cli      # terminal
 ./gtv.sh build | test | vet | install | uninstall | package | bump | help
 # Windows (MSYS2 MinGW hoặc cmd):  gtv build | test | install | uninstall | package
 # macOS: ./gtv.sh build | test | install | uninstall | package  (app vào ~/Library/Input Methods)
@@ -109,14 +113,14 @@ ibus-setup-gotiengviet --cli      # terminal
 
 ## Xử lý sự cố
 
-- **Không thấy GoTiengViet trong Input Sources (Linux):** `ibus restart`, đăng xuất/đăng nhập lại,
-  kiểm tra `/usr/share/ibus/component/gotiengviet.xml`.
-- **Gõ không ra dấu (Linux):** đang ở engine `gotiengviet`? Kiểm tra `Super+Space` và
-  `method` trong `~/.config/gotiengviet/config`.
+- **Không thấy GoTV trong Input Sources (Linux):** `ibus restart`, đăng xuất/đăng nhập lại,
+  kiểm tra `/usr/share/ibus/component/gotv.xml`.
+- **Gõ không ra dấu (Linux):** đang ở engine `gotv`? Kiểm tra `Super+Space` và
+  `method` trong `~/.config/gotv/config`.
 - **Không thấy GoTV sau khi cài (Windows):** đăng xuất/đăng nhập lại;
-  Settings → Time & Language → Language → Options → Add a keyboard → GoTiengViet.
-- **Crash (Linux):** xem `~/.cache/gotiengviet/crash.log`, báo kèm phiên bản và log liên quan.
-- **Updater (Windows):** xem `%APPDATA%\gotiengviet\update.log`.
+  Settings → Time & Language → Language → Options → Add a keyboard → GoTV.
+- **Crash (Linux):** xem `~/.cache/gotv/crash.log`, báo kèm phiên bản và log liên quan.
+- **Updater (Windows):** xem `%APPDATA%\gotv\update.log`.
 
 ## Đóng góp
 

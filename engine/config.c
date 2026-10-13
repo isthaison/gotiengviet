@@ -4,6 +4,54 @@
 #include <windows.h>
 #endif
 
+/* Keep the legacy directory as a backup. Existing GoTV files always win.
+ * A marker avoids re-importing files intentionally removed after migration. */
+static gboolean copy_legacy_tree(const gchar *source, const gchar *dest) {
+    GDir *dir = g_dir_open(source, 0, NULL);
+    if (!dir) return FALSE;
+    gboolean ok = g_mkdir_with_parents(dest, 0700) == 0;
+    const gchar *entry;
+    while (ok && (entry = g_dir_read_name(dir))) {
+        gchar *src = g_build_filename(source, entry, NULL);
+        gchar *dst = g_build_filename(dest, entry, NULL);
+        if (g_file_test(src, G_FILE_TEST_IS_SYMLINK)) {
+            /* Do not follow paths outside the user's legacy directory. */
+        } else if (g_file_test(src, G_FILE_TEST_IS_DIR)) {
+            ok = copy_legacy_tree(src, dst);
+        } else if (!g_file_test(dst, G_FILE_TEST_EXISTS)) {
+            GFile *from = g_file_new_for_path(src), *to = g_file_new_for_path(dst);
+            GError *error = NULL;
+            ok = g_file_copy(from, to, G_FILE_COPY_NONE, NULL, NULL, NULL, &error);
+            if (!ok && g_error_matches(error, G_IO_ERROR, G_IO_ERROR_EXISTS)) ok = TRUE;
+            g_clear_error(&error);
+            g_object_unref(from); g_object_unref(to);
+        }
+        g_free(src); g_free(dst);
+    }
+    g_dir_close(dir);
+    return ok;
+}
+
+G_LOCK_DEFINE_STATIC(user_migration);
+gchar *gtv_user_path(const gchar *base, const gchar *name) {
+    gchar *dir = g_build_filename(base, "gotv", NULL);
+    gchar *legacy = g_build_filename(base, "gotiengviet", NULL);
+    gchar *marker = g_build_filename(dir, ".legacy-imported", NULL);
+    G_LOCK(user_migration);
+    if (!g_file_test(marker, G_FILE_TEST_EXISTS) && g_file_test(legacy, G_FILE_TEST_IS_DIR)) {
+        if (copy_legacy_tree(legacy, dir)) {
+            if (!g_file_set_contents(marker, "GoTV\n", -1, NULL))
+                g_warning("GoTV: cannot mark migration complete in %s", dir);
+        } else {
+            g_warning("GoTV: incomplete legacy import from %s; original files preserved", legacy);
+        }
+    }
+    G_UNLOCK(user_migration);
+    gchar *path = name ? g_build_filename(dir, name, NULL) : g_strdup(dir);
+    g_free(marker); g_free(legacy); g_free(dir);
+    return path;
+}
+
 #ifdef G_OS_WIN32
 /* This DLL's own CLSID key (must match windows/tsf/tsf_defs.h). */
 #define GTV_TSF_CLSID_KEY L"Software\\Classes\\CLSID\\{E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}\\InprocServer32"
@@ -35,15 +83,15 @@ static gchar *bundled_below(const gchar *dir, const gchar *name) {
 #endif
 
 /* Shared data-file resolution: $GTV_DATA_DIR (tests/dev override) →
- * user config dir → /usr/share/gotiengviet (installed) → ./data. */
+ * user config dir → /usr/share/gotv (installed) → ./data. */
 gchar *gtv_data_path(const gchar *name){
     const gchar *env = g_getenv("GTV_DATA_DIR");
     if(env && *env) return g_build_filename(env, name, NULL);
-    gchar *user = g_build_filename(g_get_user_config_dir(), "gotiengviet", name, NULL);
+    gchar *user = gtv_user_path(g_get_user_config_dir(), name);
     if(g_file_test(user, G_FILE_TEST_EXISTS)) return user;
     g_free(user);
 #ifdef G_OS_WIN32
-    /* Check next to the running module (gtv_tsf.dll or gotiengviet.exe) */
+    /* Check next to the running module (gtv_tsf.dll or gotv.exe) */
     {
         HMODULE hDll = NULL;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -62,7 +110,7 @@ gchar *gtv_data_path(const gchar *name){
             }
         }
     }
-    /* Portable install: data/ next to the .exe (when running gotiengviet.exe) */
+    /* Portable install: data/ next to the .exe (when running gotv.exe) */
     {
         gchar *exedir = module_dir(NULL);
         if (exedir) {
@@ -95,7 +143,7 @@ gchar *gtv_data_path(const gchar *name){
         }
     }
 #endif
-    gchar *system = g_build_filename("/usr", "share", "gotiengviet", name, NULL);
+    gchar *system = g_build_filename("/usr", "share", "gotv", name, NULL);
     if(g_file_test(system, G_FILE_TEST_EXISTS)) return system;
     g_free(system);
     return g_build_filename("data", name, NULL);

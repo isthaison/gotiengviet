@@ -36,7 +36,7 @@ jobs:
         run: |
           make -f Makefile.win test
 
-      - name: Build gotiengviet.exe
+      - name: Build gotv.exe
         shell: msys2 {0}
         run: |
           make -f Makefile.win
@@ -48,7 +48,7 @@ jobs:
             VER="${GITHUB_REF#refs/tags/v}"
           else
             VER="$(sed -n 's/^#define GTV_VERSION "\(.*\)"/\1/p' windows/version.h)"
-            [ -n "$VER" ] || VER="0.8.29"
+            [ -n "$VER" ] || VER="0.9.0"
           fi
           VERNUM="$(echo "$VER" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/').0"
           case "$VERNUM" in
@@ -74,7 +74,7 @@ jobs:
           MSYS2_ARG_CONV_EXCL: "*"
         run: |
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /Q "/DAppVersion=$APP_VERSION" "/DAppVerNum=$APP_VERNUM" "/DSourceDir=..\\release-pkg" windows/installer.iss
-          ls -la gotiengviet-*-x64-setup.exe
+          ls -la gotv-*-x64-setup.exe
 
       # ── Code signing (self-signed cert + osslsigncode) ────────────
       - name: Sign installer with self-signed cert
@@ -84,22 +84,29 @@ jobs:
           WIN_CERT_PFX_B64: ${{ secrets.WIN_CERT_PFX_B64 }}
         run: |
           pacman -S --noconfirm osslsigncode 2>/dev/null || true
-          SETUP=$(ls gotiengviet-*-x64-setup.exe 2>/dev/null | head -1)
+          SETUP=$(ls gotv-*-x64-setup.exe 2>/dev/null | head -1)
           if [ -z "$SETUP" ]; then echo "No setup exe found"; exit 1; fi
           echo "$WIN_CERT_PFX_B64" | base64 -d > /tmp/cert.pfx
           osslsigncode sign -pkcs12 /tmp/cert.pfx -pass gtv2026 \
-            -n "GoTiengViet" -i "https://github.com/isthaison/gotiengviet" \
+            -n "GoTV" -i "https://github.com/isthaison/gotiengviet" \
             -in "$SETUP" -out "${SETUP%.exe}-signed.exe" && \
           mv "${SETUP%.exe}-signed.exe" "$SETUP"
           echo "Signed: $SETUP"
           rm -f /tmp/cert.pfx
 
       # ── Upload artifact ───────────────────────────────────────────
+      - name: Keep installer alias for pre-GoTV updaters
+        shell: msys2 {0}
+        run: |
+          for setup in gotv-*-x64-setup.exe; do
+            cp "$setup" "${setup/gotv-/gotiengviet-}"
+          done
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: gotiengviet-windows-setup
-          path: gotiengviet-*-x64-setup.exe
+          name: gotv-windows-setup
+          path: gotv-*-x64-setup.exe
           if-no-files-found: error
 
       # ── Release (on tag) ──────────────────────────────────────────
@@ -110,6 +117,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            gotv-*-x64-setup.exe
             gotiengviet-*-x64-setup.exe
             data/dict-vi.txt
         env:

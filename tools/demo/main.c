@@ -5,7 +5,7 @@
 
 int main(int argc, char **argv) {
     GtvConfig config;
-    gchar *directory = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *directory = gtv_user_path(g_get_user_config_dir(), NULL);
     gtv_config_load(&config, directory);
     g_free(directory);
     /* A deterministic transform mode is useful for scripts and regression tests. */
@@ -27,12 +27,12 @@ int main(int argc, char **argv) {
         g_ptr_array_unref(out);gtv_config_clear(&config);return 0;
     }
     if (argc > 1) {
-        puts("GoTiengViet Demo (C)\nUsage: gotiengviet-demo [--transform telex|vni TEXT] [--suggest PREFIX] [--correct WORD]");
+        puts("GoTV Demo (C)\nUsage: gotv-demo [--transform telex|vni TEXT] [--suggest PREFIX] [--correct WORD]");
         gtv_config_clear(&config);
         return strcmp(argv[1], "--help") != 0;
     }
     GtvEngine *engine = gtv_engine_new(&config);
-    puts("GoTiengViet Demo (C) — mode telex, mode vni, quit");
+    puts("GoTV Demo (C) — mode telex, mode vni, quit");
     gchar *line = NULL;
     size_t size = 0;
     while (TRUE) {

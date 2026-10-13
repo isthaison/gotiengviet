@@ -52,7 +52,7 @@ void gtv_tray_suggest_balloon(const gchar *typed, const gchar *correction) {
     pending_fix = g_strdup(correction);
     pending_ai_generation = ai_word_generation;
     gchar *msg = g_strdup_printf("\"%s\" có thể bạn muốn gõ \"%s\"?", typed, correction);
-    gtv_tray_balloon("GoTiengViet gợi ý", msg);
+    gtv_tray_balloon("GoTV gợi ý", msg);
     g_free(msg);
 }
 

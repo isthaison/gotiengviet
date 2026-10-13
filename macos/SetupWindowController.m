@@ -39,7 +39,7 @@
                                              styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask)
                                                backing:NSBackingStoreBuffered
                                                  defer:NO];
-        [window setTitle:@"GoTiengViet — Dữ liệu"];
+        [window setTitle:@"GoTV — Dữ liệu"];
         [window setReleasedWhenClosed:NO];
         NSView *view = [window contentView];
 
@@ -126,7 +126,7 @@
     GError *err = NULL;
     if (!gtv_table_save(emoji, &err)) {
         NSAlert *alert = [[[NSAlert alloc] init] autorelease];
-        [alert setMessageText:@"GoTiengViet"];
+        [alert setMessageText:@"GoTV"];
         NSString *msg = err && err->message
             ? [NSString stringWithUTF8String:err->message]
             : @"Không lưu được file dữ liệu.";
@@ -147,7 +147,7 @@
         [NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (!gtv_table_set(emoji, [ks UTF8String], [vs UTF8String])) {
         NSAlert *alert = [[[NSAlert alloc] init] autorelease];
-        [alert setMessageText:@"GoTiengViet"];
+        [alert setMessageText:@"GoTV"];
         [alert setInformativeText:@"Khóa/giá trị không hợp lệ (khóa không chứa dấu cách hay dấu =, giá trị không rỗng)."];
         [alert runModal];
         return;
@@ -174,7 +174,7 @@
 
 - (IBAction)openFolder:(id)sender {
     (void)sender;
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
     if (dir) {
         NSString *ns = [NSString stringWithUTF8String:dir];
         if (ns) [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:ns]];
@@ -211,6 +211,6 @@
 
 /* Placeholder settings entry: opens the data manager until the full
  * preferences window lands. */
-void GoTiengVietShowSettings(void) {
+void GoTVShowSettings(void) {
     [[GtvDataWindow shared] show];
 }

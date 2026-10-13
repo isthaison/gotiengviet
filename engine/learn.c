@@ -21,7 +21,7 @@ gchar *gtv_word_key(const gchar *word){
 }
 
 gchar *gtv_learned_path(const gchar *filename){
-    return g_build_filename(g_get_user_config_dir(),"gotiengviet",filename,NULL);
+    return gtv_user_path(g_get_user_config_dir(), filename);
 }
 
 GHashTable *gtv_words_table_new(void){

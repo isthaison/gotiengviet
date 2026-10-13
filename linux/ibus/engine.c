@@ -9,7 +9,7 @@
 static char *debug_path = NULL;
 static void debug_log(const char *fmt, ...){
     if(!debug_path){
-        gchar *dir = g_build_filename(g_get_user_cache_dir(), "gotiengviet", NULL);
+        gchar *dir = gtv_user_path(g_get_user_cache_dir(), NULL);
         g_mkdir_with_parents(dir, 0755);
         debug_path = g_build_filename(dir, "debug.log", NULL);
         g_free(dir);
@@ -24,9 +24,9 @@ static void debug_log(const char *fmt, ...){
 }
 
 /* IBus Engine definition */
-typedef struct _GoTiengVietEngine IBusGoTiengVietEngine;
-typedef struct _GoTiengVietEngineClass IBusGoTiengVietEngineClass;
-struct _GoTiengVietEngine {
+typedef struct _GoTVEngine IBusGoTVEngine;
+typedef struct _GoTVEngineClass IBusGoTVEngineClass;
+struct _GoTVEngine {
     IBusEngine parent;
     GString *preedit;
     GString *sentence_context;
@@ -56,39 +56,39 @@ struct _GoTiengVietEngine {
     gboolean pending_bad;
     gboolean candidates_from_dict;
 };
-struct _GoTiengVietEngineClass { IBusEngineClass parent; };
-G_DEFINE_TYPE(IBusGoTiengVietEngine, ibus_gotiengviet_engine, IBUS_TYPE_ENGINE)
+struct _GoTVEngineClass { IBusEngineClass parent; };
+G_DEFINE_TYPE(IBusGoTVEngine, ibus_gotv_engine, IBUS_TYPE_ENGINE)
 
 /* Learned vocabulary lives in engine/learn.c now (shared with Windows);
  * the wrappers below only add lazy loading from the user config dir. */
-static void load_learned_words(IBusGoTiengVietEngine *e){
+static void load_learned_words(IBusGoTVEngine *e){
     if(e->learned_words)return;
     e->learned_words=gtv_words_table_new();
     if(!e->learned_path)e->learned_path=gtv_learned_path("learned-words.txt");
     gtv_words_load(e->learned_words,e->learned_path);
 }
-static void load_learned_fixes(IBusGoTiengVietEngine *e){
+static void load_learned_fixes(IBusGoTVEngine *e){
     if(e->learned_fixes)return;
     e->learned_fixes=gtv_fixes_table_new();
     if(!e->learned_fixes_path)e->learned_fixes_path=gtv_learned_path("learned-corrections.txt");
     gtv_fixes_load(e->learned_fixes,e->learned_fixes_path);
 }
-static void save_learned_fixes(IBusGoTiengVietEngine *e){
+static void save_learned_fixes(IBusGoTVEngine *e){
     if(!gtv_fixes_save(e->learned_fixes,e->learned_fixes_path))debug_log("[dictionary] save failed\n");
 }
-static void learn_fix(IBusGoTiengVietEngine *e,const gchar *typed,const gchar *correction){
+static void learn_fix(IBusGoTVEngine *e,const gchar *typed,const gchar *correction){
     load_learned_fixes(e);
     if(gtv_fixes_learn(e->learned_fixes,typed,correction))save_learned_fixes(e);
 }
-static gchar *learned_fix_for(IBusGoTiengVietEngine *e,const gchar *word){
+static gchar *learned_fix_for(IBusGoTVEngine *e,const gchar *word){
     load_learned_fixes(e);
     return gtv_fixes_lookup(e->learned_fixes,word);
 }
-static void learned_completions(IBusGoTiengVietEngine *e,const gchar *prefix,GPtrArray *out,guint max){
+static void learned_completions(IBusGoTVEngine *e,const gchar *prefix,GPtrArray *out,guint max){
     load_learned_words(e);
     gtv_learned_completions(e->learned_words,prefix,out,max);
 }
-static gboolean word_valid(IBusGoTiengVietEngine *e,const gchar *word){
+static gboolean word_valid(IBusGoTVEngine *e,const gchar *word){
     load_learned_words(e);load_learned_fixes(e);gchar *key=gtv_word_key(word);
     gboolean known=key && g_hash_table_contains(e->learned_words,key);
     gboolean mistyped=key && g_hash_table_contains(e->learned_fixes,key);g_free(key);
@@ -98,7 +98,7 @@ static gboolean word_valid(IBusGoTiengVietEngine *e,const gchar *word){
     if(mistyped) return FALSE;
     return spell_word_valid(word);
 }
-static void learn_candidate(IBusGoTiengVietEngine *e,const gchar *candidate){
+static void learn_candidate(IBusGoTVEngine *e,const gchar *candidate){
     if(!e->candidates_from_dict)return;
     /* Remember the dictionary-taught correction so the typo is flagged instantly
      * next time, fully offline. Only in correction mode (pending_bad) with
@@ -124,7 +124,7 @@ static void commit_and_remember(IBusEngine *engine,IBusText *text){
     debug_log("[commit] '%s'\n", text->text);
     ibus_engine_commit_text(engine,text);
 }
-static void update_context(IBusGoTiengVietEngine *e, const char *committed){
+static void update_context(IBusGoTVEngine *e, const char *committed){
     if(!e->sentence_context || !committed || !*committed) return;
     if(strpbrk(committed, ".!?;\n")){
         g_string_assign(e->sentence_context, "");
@@ -144,7 +144,7 @@ static void update_context(IBusGoTiengVietEngine *e, const char *committed){
     }
 }
 
-static void clear_candidates(IBusGoTiengVietEngine *e){
+static void clear_candidates(IBusGoTVEngine *e){
     if(e->suggest_timer){g_source_remove(e->suggest_timer);e->suggest_timer=0;}
     if(e->suggest_cancellable){
         g_cancellable_cancel(e->suggest_cancellable);
@@ -160,12 +160,12 @@ static void clear_candidates(IBusGoTiengVietEngine *e){
     e->n_candidates=0;
     e->cand_cursor=0;
 }
-static void hide_suggest(IBusGoTiengVietEngine *e, IBusEngine *engine){
+static void hide_suggest(IBusGoTVEngine *e, IBusEngine *engine){
     clear_candidates(e);
     ibus_engine_hide_lookup_table(engine);
 }
 
-static void show_candidates(IBusGoTiengVietEngine *e, IBusEngine *engine, GPtrArray *sugs){
+static void show_candidates(IBusGoTVEngine *e, IBusEngine *engine, GPtrArray *sugs){
     e->candidates_from_dict=FALSE;
     if(e->candidates){
         for(int i=0;i<e->n_candidates;i++) g_free(e->candidates[i]);
@@ -192,7 +192,7 @@ static void show_candidates(IBusGoTiengVietEngine *e, IBusEngine *engine, GPtrAr
 }
 
 static void on_suggest_ready(GObject *source, GAsyncResult *res, gpointer user_data){
-    IBusGoTiengVietEngine *e = user_data;
+    IBusGoTVEngine *e = user_data;
     GError *error = NULL;
     GPtrArray *sugs = gtv_suggest_combined_finish(res, &error);
     if(error){
@@ -224,7 +224,7 @@ static void on_suggest_ready(GObject *source, GAsyncResult *res, gpointer user_d
 }
 
 static gboolean request_suggestions(gpointer data){
-    IBusGoTiengVietEngine *e=data;e->suggest_timer=0;
+    IBusGoTVEngine *e=data;e->suggest_timer=0;
     gboolean bad=e->spellcheck && !word_valid(e,e->preedit->str);
     e->pending_bad=bad;
     e->suggest_cancellable=g_cancellable_new();
@@ -234,7 +234,7 @@ static gboolean request_suggestions(gpointer data){
 }
 
 /* Đẩy preedit + gạch đỏ từ sai + bảng gợi ý (Tab chọn, Up/Down di chuyển, Esc bỏ) */
-static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cursor, gboolean visible){
+static void push_preedit(IBusGoTVEngine *e, IBusEngine *engine, guint cursor, gboolean visible){
     glong plen=g_utf8_strlen(e->preedit->str, -1);
     debug_log("[push_preedit] str='%s' plen=%ld visible=%d\n", e->preedit->str, plen, visible);
     gboolean is_emoji=(e->preedit->str[0]==':' || e->preedit->str[0]==';' || e->preedit->str[0]=='<' || e->preedit->str[0]=='(');
@@ -276,7 +276,7 @@ static void push_preedit(IBusGoTiengVietEngine *e, IBusEngine *engine, guint cur
     }
 }
 
-static void ibus_gotiengviet_engine_reset(IBusGoTiengVietEngine *e){
+static void ibus_gotv_engine_reset(IBusGoTVEngine *e){
     if(e->suggest_timer){g_source_remove(e->suggest_timer);e->suggest_timer=0;}
     if(e->suggest_cancellable){
         g_cancellable_cancel(e->suggest_cancellable);
@@ -288,8 +288,8 @@ static void ibus_gotiengviet_engine_reset(IBusGoTiengVietEngine *e){
     ibus_engine_hide_preedit_text((IBusEngine*)e);
 }
 // Tray đổi method khi đang gõ không gây focus_in, nên reload config theo mtime mỗi phím
-static void reload_engine_config(IBusGoTiengVietEngine *e){
-    gchar *directory = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+static void reload_engine_config(IBusGoTVEngine *e){
+    gchar *directory = gtv_user_path(g_get_user_config_dir(), NULL);
     gtv_config_clear(&e->config);
     gtv_config_load(&e->config, directory);
     if(!e->mode_pinned)
@@ -299,8 +299,8 @@ static void reload_engine_config(IBusGoTiengVietEngine *e){
     g_free(directory);
 }
 static time_t cfg_mtime_cache = 0;
-static void reload_config_if_changed(IBusGoTiengVietEngine *e){
-    gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+static void reload_config_if_changed(IBusGoTVEngine *e){
+    gchar *path = gtv_user_path(g_get_user_config_dir(), "config");
     struct stat st;
     if(stat(path, &st) == 0 && st.st_mtime != cfg_mtime_cache){
         cfg_mtime_cache = st.st_mtime;
@@ -324,8 +324,8 @@ static gboolean is_modifier_key(guint keyval){
             return FALSE;
     }
 }
-static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, guint keyval, guint keycode, guint modifiers){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+static gboolean ibus_gotv_engine_process_key_event(IBusEngine *engine, guint keyval, guint keycode, guint modifiers){
+    IBusGoTVEngine *e=(IBusGoTVEngine*)engine;
     reload_config_if_changed(e);
     debug_log("[key] kv=0x%x ('%c') kc=%u mod=0x%x preedit='%s' purpose=%u\n",
               keyval, (keyval>32 && keyval<127)?(char)keyval:' ', keycode, modifiers, e->preedit->str, e->purpose);
@@ -343,7 +343,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         if(e->preedit->len>0){
             IBusText *t=ibus_text_new_from_string(e->preedit->str);
             commit_and_remember(engine,t);
-            ibus_gotiengviet_engine_reset(e);
+            ibus_gotv_engine_reset(e);
             IBusText *empty=ibus_text_new_from_string("");
             ibus_engine_update_preedit_text(engine,empty,0,FALSE);
             hide_suggest(e, engine);
@@ -357,7 +357,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
     // Esc: hủy preedit nếu đang gõ dở
     if(keyval == IBUS_Escape){
         if(e->preedit->len > 0){
-            ibus_gotiengviet_engine_reset(e);
+            ibus_gotv_engine_reset(e);
             IBusText *empty = ibus_text_new_from_string("");
             ibus_engine_update_preedit_text(engine, empty, 0, FALSE);
             hide_suggest(e, engine);
@@ -379,7 +379,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
                 IBusText *t=ibus_text_new_from_string(expansion);
                 g_free(expansion);
                 commit_and_remember(engine,t);
-                ibus_gotiengviet_engine_reset(e);
+                ibus_gotv_engine_reset(e);
                 IBusText *empty=ibus_text_new_from_string("");
                 ibus_engine_update_preedit_text(engine,empty,0,FALSE);
                 hide_suggest(e, engine);
@@ -396,7 +396,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             update_context(e, e->preedit->str);
             IBusText *t=ibus_text_new_from_string(e->preedit->str);
             commit_and_remember(engine,t);
-            ibus_gotiengviet_engine_reset(e);
+            ibus_gotv_engine_reset(e);
             IBusText *empty=ibus_text_new_from_string("");
             ibus_engine_update_preedit_text(engine,empty,0,FALSE);
             hide_suggest(e, engine);
@@ -420,7 +420,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
                 IBusText *t=ibus_text_new_from_string(word);
                 g_free(word);
                 commit_and_remember(engine,t);
-                ibus_gotiengviet_engine_reset(e);
+                ibus_gotv_engine_reset(e);
                 IBusText *empty=ibus_text_new_from_string("");
                 ibus_engine_update_preedit_text(engine,empty,0,FALSE);
                 hide_suggest(e, engine);
@@ -463,7 +463,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             IBusText *t=ibus_text_new_from_string(with_space);
             commit_and_remember(engine,t);
             g_free(commit); g_free(with_space);
-            ibus_gotiengviet_engine_reset(e);
+            ibus_gotv_engine_reset(e);
             IBusText *empty=ibus_text_new_from_string("");
             ibus_engine_update_preedit_text(engine,empty,0,FALSE);
             hide_suggest(e, engine);
@@ -484,7 +484,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             update_context(e, commit);
             commit_and_remember(engine, ibus_text_new_from_string(commit));
             g_free(commit);
-            ibus_gotiengviet_engine_reset(e);
+            ibus_gotv_engine_reset(e);
             ibus_engine_update_preedit_text(engine, ibus_text_new_from_string(""), 0, FALSE);
             hide_suggest(e, engine);
         } else {
@@ -504,7 +504,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
             IBusText *t=ibus_text_new_from_string(word);
             g_free(word);
             commit_and_remember(engine,t);
-            ibus_gotiengviet_engine_reset(e);
+            ibus_gotv_engine_reset(e);
             IBusText *empty=ibus_text_new_from_string("");
             ibus_engine_update_preedit_text(engine,empty,0,FALSE);
             hide_suggest(e, engine);
@@ -519,7 +519,7 @@ static gboolean ibus_gotiengviet_engine_process_key_event(IBusEngine *engine, gu
         IBusText *t=ibus_text_new_from_string(word);
         g_free(word);
         commit_and_remember(engine,t);
-        ibus_gotiengviet_engine_reset(e);
+        ibus_gotv_engine_reset(e);
         IBusText *empty=ibus_text_new_from_string("");
         ibus_engine_update_preedit_text(engine,empty,0,FALSE);
         hide_suggest(e, engine);
@@ -536,12 +536,12 @@ static void register_engine_properties(IBusEngine *engine){
     (void)engine;
 }
 
-static void ibus_gotiengviet_engine_property_activate(IBusEngine *engine, const gchar *prop_name, guint prop_state){
+static void ibus_gotv_engine_property_activate(IBusEngine *engine, const gchar *prop_name, guint prop_state){
     (void)prop_state;
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    IBusGoTVEngine *e=(IBusGoTVEngine*)engine;
     if(g_strcmp0(prop_name, "mode") == 0){
         e->mode_telex = !e->mode_telex;
-        gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+        gchar *path = gtv_user_path(g_get_user_config_dir(), "config");
         char *dir = g_path_get_dirname(path);
         g_mkdir_with_parents(dir, 0755);
         g_free(dir);
@@ -559,12 +559,12 @@ static void ibus_gotiengviet_engine_property_activate(IBusEngine *engine, const 
     }
 }
 
-static void ibus_gotiengviet_engine_enable(IBusEngine *engine){
+static void ibus_gotv_engine_enable(IBusEngine *engine){
     ibus_engine_get_surrounding_text(engine,NULL,NULL,NULL);
     register_engine_properties(engine);
 }
-static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+static void ibus_gotv_engine_focus_in(IBusEngine *engine){
+    IBusGoTVEngine *e=(IBusGoTVEngine*)engine;
     ibus_engine_get_surrounding_text(engine,NULL,NULL,NULL);
     debug_log("[focus_in] engine=%p id='%s' preedit='%s'\n", engine,
               e->focus_id ? e->focus_id : "", e->preedit ? e->preedit->str : "");
@@ -576,14 +576,14 @@ static void ibus_gotiengviet_engine_focus_in(IBusEngine *engine){
     clear_candidates(e);
     update_mode_property(engine);
     // Đồng bộ cache mtime để reload_config_if_changed không load lại ngay
-    gchar *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+    gchar *path = gtv_user_path(g_get_user_config_dir(), "config");
     struct stat st;
     if(stat(path, &st) == 0) cfg_mtime_cache = st.st_mtime;
     g_free(path);
 }
 /* Hide the lookup table only when one is actually shown: reset/focus
  * storms must not ping-pong D-Bus hide/show signals with the client. */
-static void clear_lookup_quietly(IBusGoTiengVietEngine *e, IBusEngine *engine){
+static void clear_lookup_quietly(IBusGoTVEngine *e, IBusEngine *engine){
     if(e->n_candidates>0) hide_suggest(e, engine);
     else clear_candidates(e);
 }
@@ -592,7 +592,7 @@ static void clear_lookup_quietly(IBusGoTiengVietEngine *e, IBusEngine *engine){
  * keys ever commit, exactly once per keystroke. The stash re-renders
  * on the next keystroke in the same input; moving to another input
  * abandons it. */
-static void stash_composition(IBusGoTiengVietEngine *e, IBusEngine *engine, const gchar *id){
+static void stash_composition(IBusGoTVEngine *e, IBusEngine *engine, const gchar *id){
     g_free(e->preedit_focus_id);
     e->preedit_focus_id=g_strdup(id ? id : e->focus_id);
     if(e->preedit && e->preedit->len>0)
@@ -600,17 +600,17 @@ static void stash_composition(IBusGoTiengVietEngine *e, IBusEngine *engine, cons
     clear_lookup_quietly(e, engine);
 }
 static void focus_out_id(IBusEngine *engine, const gchar *id){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    IBusGoTVEngine *e=(IBusGoTVEngine*)engine;
     debug_log("[focus_out] engine=%p id='%s' preedit='%s'\n", engine,
               id ? id : "", e->preedit ? e->preedit->str : "");
     if(e->sentence_context) g_string_assign(e->sentence_context, "");
     stash_composition(e, engine, id);
 }
-static void ibus_gotiengviet_engine_focus_out(IBusEngine *engine){
+static void ibus_gotv_engine_focus_out(IBusEngine *engine){
     focus_out_id(engine, NULL);
 }
 static void focus_in_id(IBusEngine *engine, const gchar *id, const gchar *client){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    IBusGoTVEngine *e=(IBusGoTVEngine*)engine;
     (void)client;
     debug_log("[focus_in_id] engine=%p id='%s'\n", engine, id ? id : "");
     g_free(e->focus_id);
@@ -622,16 +622,16 @@ static void focus_in_id(IBusEngine *engine, const gchar *id, const gchar *client
          * abandon what was left behind. Anything less certain keeps
          * the buffer so a double-fired bare focus_in can never wipe
          * live typing. */
-        ibus_gotiengviet_engine_reset(e);
+        ibus_gotv_engine_reset(e);
         g_clear_pointer(&e->preedit_focus_id, g_free);
         IBusText *empty=ibus_text_new_from_string("");
         ibus_engine_update_preedit_text(engine,empty,0,FALSE);
         ibus_engine_hide_preedit_text(engine);
     }
-    ibus_gotiengviet_engine_focus_in(engine);
+    ibus_gotv_engine_focus_in(engine);
 }
-static void ibus_gotiengviet_engine_reset_cb(IBusEngine *engine){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+static void ibus_gotv_engine_reset_cb(IBusEngine *engine){
+    IBusGoTVEngine *e=(IBusGoTVEngine*)engine;
     debug_log("[reset_cb] engine=%p preedit='%s'\n", engine, e->preedit ? e->preedit->str : "");
     if(e->sentence_context) g_string_assign(e->sentence_context, "");
     if(!e->preedit || !e->preedit->len){
@@ -645,21 +645,21 @@ static void ibus_gotiengviet_engine_reset_cb(IBusEngine *engine){
      * and shreds words when resets land mid-composition. */
     stash_composition(e, engine, e->focus_id);
 }
-static void ibus_gotiengviet_engine_disable(IBusEngine *engine){
-    ibus_gotiengviet_engine_focus_out(engine);
+static void ibus_gotv_engine_disable(IBusEngine *engine){
+    ibus_gotv_engine_focus_out(engine);
 }
-static void ibus_gotiengviet_engine_set_capabilities(IBusEngine *engine, guint caps){
+static void ibus_gotv_engine_set_capabilities(IBusEngine *engine, guint caps){
     (void)engine; (void)caps;
 }
-static void ibus_gotiengviet_engine_set_content_type(IBusEngine *engine, guint purpose, guint hints){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+static void ibus_gotv_engine_set_content_type(IBusEngine *engine, guint purpose, guint hints){
+    IBusGoTVEngine *e=(IBusGoTVEngine*)engine;
     (void)hints;
     debug_log("[set_content_type] engine=%p purpose=%u hints=%u\n", engine, purpose, hints);
     e->purpose = purpose;
 }
-static void ibus_gotiengviet_engine_candidate_clicked(IBusEngine *engine, guint index, guint button, guint state){
+static void ibus_gotv_engine_candidate_clicked(IBusEngine *engine, guint index, guint button, guint state){
     (void)button; (void)state;
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)engine;
+    IBusGoTVEngine *e=(IBusGoTVEngine*)engine;
     if(index < (guint)e->n_candidates && e->candidates){
         learn_candidate(e,e->candidates[index]);
         g_string_assign(e->preedit, e->candidates[index]);
@@ -669,14 +669,14 @@ static void ibus_gotiengviet_engine_candidate_clicked(IBusEngine *engine, guint 
         IBusText *t=ibus_text_new_from_string(word);
         g_free(word);
         commit_and_remember(engine,t);
-        ibus_gotiengviet_engine_reset(e);
+        ibus_gotv_engine_reset(e);
         IBusText *empty=ibus_text_new_from_string("");
         ibus_engine_update_preedit_text(engine,empty,0,FALSE);
         hide_suggest(e, engine);
     }
 }
-static void ibus_gotiengviet_engine_finalize(GObject *object){
-    IBusGoTiengVietEngine *e=(IBusGoTiengVietEngine*)object;
+static void ibus_gotv_engine_finalize(GObject *object){
+    IBusGoTVEngine *e=(IBusGoTVEngine*)object;
     clear_candidates(e);
     gtv_config_clear(&e->config);
     g_clear_pointer(&e->learned_words,g_hash_table_unref);g_free(e->learned_path);
@@ -684,25 +684,25 @@ static void ibus_gotiengviet_engine_finalize(GObject *object){
     g_free(e->focus_id);g_free(e->preedit_focus_id);
     if(e->preedit) g_string_free(e->preedit,TRUE);
     if(e->sentence_context) g_string_free(e->sentence_context,TRUE);
-    G_OBJECT_CLASS(ibus_gotiengviet_engine_parent_class)->finalize(object);
+    G_OBJECT_CLASS(ibus_gotv_engine_parent_class)->finalize(object);
 }
-static void ibus_gotiengviet_engine_class_init(IBusGoTiengVietEngineClass *klass){
-    G_OBJECT_CLASS(klass)->finalize=ibus_gotiengviet_engine_finalize;
+static void ibus_gotv_engine_class_init(IBusGoTVEngineClass *klass){
+    G_OBJECT_CLASS(klass)->finalize=ibus_gotv_engine_finalize;
     IBusEngineClass *ec=IBUS_ENGINE_CLASS(klass);
-    ec->process_key_event=ibus_gotiengviet_engine_process_key_event;
+    ec->process_key_event=ibus_gotv_engine_process_key_event;
     ec->focus_in_id=focus_in_id;
     ec->focus_out_id=focus_out_id;
-    ec->focus_in=ibus_gotiengviet_engine_focus_in;
-    ec->focus_out=ibus_gotiengviet_engine_focus_out;
-    ec->reset=ibus_gotiengviet_engine_reset_cb;
-    ec->disable=ibus_gotiengviet_engine_disable;
-    ec->enable=ibus_gotiengviet_engine_enable;
-    ec->set_capabilities=ibus_gotiengviet_engine_set_capabilities;
-    ec->set_content_type=ibus_gotiengviet_engine_set_content_type;
-    ec->candidate_clicked=ibus_gotiengviet_engine_candidate_clicked;
-    ec->property_activate=ibus_gotiengviet_engine_property_activate;
+    ec->focus_in=ibus_gotv_engine_focus_in;
+    ec->focus_out=ibus_gotv_engine_focus_out;
+    ec->reset=ibus_gotv_engine_reset_cb;
+    ec->disable=ibus_gotv_engine_disable;
+    ec->enable=ibus_gotv_engine_enable;
+    ec->set_capabilities=ibus_gotv_engine_set_capabilities;
+    ec->set_content_type=ibus_gotv_engine_set_content_type;
+    ec->candidate_clicked=ibus_gotv_engine_candidate_clicked;
+    ec->property_activate=ibus_gotv_engine_property_activate;
 }
-static void ibus_gotiengviet_engine_init(IBusGoTiengVietEngine *e){
+static void ibus_gotv_engine_init(IBusGoTVEngine *e){
     e->preedit=g_string_new("");
     e->sentence_context=g_string_new("");
     e->modern=TRUE;
@@ -715,11 +715,11 @@ static gint engine_id = 0;
 static IBusEngine* create_engine_cb(IBusFactory *f, const gchar *engine_name, gpointer user_data){
     gchar *path = g_strdup_printf("/org/freedesktop/IBus/Engine/%d", ++engine_id);
     GDBusConnection *conn = ibus_bus_get_connection(bus);
-    IBusEngine *engine = g_object_new(ibus_gotiengviet_engine_get_type(), "engine-name",engine_name,"object-path",path,"connection",conn,"has-focus-id",TRUE,NULL);
+    IBusEngine *engine = g_object_new(ibus_gotv_engine_get_type(), "engine-name",engine_name,"object-path",path,"connection",conn,"has-focus-id",TRUE,NULL);
     g_free(path);
     if(!engine) return NULL;
     g_object_ref_sink(engine);
-    IBusGoTiengVietEngine *ue = (IBusGoTiengVietEngine*)engine;
+    IBusGoTVEngine *ue = (IBusGoTVEngine*)engine;
     // Engine Telex/VNI riêng ghim kiểu gõ theo tên, engine chung theo config
     reload_engine_config(ue);
     return engine;
@@ -730,7 +730,7 @@ static IBusEngine* create_engine_cb(IBusFactory *f, const gchar *engine_name, gp
 #include <unistd.h>
 static void crash_handler(int sig){
     void *bt[32]; int n = backtrace(bt, 32);
-    gchar *dir = g_build_filename(g_get_user_cache_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_cache_dir(), NULL);
     g_mkdir_with_parents(dir, 0755);
     gchar *log = g_build_filename(dir, "crash.log", NULL);
     FILE *f = fopen(log, "a");
@@ -742,7 +742,7 @@ static void crash_handler(int sig){
     }
     g_free(dir); g_free(log);
     // Ghi ra stderr để apport bắt
-    fprintf(stderr, "GoTiengViet crash signal %d, log saved\n", sig);
+    fprintf(stderr, "GoTV crash signal %d, log saved\n", sig);
     backtrace_symbols_fd(bt, n, STDERR_FILENO);
     // Thử reset preedit thay vì abort cứng
     _exit(1); // để ibus-daemon tự restart engine (watchdog)
@@ -763,21 +763,21 @@ static void install_crash_handlers(void){
 
 static void bus_connected_cb(IBusBus *b, gpointer user_data){
     IBusComponent *c = NULL;
-    if(g_file_test("/usr/share/ibus/component/gotiengviet.xml", G_FILE_TEST_EXISTS)){
-        c = ibus_component_new_from_file("/usr/share/ibus/component/gotiengviet.xml");
+    if(g_file_test("/usr/share/ibus/component/gotv.xml", G_FILE_TEST_EXISTS)){
+        c = ibus_component_new_from_file("/usr/share/ibus/component/gotv.xml");
     }
     if(!c){
-        c = ibus_component_new("org.freedesktop.IBus.GoTiengViet","GoTiengViet Engine (thuần hệ thống)","0.8.29","GPL","GoTiengViet Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotiengviet --ibus","gotiengviet");
+        c = ibus_component_new("org.freedesktop.IBus.GoTV","GoTV Engine (thuần hệ thống)","0.9.0","GPL","GoTV Project","https://github.com/isthaison/gotiengviet","/usr/libexec/ibus-engine-gotv --ibus","gotv");
         IBusEngineDesc *d = ibus_engine_desc_new_varargs(
-            "name", "gotiengviet",
-            "longname", "GoTiengViet",
-            "description", "GoTiengViet: Telex/VNI - github.com/isthaison/gotiengviet",
+            "name", "gotv",
+            "longname", "GoTV",
+            "description", "GoTV: Telex/VNI - github.com/isthaison/gotiengviet",
             "language", "vi",
             "license", "GPL",
-            "author", "GoTiengViet",
-            "icon", "gotiengviet",
+            "author", "GoTV",
+            "icon", "gotv",
             "layout", "us",
-            "setup", "/usr/libexec/ibus-setup-gotiengviet",
+            "setup", "/usr/libexec/ibus-setup-gotv",
             NULL);
         ibus_component_add_engine(c, d);
     }
@@ -785,9 +785,9 @@ static void bus_connected_cb(IBusBus *b, gpointer user_data){
     if(!factory){
         factory=ibus_factory_new(ibus_bus_get_connection(bus));
         g_signal_connect(factory, "create-engine", G_CALLBACK(create_engine_cb), NULL);
-        ibus_factory_add_engine(factory, "gotiengviet", ibus_gotiengviet_engine_get_type());
+        ibus_factory_add_engine(factory, "gotv", ibus_gotv_engine_get_type());
     }
-    ibus_bus_request_name(bus,"org.freedesktop.IBus.GoTiengViet",0);
+    ibus_bus_request_name(bus,"org.freedesktop.IBus.GoTV",0);
 }
 int main(int argc, char **argv){
     install_crash_handlers();
@@ -802,7 +802,7 @@ int main(int argc, char **argv){
         }
         g_main_loop_run(g_main_loop_new(NULL,FALSE));
     } else {
-        printf("GoTiengViet IBus engine - Telex/VNI thuần hệ thống\n");
+        printf("GoTV IBus engine - Telex/VNI thuần hệ thống\n");
         printf("Test: as->á, dd->đ, hoaf->hoà\n");
         // quick test using telex_transform
         GString *s=g_string_new("chao");

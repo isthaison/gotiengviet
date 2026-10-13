@@ -9,6 +9,7 @@
  * OS-validated path — in a hidden powershell child, because raw registry
  * writes are ignored/dropped by the input stack. */
 #include "input_setup.h"
+#include "engine.h"
 #include "keyboard.h"
 #include "version.h"
 
@@ -25,7 +26,7 @@
 #define GTV_INPUT_SETUP_REVISION "7"
 
 static void setup_log(const gchar *fmt, ...) {
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
     g_mkdir_with_parents(dir, 0755);
     gchar *path = g_build_filename(dir, "input-setup.log", NULL);
     g_free(dir);
@@ -41,7 +42,7 @@ static void setup_log(const gchar *fmt, ...) {
 }
 
 static gchar *stamp_path(void) {
-    return g_build_filename(g_get_user_config_dir(), "gotiengviet", "input-setup.done", NULL);
+    return gtv_user_path(g_get_user_config_dir(), "input-setup.done");
 }
 
 static gboolean stamp_current(void) {

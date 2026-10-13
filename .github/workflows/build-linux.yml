@@ -39,19 +39,24 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           make package VERSION="$APP_VERSION"
-          ls -la gotiengviet_*.deb
+          ls -la gotv_*.deb
+          for package in gotv_*.deb; do
+            cp "$package" "${package/gotv_/gotiengviet_}"
+          done
 
       - name: Upload Artifact
         if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
-          name: gotiengviet-deb
-          path: gotiengviet_*.deb
+          name: gotv-deb
+          path: gotv_*.deb
 
       - name: Release Asset (on Tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: gotiengviet_*.deb
+          files: |
+            gotv_*.deb
+            gotiengviet_*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

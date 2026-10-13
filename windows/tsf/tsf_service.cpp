@@ -18,7 +18,7 @@ void CGtvTextService::ReloadConfig()
 {
     GtvConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
-    gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *config_dir = gtv_user_path(g_get_user_config_dir(), NULL);
     gtv_config_load(&cfg, config_dir);
     g_free(config_dir);
 

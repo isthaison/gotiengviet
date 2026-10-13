@@ -456,7 +456,7 @@ static gpointer suggest_worker(gpointer data) {
 
     GtvConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
     gtv_config_load(&cfg, dir);
     g_free(dir);
 
@@ -821,7 +821,7 @@ void gtv_suggest_on_key(CGtvTextService *service, ITfContext *pic) {
     {
         GtvConfig cfg;
         memset(&cfg, 0, sizeof(cfg));
-        gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+        gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
         gtv_config_load(&cfg, dir);
         g_free(dir);
         gboolean enabled = cfg.suggest_enabled || cfg.spellcheck;

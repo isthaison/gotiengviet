@@ -20,7 +20,7 @@ static GtkWidget *tray_item_telex;
 static GtkWidget *tray_item_vni;
 
 static char* tray_current_method(){
-    char *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+    char *path = gtv_user_path(g_get_user_config_dir(), "config");
     GKeyFile *kf = g_key_file_new();
     char *method = NULL;
     if(g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)){
@@ -33,7 +33,7 @@ static char* tray_current_method(){
 }
 
 static void tray_update_config_method(const char *method){
-    char *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+    char *path = gtv_user_path(g_get_user_config_dir(), "config");
     char *dir = g_path_get_dirname(path);
     g_mkdir_with_parents(dir, 0755);
     g_free(dir);
@@ -57,14 +57,14 @@ static void tray_update_indicator_label(gboolean is_telex){
     if(!tray_indicator) return;
     // Hiển thị kiểu gõ ngay trên statusbar bên cạnh icon
     app_indicator_set_label(tray_indicator, is_telex ? "Telex" : "VNI", is_telex ? "Telex" : "VNI");
-    app_indicator_set_title(tray_indicator, is_telex ? "GoTiengViet — Telex" : "GoTiengViet — VNI");
-    const char *mode_icon = is_telex ? "gotiengviet-telex" : "gotiengviet-vni";
+    app_indicator_set_title(tray_indicator, is_telex ? "GoTV — Telex" : "GoTV — VNI");
+    const char *mode_icon = is_telex ? "gotv-telex" : "gotv-vni";
     GtkIconTheme *icon_theme = gtk_icon_theme_get_default();
     if(!icon_theme || !gtk_icon_theme_has_icon(icon_theme, mode_icon))
-        mode_icon = "gotiengviet";
+        mode_icon = "gotv";
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     app_indicator_set_icon_full(tray_indicator, mode_icon,
-        is_telex ? "GoTiengViet — Telex" : "GoTiengViet — VNI");
+        is_telex ? "GoTV — Telex" : "GoTV — VNI");
     G_GNUC_END_IGNORE_DEPRECATIONS
 }
 
@@ -83,7 +83,7 @@ static void tray_refresh_checks(){
 
 static gboolean tray_check_config_timer(gpointer data){
     (void)data;
-    char *path = g_build_filename(g_get_user_config_dir(), "gotiengviet", "config", NULL);
+    char *path = gtv_user_path(g_get_user_config_dir(), "config");
     struct stat st;
     static time_t tray_last_mtime = 0;
     if(stat(path, &st) == 0){
@@ -109,7 +109,7 @@ static void tray_on_activate_setup(GtkMenuItem *item, gpointer data){
         if(err){ g_warning("Failed to spawn setup: %s", err->message); g_error_free(err); }
         g_free(self);
     }
-    run_shell("/usr/bin/gotiengviet 2>/dev/null || gotiengviet 2>/dev/null || /usr/libexec/ibus-setup-gotiengviet 2>/dev/null &");
+    run_shell("/usr/bin/gotv 2>/dev/null || gotv 2>/dev/null || /usr/libexec/ibus-setup-gotv 2>/dev/null &");
 }
 static void tray_on_activate_telex(GtkMenuItem *item, gpointer data){
     (void)data;
@@ -117,14 +117,14 @@ static void tray_on_activate_telex(GtkMenuItem *item, gpointer data){
     tray_update_config_method("telex");
     // Chỉ đổi method trong config (engine chung tự reload, engine ghim giữ
     // nguyên); KHÔNG đụng input-sources để khỏi xóa nguồn Telex/VNI của user.
-    run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
+    run_shell("notify-send 'GoTV' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
     tray_refresh_checks();
 }
 static void tray_on_activate_vni(GtkMenuItem *item, gpointer data){
     (void)data;
     if(!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) return;
     tray_update_config_method("vni");
-    run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
+    run_shell("notify-send 'GoTV' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
     tray_refresh_checks();
 }
 static void tray_toggle_method(void){
@@ -133,10 +133,10 @@ static void tray_toggle_method(void){
     g_free(m);
     if (is_telex) {
         tray_update_config_method("vni");
-        run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
+        run_shell("notify-send 'GoTV' 'Đã chuyển sang VNI (1-5, 6-9)' 2>/dev/null &");
     } else {
         tray_update_config_method("telex");
-        run_shell("notify-send 'GoTiengViet' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
+        run_shell("notify-send 'GoTV' 'Đã chuyển sang Telex (s f r x j)' 2>/dev/null &");
     }
     tray_refresh_checks();
 }
@@ -202,7 +202,7 @@ static void tray_update_free(TrayUpdate *u){
 /* Phiên bản đã cài (không revision .deb) để so với tag GitHub. */
 static gchar *tray_update_current_version(void){
     gchar *contents = NULL, *ver = NULL;
-    if(g_file_get_contents("/usr/share/ibus/component/gotiengviet.xml", &contents, NULL, NULL) && contents){
+    if(g_file_get_contents("/usr/share/ibus/component/gotv.xml", &contents, NULL, NULL) && contents){
         gchar *p = strstr(contents, "<version>");
         if(p){
             p += strlen("<version>");
@@ -217,7 +217,7 @@ static gchar *tray_update_current_version(void){
 }
 static gboolean deb_asset_match(const gchar *asset, const gchar *tagver, gpointer data){
     const gchar *arch = data;
-    gchar *prefix = g_strdup_printf("gotiengviet_%s", tagver);
+    gchar *prefix = g_strdup_printf("gotv_%s", tagver);
     gboolean ok = g_str_has_prefix(asset, prefix) && g_str_has_suffix(asset, ".deb")
         && (!arch || !*arch || strstr(asset, arch) != NULL);
     g_free(prefix);
@@ -228,7 +228,7 @@ static gboolean tray_update_installed_cb(gpointer data){
     GtkWidget *d;
     if(u->installed){
         run_shell("ibus restart >/dev/null 2>&1 &");
-        gchar *dest = g_build_filename(g_get_tmp_dir(), "gotiengviet-update.deb", NULL);
+        gchar *dest = g_build_filename(g_get_tmp_dir(), "gotv-update.deb", NULL);
         g_remove(dest);
         g_free(dest);
         d = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
@@ -246,7 +246,7 @@ static gpointer tray_update_install_thread(gpointer data){
     TrayUpdate *u = data;
     u->installed = FALSE;
     g_free(u->note); u->note = NULL;
-    gchar *dest = g_build_filename(g_get_tmp_dir(), "gotiengviet-update.deb", NULL);
+    gchar *dest = g_build_filename(g_get_tmp_dir(), "gotv-update.deb", NULL);
     if(!(u->url && gtv_update_download(u->url, dest))){
         u->note = g_strdup("Không tải được file .deb (cần mạng và curl).");
     }else{
@@ -300,7 +300,7 @@ static gboolean tray_update_checked_cb(gpointer data){
     }else{
         if(u->status == GTV_UPDATE_AVAILABLE && u->tag){
             gchar *cmd = g_strdup_printf(
-                "notify-send 'GoTiengViet' 'Đã có bản mới %s — mở menu tray, chọn Kiểm tra cập nhật để cài.' 2>/dev/null &",
+                "notify-send 'GoTV' 'Đã có bản mới %s — mở menu tray, chọn Kiểm tra cập nhật để cài.' 2>/dev/null &",
                 u->tag);
             run_shell(cmd);
             g_free(cmd);
@@ -339,27 +339,27 @@ static void tray_on_activate_update(GtkMenuItem *item, gpointer data){
 }
 
 int tray_run(int argc, char *argv[]){
-    g_set_prgname("gotiengviet");
-    g_set_application_name("GoTiengViet");
+    g_set_prgname("gotv");
+    g_set_application_name("GoTV");
     gtk_init(&argc, &argv);
 
-    // Đảm bảo theme tìm thấy icon "gotiengviet" kể cả khi hicolor cache chưa cập nhật
+    // Đảm bảo theme tìm thấy icon "gotv" kể cả khi hicolor cache chưa cập nhật
     GtkIconTheme *theme = gtk_icon_theme_get_default();
     if(theme){
-        gtk_icon_theme_append_search_path(theme, "/usr/share/gotiengviet/icons");
+        gtk_icon_theme_append_search_path(theme, "/usr/share/gotv/icons");
         gtk_icon_theme_append_search_path(theme, "/usr/share/icons/hicolor");
     }
 
     // AppIndicator — hiện trên top bar GNOME qua extension ubuntu-appindicators
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-    tray_indicator = app_indicator_new("gotiengviet", "gotiengviet",
+    tray_indicator = app_indicator_new("gotv", "gotv",
                                   APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
     G_GNUC_END_IGNORE_DEPRECATIONS
     app_indicator_set_status(tray_indicator, APP_INDICATOR_STATUS_ACTIVE);
     // Trỏ trực tiếp vào thư mục chứa icon để Shell resolve đúng icon
-    app_indicator_set_icon_theme_path(tray_indicator, "/usr/share/gotiengviet/icons");
-    app_indicator_set_icon_full(tray_indicator, "gotiengviet", "GoTiengViet");
-    app_indicator_set_title(tray_indicator, "GoTiengViet — Telex/VNI");
+    app_indicator_set_icon_theme_path(tray_indicator, "/usr/share/gotv/icons");
+    app_indicator_set_icon_full(tray_indicator, "gotv", "GoTV");
+    app_indicator_set_title(tray_indicator, "GoTV — Telex/VNI");
 
     GtkWidget *menu = gtk_menu_new();
     GSList *group = NULL;
@@ -370,7 +370,7 @@ int tray_run(int argc, char *argv[]){
     GtkWidget *tray_item_toggle = gtk_menu_item_new_with_label("Chuyển kiểu gõ (Telex ↔ VNI)");
     g_signal_connect(tray_item_toggle, "activate", G_CALLBACK(tray_on_activate_toggle), NULL);
 
-    GtkWidget *tray_item_setup = gtk_menu_item_new_with_label("Mở GoTiengViet Setup...");
+    GtkWidget *tray_item_setup = gtk_menu_item_new_with_label("Mở GoTV Setup...");
     GtkWidget *tray_item_update = gtk_menu_item_new_with_label("Kiểm tra cập nhật...");
     GtkWidget *tray_item_quit = gtk_menu_item_new_with_label("Thoát");
     g_signal_connect(tray_item_telex, "toggled", G_CALLBACK(tray_on_activate_telex), NULL);
@@ -504,31 +504,31 @@ static void on_data(GtkWidget *w, gpointer data){
     data_show(GTK_WINDOW(data));
 }
 int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_modern, const char *cur_spell, const char *cur_suggest, const char *cfg){
-    g_set_prgname("gotiengviet");
-    g_set_application_name("GoTiengViet");
+    g_set_prgname("gotv");
+    g_set_application_name("GoTV");
     config_path = strdup(cfg);
     gtk_init(&argc, &argv);
 
     GtkIconTheme *theme = gtk_icon_theme_get_default();
     if(theme){
-        gtk_icon_theme_append_search_path(theme, "/usr/share/gotiengviet/icons");
+        gtk_icon_theme_append_search_path(theme, "/usr/share/gotv/icons");
         gtk_icon_theme_append_search_path(theme, "/usr/share/icons/hicolor");
     }
-    gtk_window_set_default_icon_name("gotiengviet");
+    gtk_window_set_default_icon_name("gotv");
 
     GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(win), "GoTiengViet Setup — github.com/isthaison/gotiengviet");
+    gtk_window_set_title(GTK_WINDOW(win), "GoTV Setup — github.com/isthaison/gotiengviet");
     gtk_window_set_default_size(GTK_WINDOW(win), 540, 620);
     gtk_window_set_position(GTK_WINDOW(win), GTK_WIN_POS_CENTER);
-    gtk_window_set_icon_name(GTK_WINDOW(win), "gotiengviet");
-    gtk_window_set_icon_from_file(GTK_WINDOW(win), "/usr/share/gotiengviet/icons/gotiengviet.png", NULL);
+    gtk_window_set_icon_name(GTK_WINDOW(win), "gotv");
+    gtk_window_set_icon_from_file(GTK_WINDOW(win), "/usr/share/gotv/icons/gotv.png", NULL);
     g_signal_connect(win, "destroy", G_CALLBACK(gtk_main_quit), NULL);
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     gtk_container_set_border_width(GTK_CONTAINER(vbox), 12);
     gtk_container_add(GTK_CONTAINER(win), vbox);
 
     GtkWidget *title = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(title), "<b>GoTiengViet</b> — Gõ Telex/VNI thuần hệ thống\n<span size='small'>Chỉ dùng lib hệ thống (Go + gtk+-3.0), không lib ngoài</span>");
+    gtk_label_set_markup(GTK_LABEL(title), "<b>GoTV</b> — Gõ Telex/VNI thuần hệ thống\n<span size='small'>Chỉ dùng lib hệ thống (Go + gtk+-3.0), không lib ngoài</span>");
     gtk_label_set_justify(GTK_LABEL(title), GTK_JUSTIFY_CENTER);
     gtk_box_pack_start(GTK_BOX(vbox), title, FALSE, FALSE, 0);
 
@@ -590,7 +590,7 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     dict_ui_refresh();
 
     GtkWidget *info = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(info), "<span size='small'>Cấu hình lưu tại <tt>~/.config/gotiengviet/config</tt>\nGõ lại ký tự để xóa dấu: <tt>as-&gt;á, á s-&gt;a</tt>, <tt>uw-&gt;ư, ư w-&gt;u</tt></span>");
+    gtk_label_set_markup(GTK_LABEL(info), "<span size='small'>Cấu hình lưu tại <tt>~/.config/gotv/config</tt>\nGõ lại ký tự để xóa dấu: <tt>as-&gt;á, á s-&gt;a</tt>, <tt>uw-&gt;ư, ư w-&gt;u</tt></span>");
     gtk_label_set_line_wrap(GTK_LABEL(info), TRUE);
     gtk_box_pack_start(GTK_BOX(vbox), info, FALSE, FALSE, 0);
 
@@ -632,14 +632,14 @@ static void ensure_input_source(void) {
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a(ss)"));
     g_variant_iter_init(&iter, current);
     while (g_variant_iter_next(&iter, "(&s&s)", &kind, &name)) {
-        if (!strcmp(kind, "ibus") && !strcmp(name, "gotiengviet")) found = TRUE;
+        if (!strcmp(kind, "ibus") && !strcmp(name, "gotv")) found = TRUE;
         g_variant_builder_add(&builder, "(ss)", kind, name);
     }
     if (!found) {
-        g_variant_builder_add(&builder, "(ss)", "ibus", "gotiengviet");
+        g_variant_builder_add(&builder, "(ss)", "ibus", "gotv");
         g_settings_set_value(settings, "sources", g_variant_builder_end(&builder));
         g_settings_sync();
-        g_spawn_command_line_async("ibus engine gotiengviet", NULL);
+        g_spawn_command_line_async("ibus engine gotv", NULL);
     } else g_variant_builder_clear(&builder);
     g_variant_unref(current);
     g_object_unref(settings);
@@ -654,7 +654,7 @@ static void cli_choice(const gchar *label, gchar *buffer, gsize size) {
 
 static int setup_cli(GtvConfig *config, const gchar *directory) {
     gchar input[256];
-    g_print("GoTiengViet Setup (C) — %s, modern=%s, gợi ý từ điển=%s\nEnter để giữ giá trị hiện tại.\n",
+    g_print("GoTV Setup (C) — %s, modern=%s, gợi ý từ điển=%s\nEnter để giữ giá trị hiện tại.\n",
         config->mode == GTV_VNI ? "vni" : "telex", config->modern ? "true" : "false", config->suggest_enabled ? "true" : "false");
     cli_choice("Kiểu gõ [telex/vni]", input, sizeof(input));
     if (!g_ascii_strcasecmp(input, "vni")) config->mode = GTV_VNI;
@@ -681,14 +681,14 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[i], "--tray")) tray = TRUE;
         else if (!strcmp(argv[i], "--cli")) cli = TRUE;
         else if (!strcmp(argv[i], "--help")) {
-            g_print("GoTiengViet Setup\n  --tray  Chạy indicator\n  --cli   Cấu hình qua terminal\n");
+            g_print("GoTV Setup\n  --tray  Chạy indicator\n  --cli   Cấu hình qua terminal\n");
             return 0;
         } else { g_printerr("Tham số không hợp lệ: %s\n", argv[i]); return 1; }
     }
     gboolean graphical = g_getenv("DISPLAY") || g_getenv("WAYLAND_DISPLAY");
     if (tray) {
         if (!graphical) { g_printerr("Tray cần DISPLAY/WAYLAND_DISPLAY\n"); return 1; }
-        gchar *lock_path = g_build_filename(g_get_user_runtime_dir(), "gotiengviet-tray.lock", NULL);
+        gchar *lock_path = g_build_filename(g_get_user_runtime_dir(), "gotv-tray.lock", NULL);
         int lock_fd = open(lock_path, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
         g_free(lock_path);
         if (lock_fd < 0) { g_printerr("Không mở được khóa tray\n"); return 1; }
@@ -698,7 +698,7 @@ int main(int argc, char **argv) {
         close(lock_fd);
         return result;
     }
-    gchar *directory = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *directory = gtv_user_path(g_get_user_config_dir(), NULL);
     GtvConfig config;
     gtv_config_load(&config, directory);
     int result;

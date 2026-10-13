@@ -30,6 +30,8 @@ gchar *expand_emoji(const char *word);
 void gtv_config_load(GtvConfig *config, const gchar *directory);
 gboolean gtv_config_save(const GtvConfig *config, const gchar *directory, GError **error);
 void gtv_config_clear(GtvConfig *config);
+/* GoTV user path; copies missing legacy files without removing the originals. */
+gchar *gtv_user_path(const gchar *base, const gchar *name);
 /* Offline dictionary suggestions (bundled dict-vi.txt seed, refreshed
  * from the dict-vi.txt asset of GitHub releases, plus the user's learned
  * vocabulary). Disabled providers return no candidates. */

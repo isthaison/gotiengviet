@@ -7,19 +7,19 @@
 static void test_app_dir(void) {
     gchar *d;
     /* Versioned payload module -> app root two levels up. */
-    d = gtv_app_dir_for_module("C:\\Users\\x\\AppData\\Local\\Programs\\GoTiengViet\\ver\\0.8.12\\gotiengviet.exe");
-    g_assert_cmpstr(d, ==, "C:\\Users\\x\\AppData\\Local\\Programs\\GoTiengViet");
+    d = gtv_app_dir_for_module("C:\\Users\\x\\AppData\\Local\\Programs\\GoTV\\ver\\0.8.12\\gotv.exe");
+    g_assert_cmpstr(d, ==, "C:\\Users\\x\\AppData\\Local\\Programs\\GoTV");
     g_free(d);
     d = gtv_app_dir_for_module("/opt/gtv/ver/0.8.12/gtv_engine.dll");
     g_assert_cmpstr(d, ==, "/opt/gtv");
     g_free(d);
     /* Root-level module -> own dir. */
-    d = gtv_app_dir_for_module("C:\\Users\\x\\AppData\\Local\\Programs\\GoTiengViet\\gotiengviet.exe");
-    g_assert_cmpstr(d, ==, "C:\\Users\\x\\AppData\\Local\\Programs\\GoTiengViet");
+    d = gtv_app_dir_for_module("C:\\Users\\x\\AppData\\Local\\Programs\\GoTV\\gotv.exe");
+    g_assert_cmpstr(d, ==, "C:\\Users\\x\\AppData\\Local\\Programs\\GoTV");
     g_free(d);
     /* Dev layout -> own dir. */
-    d = gtv_app_dir_for_module("E:/git/gotiengviet/build/win/gotiengviet.exe");
-    g_assert_cmpstr(d, ==, "E:/git/gotiengviet/build/win");
+    d = gtv_app_dir_for_module("E:/git/gotv/build/win/gotv.exe");
+    g_assert_cmpstr(d, ==, "E:/git/gotv/build/win");
     g_free(d);
     /* Degenerate input never returns NULL. */
     d = gtv_app_dir_for_module("");
@@ -31,7 +31,7 @@ static void test_app_dir(void) {
 }
 
 static void test_current_and_dir(void) {
-    gchar *tmp = g_dir_make_tmp("gotiengviet-ver-XXXXXX", NULL);
+    gchar *tmp = g_dir_make_tmp("gotv-ver-XXXXXX", NULL);
     g_assert_nonnull(tmp);
     /* No current.txt -> NULL current, ver dir falls back to appdir. */
     g_assert_null(gtv_ver_current(tmp));
@@ -62,7 +62,7 @@ static void test_ver_cmp(void) {
 }
 
 static void test_forward(void) {
-    gchar *tmp = g_dir_make_tmp("gotiengviet-fwd-XXXXXX", NULL);
+    gchar *tmp = g_dir_make_tmp("gotv-fwd-XXXXXX", NULL);
     g_assert_nonnull(tmp);
     /* No current.txt -> no forward (dev/legacy). */
     g_assert_null(gtv_forward_target(tmp, "0.8.11"));
@@ -76,7 +76,7 @@ static void test_forward(void) {
     /* Payload exe present -> forward target. */
     gchar *vdir = g_build_filename(tmp, "ver", "0.8.12", NULL);
     g_assert_cmpint(g_mkdir_with_parents(vdir, 0755), ==, 0);
-    gchar *exe = g_build_filename(vdir, "gotiengviet.exe", NULL);
+    gchar *exe = g_build_filename(vdir, "gotv.exe", NULL);
     g_assert_true(g_file_set_contents(exe, "x", -1, NULL));
     gchar *tgt = gtv_forward_target(tmp, "0.8.11");
     g_assert_cmpstr(tgt, ==, exe);
@@ -87,7 +87,7 @@ static void test_forward(void) {
     g_assert_null(gtv_forward_target(tmp, "0.9.0"));
     /* Tear down. */
     gchar *p;
-    p = g_build_filename(tmp, "ver", "0.8.12", "gotiengviet.exe", NULL);
+    p = g_build_filename(tmp, "ver", "0.8.12", "gotv.exe", NULL);
     g_remove(p);
     g_free(p);
     p = g_build_filename(tmp, "ver", "0.8.12", NULL);
@@ -104,7 +104,7 @@ static void test_forward(void) {
 }
 
 static void test_cleanup(void) {
-    gchar *tmp = g_dir_make_tmp("gotiengviet-clean-XXXXXX", NULL);
+    gchar *tmp = g_dir_make_tmp("gotv-clean-XXXXXX", NULL);
     g_assert_nonnull(tmp);
     const gchar *vers[] = {"0.8.9", "0.8.10", "0.8.11", "0.8.12", NULL};
     for (guint i = 0; vers[i]; i++) {
@@ -156,9 +156,9 @@ static void test_cleanup(void) {
 }
 
 static void test_legacy(void) {
-    gchar *tmp = g_dir_make_tmp("gotiengviet-leg-XXXXXX", NULL);
+    gchar *tmp = g_dir_make_tmp("gotv-leg-XXXXXX", NULL);
     g_assert_nonnull(tmp);
-    gchar *old = g_build_filename(tmp, "gotiengviet.exe", NULL);
+    gchar *old = g_build_filename(tmp, "gotv.exe", NULL);
     g_assert_true(g_file_set_contents(old, "x", -1, NULL));
     /* No versioned layout -> flat files untouched. */
     gtv_legacy_cleanup(tmp);

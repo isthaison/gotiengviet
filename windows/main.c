@@ -18,6 +18,7 @@
 GtvWindowsApp g_app = {0};
 
 static const char *WINDOW_CLASS_NAME = GTV_TRAY_WINDOW_CLASS;
+/* Stable cross-version protocol: old trays must receive GoTV takeover. */
 static const char *MUTEX_NAME = "GoTiengViet_Single_Instance_Mutex";
 static const WCHAR *TAKEOVER_EVENT_NAME = L"GoTiengViet_Takeover_Event";
 
@@ -115,7 +116,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
      * Forms: --configure-startup admin|admin-off|user (from gtv_startup_request). */
     /* Elevated one-time TSF worker: full machine registration of the
      * keyboard profiles/categories (HKLM writes need admin).
-     * Launched elevated, e.g.: gotiengviet.exe --register-tsf */
+     * Launched elevated, e.g.: gotv.exe --register-tsf */
     if (lpCmdLine && !strncmp(lpCmdLine, "--register-tsf", 14)) {
         gboolean ok = gtv_tsf_register_elevated();
         return ok ? 0 : 1;
@@ -239,10 +240,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
      * Async worker; setup-revision stamped, additive-only. */
     gtv_input_setup_ensure_async();
 
-    /* 3. Initialize GoTiengViet config */
+    /* 3. Initialize GoTV config */
     gtv_init();
 
-    gchar *config_dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *config_dir = gtv_user_path(g_get_user_config_dir(), NULL);
     gtv_config_load(&g_app.config, config_dir);
     g_free(config_dir);
 
@@ -256,7 +257,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpszClassName = WINDOW_CLASS_NAME;
     RegisterClassExA(&wc);
 
-    g_app.hwnd_main = CreateWindowExA(0, WINDOW_CLASS_NAME, "GoTiengViet Hidden Window",
+    g_app.hwnd_main = CreateWindowExA(0, WINDOW_CLASS_NAME, "GoTV Hidden Window",
                                        WS_POPUP, 0, 0, 0, 0,
                                        NULL, NULL, hInstance, NULL);
 

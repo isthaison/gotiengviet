@@ -45,7 +45,7 @@ typedef struct {
 
 static void msg_box(HWND hwnd, const gchar *utf8, UINT flags) {
     gunichar2 *w = g_utf8_to_utf16(utf8 ? utf8 : "", -1, NULL, NULL, NULL);
-    gunichar2 *t = g_utf8_to_utf16("GoTiengViet", -1, NULL, NULL, NULL);
+    gunichar2 *t = g_utf8_to_utf16("GoTV", -1, NULL, NULL, NULL);
     if (w && t)
         MessageBoxW(hwnd, (LPCWSTR)w, (LPCWSTR)t, flags);
     g_free(w);
@@ -54,7 +54,7 @@ static void msg_box(HWND hwnd, const gchar *utf8, UINT flags) {
 
 static int ask(HWND hwnd, const gchar *utf8) {
     gunichar2 *w = g_utf8_to_utf16(utf8 ? utf8 : "", -1, NULL, NULL, NULL);
-    gunichar2 *t = g_utf8_to_utf16("GoTiengViet", -1, NULL, NULL, NULL);
+    gunichar2 *t = g_utf8_to_utf16("GoTV", -1, NULL, NULL, NULL);
     int r = IDCANCEL;
     if (w && t) r = MessageBoxW(hwnd, (LPCWSTR)w, (LPCWSTR)t, MB_YESNO | MB_ICONQUESTION);
     g_free(w);
@@ -271,7 +271,7 @@ static INT_PTR CALLBACK AddDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         case WM_INITDIALOG: {
             AddState *st = (AddState *)lParam;
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)st);
-            gtv_win_set_window_text(hwnd, "GoTiengViet - Thêm bàn phím");
+            gtv_win_set_window_text(hwnd, "GoTV - Thêm bàn phím");
 
             /* Offer the languages already in the list, plus Vietnamese: that
              * is where GoTV lives, even if the vi language was removed.
@@ -378,7 +378,7 @@ static void on_default(HWND hwnd) {
     KbdState *st = (KbdState *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (!st) return;
     if (ask(hwnd,
-            "Khôi phục mặc định của GoTiengViet?\n\n"
+            "Khôi phục mặc định của GoTV?\n\n"
             "Anh (US) + Tiếng Việt (GoTV).\n"
             "Các bàn phím khác bạn đã thêm sẽ bị gỡ.") != IDYES)
         return;
@@ -455,7 +455,7 @@ static INT_PTR CALLBACK KbdDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
                 { IDC_KBD_DEFAULT, "Mặc định" },
                 { IDC_KBD_CLOSE, "Đóng" },
             };
-            gtv_win_set_window_text(hwnd, "GoTiengViet - Bàn phím");
+            gtv_win_set_window_text(hwnd, "GoTV - Bàn phím");
             for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
                 gtv_win_set_dlg_item_text(hwnd, labels[i].id, labels[i].text);
 

@@ -1,10 +1,10 @@
 @echo off
 setlocal
 echo =============================================
-echo   GoTiengViet - Complete Uninstall Script
+echo   GoTV - Complete Uninstall Script
 echo =============================================
 echo.
-echo This script removes ALL traces of GoTiengViet:
+echo This script removes ALL traces of GoTV:
 echo   - Running processes
 echo   - Installation directory
 echo   - Configuration files
@@ -24,14 +24,14 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-set "INSTALL_DIR=%LOCALAPPDATA%\Programs\GoTiengViet"
-set "CONFIG_DIR=%LOCALAPPDATA%\GoTiengViet"
-set "CONFIG_DIR2=%APPDATA%\GoTiengViet"
+set "INSTALL_DIR=%LOCALAPPDATA%\Programs\GoTV"
+set "CONFIG_DIR=%LOCALAPPDATA%\GoTV"
+set "CONFIG_DIR2=%APPDATA%\GoTV"
 set "CLSID={E3B0C442-98FC-4F2E-9C8F-7B2A3E1D4C5B}"
 
 echo [1/7] Killing processes...
 taskkill /f /im explorer.exe 2>nul
-taskkill /f /im gotiengviet.exe 2>nul
+taskkill /f /im gotv.exe 2>nul
 taskkill /f /im gtv_tsf.dll 2>nul
 taskkill /f /im ctfmon.exe 2>nul
 timeout /t 3 /nobreak >nul
@@ -91,7 +91,7 @@ powershell -Command "Get-WinUserLanguageList | ForEach-Object { Write-Host ('   
 echo.
 echo =============================================
 echo   Cleanup complete! Please REBOOT before
-echo   reinstalling GoTiengViet.
+echo   reinstalling GoTV.
 echo =============================================
 echo.
 pause

@@ -39,9 +39,9 @@ jobs:
           GTV_DATA_DIR="$PWD/data" ./build/macos/test-engine
           GTV_DATA_DIR="$PWD/data" ./build/macos/test-support
 
-      - name: Build GoTiengViet.app bundle
+      - name: Build GoTV.app bundle
         run: |
-          APP=build/macos/GoTiengViet.app/Contents
+          APP=build/macos/GoTV.app/Contents
           mkdir -p "$APP/MacOS" "$APP/Resources/data"
           CORE_CFLAGS="$(pkg-config --cflags glib-2.0 gio-2.0) -Iengine"
           CORE_LIBS="$(pkg-config --libs glib-2.0 gio-2.0) -lm"
@@ -50,15 +50,15 @@ jobs:
             $CORE_CFLAGS \
             -framework Cocoa -framework InputMethodKit \
             engine/*.c macos/*.m $CORE_LIBS \
-            -o "$APP/MacOS/GoTiengViet"
+            -o "$APP/MacOS/GoTV"
           cp macos/Info.plist "$APP/Info.plist"
           printf 'APPL????' > "$APP/PkgInfo"
           cp data/macros.txt data/emojis.txt data/config data/dict-vi.txt \
             data/learned-corrections.txt \
             data/learned-words.txt "$APP/Resources/data/"
           plutil -lint "$APP/Info.plist"
-          file "$APP/MacOS/GoTiengViet"
-          find build/macos/GoTiengViet.app -maxdepth 4 | sort
+          file "$APP/MacOS/GoTV"
+          find build/macos/GoTV.app -maxdepth 4 | sort
 
       - name: Compute version
         run: |
@@ -74,38 +74,43 @@ jobs:
         run: |
           # 1. Package .pkg installer via Apple native pkgbuild
           mkdir -p "build/macos/pkg_root/Library/Input Methods"
-          cp -R build/macos/GoTiengViet.app "build/macos/pkg_root/Library/Input Methods/"
+          cp -R build/macos/GoTV.app "build/macos/pkg_root/Library/Input Methods/"
           pkgbuild --root build/macos/pkg_root \
-                   --identifier "org.freedesktop.IBus.GoTiengViet" \
+                   --identifier "org.freedesktop.IBus.GoTV" \
                    --version "${APP_VERSION}" \
                    --install-location "/" \
-                   "build/macos/gotiengviet-${APP_VERSION}-macos.pkg"
+                   "build/macos/gotv-${APP_VERSION}-macos.pkg"
 
           # 2. Package .dmg installer via Apple native hdiutil
           mkdir -p build/macos/dmg_root
-          cp -R build/macos/GoTiengViet.app build/macos/dmg_root/
+          cp -R build/macos/GoTV.app build/macos/dmg_root/
           ln -s "/Library/Input Methods" "build/macos/dmg_root/Input Methods"
           ln -s /Applications build/macos/dmg_root/Applications
-          hdiutil create -volname "GoTiengViet" \
+          hdiutil create -volname "GoTV" \
                          -srcfolder build/macos/dmg_root \
                          -ov -format UDZO \
-                         "build/macos/gotiengviet-${APP_VERSION}-macos.dmg"
+                         "build/macos/gotv-${APP_VERSION}-macos.dmg"
 
-          ls -la build/macos/gotiengviet-*-macos.*
+          ls -la build/macos/gotv-*-macos.*
+          for package in build/macos/gotv-*-macos.*; do
+            cp "$package" "${package/gotv-/gotiengviet-}"
+          done
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gotiengviet-macos-installers
+          name: gotv-macos-installers
           path: |
-            build/macos/gotiengviet-*-macos.dmg
-            build/macos/gotiengviet-*-macos.pkg
+            build/macos/gotv-*-macos.dmg
+            build/macos/gotv-*-macos.pkg
 
       - name: Release Asset (on Tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            build/macos/gotv-*-macos.dmg
+            build/macos/gotv-*-macos.pkg
             build/macos/gotiengviet-*-macos.dmg
             build/macos/gotiengviet-*-macos.pkg
         env:

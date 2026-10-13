@@ -36,7 +36,7 @@ static void test_stateful(void) {
     g_assert_null(gtv_transform("\xff",GTV_TELEX,TRUE));
 }
 static void test_config(void) {
-    gchar *directory=g_dir_make_tmp("gotiengviet-config-XXXXXX",NULL);
+    gchar *directory=g_dir_make_tmp("gotv-config-XXXXXX",NULL);
     g_assert_nonnull(directory);
     GtvConfig config,loaded;
     gtv_config_load(&config,directory);
@@ -74,7 +74,7 @@ static void test_config(void) {
 }
 static gboolean test_deb_match(const gchar *asset, const gchar *tagver, gpointer data) {
     const gchar *arch = data;
-    gchar *prefix = g_strdup_printf("gotiengviet_%s", tagver);
+    gchar *prefix = g_strdup_printf("gotv_%s", tagver);
     gboolean ok = g_str_has_prefix(asset, prefix) && g_str_has_suffix(asset, ".deb")
         && (!arch || !*arch || strstr(asset, arch) != NULL);
     g_free(prefix);
@@ -99,20 +99,20 @@ static void test_update(void) {
         g_assert_cmpint((rev > 0) - (rev < 0), ==, -want);
     }
     gchar *asset = gtv_update_asset_name("v0.4.0");
-    g_assert_cmpstr(asset, ==, "gotiengviet-0.4.0-x64-setup.exe");
+    g_assert_cmpstr(asset, ==, "gotv-0.4.0-x64-setup.exe");
     g_free(asset);
     /* Release payload parsing: newer tag + matching asset. */
     const gchar *payload =
         "{\"tag_name\":\"v0.4.0\",\"prerelease\":false,"
         "\"assets\":["
-        "{\"name\":\"gotiengviet-0.4.0-x64-setup.exe\","
-        " \"browser_download_url\":\"https://github.com/x/y/releases/download/v0.4.0/gotiengviet-0.4.0-x64-setup.exe\","
+        "{\"name\":\"gotv-0.4.0-x64-setup.exe\","
+        " \"browser_download_url\":\"https://github.com/x/y/releases/download/v0.4.0/gotv-0.4.0-x64-setup.exe\","
         " \"uploader\":{\"login\":\"x\"}},"
         "{\"name\":\"SHA256SUMS\",\"browser_download_url\":\"https://example.com/sums\"}]}";
     gchar *tag = NULL, *url = NULL;
     g_assert_cmpint(gtv_update_parse_release(payload, "0.3.0", &tag, &url), ==, GTV_UPDATE_AVAILABLE);
     g_assert_cmpstr(tag, ==, "v0.4.0");
-    g_assert_true(g_str_has_suffix(url, "gotiengviet-0.4.0-x64-setup.exe"));
+    g_assert_true(g_str_has_suffix(url, "gotv-0.4.0-x64-setup.exe"));
     g_free(tag); g_free(url);
     /* Same or newer current version: no update, no out strings. */
     g_assert_cmpint(gtv_update_parse_release(payload, "0.4.0", &tag, &url), ==, GTV_UPDATE_CURRENT);
@@ -131,11 +131,11 @@ static void test_update(void) {
     /* Debian matcher: picks the arch build, ignores exe/foreign arch. */
     const gchar *deb_payload =
         "{\"tag_name\":\"v0.6.1\",\"assets\":["
-        "{\"name\":\"gotiengviet-0.6.1-x64-setup.exe\","
+        "{\"name\":\"gotv-0.6.1-x64-setup.exe\","
         " \"browser_download_url\":\"https://example.com/setup.exe\"},"
-        "{\"name\":\"gotiengviet_0.6.1-1_arm64.deb\","
+        "{\"name\":\"gotv_0.6.1-1_arm64.deb\","
         " \"browser_download_url\":\"https://example.com/arm64.deb\"},"
-        "{\"name\":\"gotiengviet_0.6.1-1_amd64.deb\","
+        "{\"name\":\"gotv_0.6.1-1_amd64.deb\","
         " \"browser_download_url\":\"https://example.com/amd64.deb\"}]}";
     tag = NULL; url = NULL;
     g_assert_cmpint(gtv_update_parse_release_full(deb_payload, "0.6.0",
@@ -154,13 +154,13 @@ static void test_update(void) {
     g_assert_cmpint(gtv_update_parse_release_full(deb_payload, "0.6.0",
         NULL, NULL, &tag, &url), ==, GTV_UPDATE_ERROR);
     /* 24h autocheck throttle honours XDG_CONFIG_HOME. */
-    gchar *cfgdir = g_dir_make_tmp("gotiengviet-update-XXXXXX", NULL);
+    gchar *cfgdir = g_dir_make_tmp("gotv-update-XXXXXX", NULL);
     g_assert_nonnull(cfgdir);
     g_setenv("XDG_CONFIG_HOME", cfgdir, TRUE);
     g_assert_true(gtv_update_should_autocheck());
     gtv_update_mark_checked();
     g_assert_false(gtv_update_should_autocheck());
-    gchar *stamp = g_build_filename(cfgdir, "gotiengviet", "update-check", NULL);
+    gchar *stamp = g_build_filename(cfgdir, "gotv", "update-check", NULL);
     gchar *old = g_strdup_printf("%" G_GINT64_FORMAT, g_get_real_time() / 1000000 - 25 * 3600);
     g_assert_true(g_file_set_contents(stamp, old, -1, NULL));
     g_assert_true(gtv_update_should_autocheck());
@@ -248,7 +248,7 @@ static void test_dict(void) {
     g_ptr_array_unref(out);
     /* A corrupt download never poisons suggestions: unparsable content
      * yields an empty table, and the loader falls back to the seed. */
-    gchar *tmp = g_dir_make_tmp("gotiengviet-dict-XXXXXX", NULL);
+    gchar *tmp = g_dir_make_tmp("gotv-dict-XXXXXX", NULL);
     g_assert_nonnull(tmp);
     gchar *bad = g_build_filename(tmp, "dict-vi.txt", NULL);
     g_assert_true(g_file_set_contents(bad, "\xff\xfe-not-utf8\n", -1, NULL));
@@ -258,7 +258,7 @@ static void test_dict(void) {
 }
 static void test_config_defaults(void) {
     /* Shipped data files drive defaults; user files override them. */
-    gchar *empty=g_dir_make_tmp("gotiengviet-defaults-XXXXXX",NULL);
+    gchar *empty=g_dir_make_tmp("gotv-defaults-XXXXXX",NULL);
     g_assert_nonnull(empty);
     GtvConfig cfg;
     gtv_config_load(&cfg,empty);
@@ -290,7 +290,7 @@ static void test_learn(void) {
     g_assert_null(gtv_word_key("a b"));
     g_assert_null(gtv_word_key(NULL));
     /* Roundtrip through real files in a temp dir. */
-    gchar *tmp = g_dir_make_tmp("gotiengviet-learn-XXXXXX", NULL);
+    gchar *tmp = g_dir_make_tmp("gotv-learn-XXXXXX", NULL);
     g_assert_nonnull(tmp);
     gchar *wp = g_build_filename(tmp, "learned-words.txt", NULL);
     gchar *fp = g_build_filename(tmp, "learned-corrections.txt", NULL);
@@ -671,15 +671,47 @@ static void test_table_manage(void) {
     gtv_tables_reload();
 }
 
+static void test_brand_migration(void) {
+    gchar *base = g_dir_make_tmp("gotv-migrate-XXXXXX", NULL);
+    g_assert_nonnull(base);
+    gchar *legacy = g_build_filename(base, "gotiengviet", NULL);
+    gchar *legacy_file = g_build_filename(legacy, "config", NULL);
+    gchar *legacy_words = g_build_filename(legacy, "learned-words.txt", NULL);
+    g_assert_cmpint(g_mkdir_with_parents(legacy, 0700), ==, 0);
+    g_assert_true(g_file_set_contents(legacy_file, "old-config", -1, NULL));
+    g_assert_true(g_file_set_contents(legacy_words, "custom-word", -1, NULL));
+    gchar *next = g_build_filename(base, "gotv", NULL);
+    g_assert_cmpint(g_mkdir_with_parents(next, 0700), ==, 0);
+    gchar *next_file = g_build_filename(next, "config", NULL);
+    g_assert_true(g_file_set_contents(next_file, "new-config", -1, NULL));
+    gchar *imported = gtv_user_path(base, "learned-words.txt");
+    gchar *contents = NULL;
+    g_assert_true(g_file_get_contents(imported, &contents, NULL, NULL));
+    g_assert_cmpstr(contents, ==, "custom-word"); g_free(contents);
+    g_assert_true(g_file_get_contents(next_file, &contents, NULL, NULL));
+    g_assert_cmpstr(contents, ==, "new-config"); g_free(contents);
+    g_assert_true(g_file_test(legacy_words, G_FILE_TEST_EXISTS));
+    /* A removed GoTV file must not be re-imported on the next lookup. */
+    g_assert_cmpint(g_remove(imported), ==, 0);
+    gchar *again = gtv_user_path(base, "learned-words.txt");
+    g_assert_false(g_file_test(again, G_FILE_TEST_EXISTS));
+    gchar *marker = g_build_filename(next, ".legacy-imported", NULL);
+    g_remove(marker); g_remove(next_file); g_rmdir(next);
+    g_remove(legacy_file); g_remove(legacy_words); g_rmdir(legacy); g_rmdir(base);
+    g_free(marker); g_free(again); g_free(imported); g_free(next_file);
+    g_free(next); g_free(legacy_words); g_free(legacy_file); g_free(legacy); g_free(base);
+}
+
 int main(int argc,char **argv) {
     /* Isolate user dirs: suggestions must come from shipped seeds only,
      * never from the developer's real ~/.config files. */
-    gchar *cfghome = g_dir_make_tmp("gotiengviet-test-home-XXXXXX", NULL);
+    gchar *cfghome = g_dir_make_tmp("gotv-test-home-XXXXXX", NULL);
     if (cfghome) { g_setenv("XDG_CONFIG_HOME", cfghome, TRUE); g_free(cfghome); }
-    gchar *datahome = g_dir_make_tmp("gotiengviet-test-data-XXXXXX", NULL);
+    gchar *datahome = g_dir_make_tmp("gotv-test-data-XXXXXX", NULL);
     if (datahome) { g_setenv("XDG_DATA_HOME", datahome, TRUE); g_free(datahome); }
     g_test_init(&argc,&argv,NULL);gtv_init();
     g_test_add_func("/support/stateful",test_stateful);
+    g_test_add_func("/support/brand-migration",test_brand_migration);
     g_test_add_func("/support/config",test_config);
     g_test_add_func("/support/update",test_update);
     g_test_add_func("/support/dict",test_dict);

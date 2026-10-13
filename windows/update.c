@@ -12,9 +12,9 @@ static volatile LONG update_in_flight = 0;
 static volatile DWORD update_flight_tick = 0;
 
 /* Append-only diagnostic log next to the config, so a silent updater can
- * be diagnosed from %APPDATA%/gotiengviet/update.log. Bounded size. */
+ * be diagnosed from %APPDATA%/gotv/update.log. Bounded size. */
 static void update_log(const gchar *fmt, ...) {
-    gchar *dir = g_build_filename(g_get_user_config_dir(), "gotiengviet", NULL);
+    gchar *dir = gtv_user_path(g_get_user_config_dir(), NULL);
     g_mkdir_with_parents(dir, 0755);
     gchar *path = g_build_filename(dir, "update.log", NULL);
     g_free(dir);
@@ -132,7 +132,7 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
         if (manual) {
             WCHAR wmsg[512];
             swprintf(wmsg, 512, L"Đã có phiên bản mới %hs!\n\nBạn có muốn tải về và cài đặt ngay bây giờ không?", res->tag);
-            int ret = MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_YESNO | MB_ICONQUESTION | MB_TOPMOST);
+            int ret = MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTV", MB_YESNO | MB_ICONQUESTION | MB_TOPMOST);
             if (ret == IDYES) {
                 gtv_update_balloon_clicked();
                 g_free(res->tag); g_free(res->url); g_free(res);
@@ -141,7 +141,7 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
         }
         gchar *msg = g_strdup_printf("Có bản mới %s. Nhấn vào đây để tải và cài đặt.", res->tag);
         update_log("balloon shown: update available %s", res->tag);
-        gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
+        gtv_tray_balloon_force("GoTV cập nhật", msg);
         g_free(msg);
     } else if (manual) {
         InterlockedExchange(&update_balloon_owned, 0);
@@ -149,7 +149,7 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
             update_log("check result: up to date %s", GTV_VERSION);
             WCHAR wmsg[256];
             swprintf(wmsg, 256, L"Bạn đang dùng phiên bản mới nhất (%hs).", GTV_VERSION);
-            MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
+            MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTV", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
         } else {
             update_log("check result: check error");
             /* Name the real directory instead of guessing %APPDATA%: glib
@@ -163,7 +163,7 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
                      L"%hs\\update.log\n(chạy: curl --fail https://api.github.com/repos/isthaison/gotiengviet/releases/latest để kiểm tra).",
                      dir ? dir : "?");
             g_free(dir);
-            MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTiengViet", MB_OK | MB_ICONWARNING | MB_TOPMOST);
+            MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTV", MB_OK | MB_ICONWARNING | MB_TOPMOST);
         }
     }
     g_free(res->tag); g_free(res->url); g_free(res);
@@ -193,7 +193,7 @@ static gpointer download_worker(gpointer data) {
         PostMessage(g_app.hwnd_main, WM_GTV_UPDATE_DOWNLOADED, 0, (LPARAM)dest);
     } else {
         update_log("download failed or main window missing");
-        gtv_tray_balloon_force("GoTiengViet cập nhật", "Tải bản mới thất bại. Vui lòng thử lại sau.");
+        gtv_tray_balloon_force("GoTV cập nhật", "Tải bản mới thất bại. Vui lòng thử lại sau.");
         g_free(dest);
     }
     return NULL;
@@ -208,7 +208,7 @@ gboolean gtv_update_balloon_clicked(void) {
     /* The balloon slot now belongs to the download progress message. */
     gchar *msg = g_strdup_printf("Đang tải bản %s...", pending_tag);
     update_log("download start tag=%s", pending_tag);
-    gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
+    gtv_tray_balloon_force("GoTV cập nhật", msg);
     g_free(msg);
     gchar *url = pending_url;
     pending_url = NULL;
@@ -308,11 +308,11 @@ void gtv_update_on_downloaded(gchar *installer_path) {
     InterlockedExchange(&update_balloon_owned, 0);
     if (!installer_path || !*installer_path) {
         update_log("download failed");
-        gtv_tray_balloon_force("GoTiengViet cập nhật", "Tải bản mới thất bại. Thử lại sau.");
+        gtv_tray_balloon_force("GoTV cập nhật", "Tải bản mới thất bại. Thử lại sau.");
         g_free(installer_path);
         return;
     }
-    gtv_tray_balloon_force("GoTiengViet cập nhật", "Đang cài đặt phiên bản mới...");
+    gtv_tray_balloon_force("GoTV cập nhật", "Đang cài đặt phiên bản mới...");
     if (!update_launch_installer(installer_path)) {
         update_log("installer could not be launched; see hint below");
         /* Resolve the real temp dir: GetTempPathW can point at
@@ -329,7 +329,7 @@ void gtv_update_on_downloaded(gchar *installer_path) {
             "Không chạy được bộ cài. Mở %sgtv-update-install.log "
             "hoặc tải thủ công từ trang Releases.",
             logpath ? logpath : "");
-        gtv_tray_balloon_force("GoTiengViet cập nhật", msg);
+        gtv_tray_balloon_force("GoTV cập nhật", msg);
         g_free(msg);
         g_free(logpath);
         g_free(installer_path);

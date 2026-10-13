@@ -13,7 +13,7 @@
 Linux giữ `make ...` trực tiếp vẫn dùng được:
 
 ```sh
-make build                         # 3 binary + libgotiengviet.a
+make build                         # 3 binary + libgotv.a
 make test                          # engine + support + thuật toán
 make vet                           # build + test với -Werror
 make test-ibus                     # vòng đời IBus
@@ -25,7 +25,7 @@ Mọi lệnh shell gom trong một file duy nhất: `./gtv.sh <build|test|vet|cl
 
 `make test` gồm: Telex/VNI, stateful, config, từ điển, gợi ý kết hợp, chính tả, macro/emoji, config mặc định, từ điển học, so version/cập nhật, hoán vị thao tác, 20.000 chuỗi ngẫu nhiên.
 
-Binary trong `build/`: `ibus-engine-gotiengviet` (`--ibus` trong IBus), `ibus-setup-gotiengviet` (GUI/`--tray`/`--cli`), `gotiengviet-demo`, `libgotiengviet.a`.
+Binary trong `build/`: `ibus-engine-gotv` (`--ibus` trong IBus), `ibus-setup-gotv` (GUI/`--tray`/`--cli`), `gotv-demo`, `libgotv.a`.
 
 ## Cài đặt, gỡ và đóng gói
 
@@ -39,15 +39,15 @@ make package VERSION=X.Y-1         # tương đương (Linux)
 Windows (MSYS2 MinGW, hoặc `gtv ...` từ cmd):
 
 ```sh
-./gtv.sh package                   # staging + iscc -> gotiengviet-X.Y.Z-x64-setup.exe
+./gtv.sh package                   # staging + iscc -> gotv-X.Y.Z-x64-setup.exe
 ./gtv.sh install                   # dựng setup (nếu thiếu) + cài silent + chạy app
 ./gtv.sh uninstall                 # gỡ silent + dọn Run/task/profile thừa
 ```
 
-macOS: `./gtv.sh package` (zip `GoTiengViet.app`), `./gtv.sh install` (chép vào
+macOS: `./gtv.sh package` (zip `GoTV.app`), `./gtv.sh install` (chép vào
 `~/Library/Input Methods`), `./gtv.sh uninstall` (xóa app, giữ `~/.config`).
 
-Giữ nguyên cấu hình người dùng; cuối cài đặt tự `ibus restart` từng phiên desktop (báo chứ không fail nếu không được). Thử không chạm hệ thống: `DESTDIR=/tmp/gotiengviet-staging ./gtv.sh install`. `make clean` chỉ xóa `build/`. Gỡ thủ công: xóa `/usr/libexec/ibus-engine-gotiengviet`, `/usr/libexec/ibus-setup-gotiengviet`, `/usr/bin/gotiengviet*`, `/usr/share/ibus/component/gotiengviet.xml`, rồi `ibus restart`.
+Giữ nguyên cấu hình người dùng; cuối cài đặt tự `ibus restart` từng phiên desktop (báo chứ không fail nếu không được). Thử không chạm hệ thống: `DESTDIR=/tmp/gotv-staging ./gtv.sh install`. `make clean` chỉ xóa `build/`. Gỡ thủ công: xóa `/usr/libexec/ibus-engine-gotv`, `/usr/libexec/ibus-setup-gotv`, `/usr/bin/gotv*`, `/usr/share/ibus/component/gotv.xml`, rồi `ibus restart`.
 
 ## Cấu trúc mã nguồn
 
@@ -56,7 +56,7 @@ engine/           lõi dùng chung (C): compose, charset, phonology, config,
                   spell, macro/emoji, dict/suggest (từ điển offline),
                   learn, update (check version GitHub), text, telex/vni adapter
 linux/
-  ibus/           adapter IBus: engine.c, gotiengviet.xml/icons
+  ibus/           adapter IBus: engine.c, gotv.xml/icons
   setup/          GTK, indicator, CLI
 windows/          app khay + setup + update (C: main/app/tray/tray_ai/
                   setup/update/tsf_install/win_utf) + tsf/ (C++ TSF Text Service)
@@ -92,14 +92,14 @@ point deflate could not be located in ...libgio-2.0-0.dll"*.
 Vì vậy hai DLL này **không được import DLL của bên thứ ba nào**:
 glib/gio/zlib/intl/iconv/pcre2/libffi/libstdc++/libgcc/winpthread đều static
 link **vào trong** `gtv_engine.dll` (`Makefile.win`, `GLIB_STATIC_DEFS`); nó
-chỉ còn import DLL hệ thống. `gotiengviet.exe` thì vẫn dùng glib dạng shared
+chỉ còn import DLL hệ thống. `gotv.exe` thì vẫn dùng glib dạng shared
 (bình thường, nó là process riêng).
 
 Hệ quả bắt buộc khi sửa:
 
 - Engine dùng glib phải biên dịch trong cây riêng `build/win-static/`
   (ABI static khác shared: `dllimport` vs gọi trực tiếp) — không trộn với
-  object đi vào `gotiengviet.exe`.
+  object đi vào `gotv.exe`.
 - Thêm thư viện mới cho engine ⇒ thêm vào `GLIB_STATIC_LIBS` (static) và vào
   `STATIC_SYS_LIBS` (DLL hệ thống).
 - `make -f Makefile.win check-tsf-isolated` (đã nằm trong `test` và `staging`)
@@ -110,14 +110,14 @@ Mọi lệnh shell gom trong `./gtv.sh` duy nhất (`build|test|vet|clean|instal
 
 ## API thư viện C
 
-Liên kết `build/libgotiengviet.a`, `#include "engine/engine.h"`. Chuỗi/mảng trả về thuộc về caller (`g_free`/`g_ptr_array_unref`).
+Liên kết `build/libgotv.a`, `#include "engine/engine.h"`. Chuỗi/mảng trả về thuộc về caller (`g_free`/`g_ptr_array_unref`).
 
 ```c
 gtv_init();
 gchar *out = gtv_transform("duocjwd", GTV_TELEX, TRUE); // "được"
 
 GtvConfig cfg;
-gtv_config_load(&cfg, "/home/ban/.config/gotiengviet");
+gtv_config_load(&cfg, "/home/ban/.config/gotv");
 GtvEngine *e = gtv_engine_new(&cfg);
 guint backspaces = 0;
 gchar *commit = gtv_engine_process(e, 's', &backspaces); // NULL khi đang soạn
@@ -136,8 +136,8 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 
 1. Bump một lệnh (đừng sửa tay từng file — script là nơi duy nhất ghi version): `make bump V=X.Y.Z ["ghi chú"]` (chạy `./gtv.sh bump`). Kiểm tra `git diff`, rồi commit.
 2. Commit, push tag `vX.Y.Z`.
-3. CI Windows build `gotiengviet-X.Y.Z-x64-setup.exe` (ký self-signed cert RSA 4096, cert lưu trong GitHub secret `WIN_CERT_PFX_B64`),
-   CI Linux build `gotiengviet_X.Y.Z-1_<arch>.deb`, CI macOS build `.dmg` + `.pkg`, cả ba đính kèm release để app tự cập nhật.
+3. CI Windows build `gotv-X.Y.Z-x64-setup.exe` (ký self-signed cert RSA 4096, cert lưu trong GitHub secret `WIN_CERT_PFX_B64`),
+   CI Linux build `gotv_X.Y.Z-1_<arch>.deb`, CI macOS build `.dmg` + `.pkg`, cả ba đính kèm release để app tự cập nhật.
 4. Linux: khay hệ thống có mục **Kiểm tra cập nhật...**
 
 ---

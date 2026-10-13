@@ -48,7 +48,7 @@ for path in (v22, v74, seed):
             continue
         words.add(s)
 
-print("# GoTiengViet Vietnamese dictionary: one word per line (UTF-8 NFC lowercase).")
+print("# GoTV Vietnamese dictionary: one word per line (UTF-8 NFC lowercase).")
 print("# Seed sources, curated/filtered/merged by tools/mkdict.sh:")
 print("#   - duyet/vietnamese-wordlist Viet22K + Viet74K (GPL-2.0; Ho Ngoc Duc wordlist)")
 print("#   - data/learned-words.txt (this repo, MIT)")

@@ -10,7 +10,7 @@ cùng quy tắc Telex/VNI, cùng file cấu hình `~/.config/gotv/`.
 ## Cài bản preview
 
 1. Tải file cài đặt `gotv-<version>-macos.dmg` hoặc `gotv-<version>-macos.pkg` ở trang
-   [Releases](https://github.com/isthaison/gotiengviet/releases/latest)
+   [Releases](https://github.com/isthaison/gotv/releases/latest)
    (do CI build, chưa ký số Apple).
 2. **Cài đặt**:
    - Nếu dùng file `.pkg`: Click đúp để chạy trình cài đặt chuẩn của macOS, ứng dụng sẽ được tự động cài vào `/Library/Input Methods/`.
@@ -77,4 +77,4 @@ Báo lỗi kèm macOS version + log Console.app chứa `GoTV`.
 
 ---
 Xem thêm: [README](../README.md) · [Cấu hình](config.md) · [Phát triển](dev.md) ·
-[Trang chủ](https://isthaison.github.io/gotiengviet/)
+[Trang chủ](https://isthaison.github.io/gotv/)

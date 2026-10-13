@@ -18,19 +18,19 @@
     <binary>gotv</binary>
     <binary>gotv-demo</binary>
   </provides>
-  <url type="homepage">https://github.com/isthaison/gotiengviet</url>
+  <url type="homepage">https://github.com/isthaison/gotv</url>
   <screenshots>
     <screenshot type="default">
       <caption>Gõ tiếng Việt Telex/VNI trên bất kỳ ứng dụng nào</caption>
-      <image>https://raw.githubusercontent.com/isthaison/gotiengviet/main/linux/ibus/screenshots/screenshot-main.png</image>
+      <image>https://raw.githubusercontent.com/isthaison/gotv/main/linux/ibus/screenshots/screenshot-main.png</image>
     </screenshot>
     <screenshot>
       <caption>Hộp thoại thiết lậpibus engine GoTV</caption>
-      <image>https://raw.githubusercontent.com/isthaison/gotiengviet/main/linux/ibus/screenshots/screenshot-setup.png</image>
+      <image>https://raw.githubusercontent.com/isthaison/gotv/main/linux/ibus/screenshots/screenshot-setup.png</image>
     </screenshot>
     <screenshot>
       <caption>Chọn kiểu gõ Telex hoặc VNI</caption>
-      <image>https://raw.githubusercontent.com/isthaison/gotiengviet/main/linux/ibus/screenshots/screenshot-mode.png</image>
+      <image>https://raw.githubusercontent.com/isthaison/gotv/main/linux/ibus/screenshots/screenshot-mode.png</image>
     </screenshot>
   </screenshots>
   <releases>

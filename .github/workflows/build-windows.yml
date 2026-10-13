@@ -88,7 +88,7 @@ jobs:
           if [ -z "$SETUP" ]; then echo "No setup exe found"; exit 1; fi
           echo "$WIN_CERT_PFX_B64" | base64 -d > /tmp/cert.pfx
           osslsigncode sign -pkcs12 /tmp/cert.pfx -pass gtv2026 \
-            -n "GoTV" -i "https://github.com/isthaison/gotiengviet" \
+            -n "GoTV" -i "https://github.com/isthaison/gotv" \
             -in "$SETUP" -out "${SETUP%.exe}-signed.exe" && \
           mv "${SETUP%.exe}-signed.exe" "$SETUP"
           echo "Signed: $SETUP"

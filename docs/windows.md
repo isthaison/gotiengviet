@@ -103,4 +103,4 @@ commit, push tag `vX.Y.Z` — CI build `gotv-X.Y.Z-x64-setup.exe` và đính kè
 
 ---
 Xem thêm: [README](../README.md) · [Cấu hình](config.md) · [Bản macOS](macos.md) ·
-[Phát triển](dev.md) · [Trang chủ](https://isthaison.github.io/gotiengviet/)
+[Phát triển](dev.md) · [Trang chủ](https://isthaison.github.io/gotv/)

@@ -42,7 +42,7 @@ gboolean gtv_dict_update_check(const gchar *repo);
 /* Self-update against GitHub releases. Check/download need curl and network;
  * parse/compare/throttle are offline. Out strings belong to the caller. */
 typedef enum { GTV_UPDATE_AVAILABLE, GTV_UPDATE_CURRENT, GTV_UPDATE_ERROR } GtvUpdateStatus;
-#define GTV_GITHUB_REPO "isthaison/gotiengviet"
+#define GTV_GITHUB_REPO "isthaison/gotv"
 gint gtv_version_compare(const gchar *a, const gchar *b);
 gchar *gtv_update_asset_name(const gchar *version);
 /* Platform asset matcher: asset_name from the release payload, tag_version

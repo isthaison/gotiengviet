@@ -517,7 +517,7 @@ int setup_ui(int argc, char *argv[], const char *cur_method, const char *cur_mod
     gtk_window_set_default_icon_name("gotv");
 
     GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(win), "GoTV Setup — github.com/isthaison/gotiengviet");
+    gtk_window_set_title(GTK_WINDOW(win), "GoTV Setup — github.com/isthaison/gotv");
     gtk_window_set_default_size(GTK_WINDOW(win), 540, 620);
     gtk_window_set_position(GTK_WINDOW(win), GTK_WIN_POS_CENTER);
     gtk_window_set_icon_name(GTK_WINDOW(win), "gotv");

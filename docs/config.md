@@ -40,4 +40,4 @@ Chỉ những gợi ý bạn **chủ động chọn** mới được nhớ vào 
 
 ---
 Xem thêm: [README](../README.md) · [Bản Windows](windows.md) · [Bản macOS](macos.md) ·
-[Phát triển](dev.md) · [Trang chủ](https://isthaison.github.io/gotiengviet/)
+[Phát triển](dev.md) · [Trang chủ](https://isthaison.github.io/gotv/)

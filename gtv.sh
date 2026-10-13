@@ -707,8 +707,8 @@ Priority: optional
 Architecture: $architecture
 Depends: ibus, libibus-1.0-5, libglib2.0-0, libgtk-3-0, libgdk-pixbuf-2.0-0, libayatana-appindicator3-1
 Recommends: curl, libnotify-bin
-Maintainer: GoTV Project <https://github.com/isthaison/gotiengviet>
-Homepage: https://github.com/isthaison/gotiengviet
+Maintainer: GoTV Project <https://github.com/isthaison/gotv>
+Homepage: https://github.com/isthaison/gotv
  Description: Vietnamese Telex/VNI input method in native C
   Shared C input engine, GTK settings, indicator, spelling and macro support.
   Offline dictionary suggestions, updated from GitHub; no Go runtime is required.

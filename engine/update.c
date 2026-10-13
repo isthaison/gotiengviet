@@ -7,7 +7,7 @@
 #include <stdarg.h>
 
 #ifndef GTV_GITHUB_REPO
-#define GTV_GITHUB_REPO "isthaison/gotiengviet"
+#define GTV_GITHUB_REPO "isthaison/gotv"
 #endif
 #define GTV_UPDATE_INTERVAL_SECS (24 * 3600)
 

@@ -75,7 +75,7 @@ static gpointer check_worker(gpointer data) {
     if (st == GTV_UPDATE_ERROR)
         update_log("check error detail: %s", gtv_update_last_error());
     if (st == GTV_UPDATE_ERROR)
-        update_log("hint: run curl manually: curl --fail --location https://api.github.com/repos/isthaison/gotiengviet/releases/latest");
+        update_log("hint: run curl manually: curl --fail --location https://api.github.com/repos/isthaison/gotv/releases/latest");
     GtvUpdateResult *res = g_new(GtvUpdateResult, 1);
     res->status = (gint)st;
     res->tag = tag;
@@ -160,7 +160,7 @@ void gtv_update_on_result(GtvUpdateResult *res, gboolean manual) {
             swprintf(wmsg, 512,
                      L"Không kiểm tra được bản mới. Có thể do mạng, proxy hoặc "
                      L"GitHub API đang giới hạn truy cập.\n\nChi tiết trong "
-                     L"%hs\\update.log\n(chạy: curl --fail https://api.github.com/repos/isthaison/gotiengviet/releases/latest để kiểm tra).",
+                     L"%hs\\update.log\n(chạy: curl --fail https://api.github.com/repos/isthaison/gotv/releases/latest để kiểm tra).",
                      dir ? dir : "?");
             g_free(dir);
             MessageBoxW(g_app.hwnd_main, wmsg, L"Cập nhật GoTV", MB_OK | MB_ICONWARNING | MB_TOPMOST);

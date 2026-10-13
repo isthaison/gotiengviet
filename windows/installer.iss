@@ -27,9 +27,9 @@ VersionInfoProductName=GoTV
 VersionInfoProductVersion={#AppVersion}
 AppVerName=GoTV {#AppVersion}
 AppPublisher=GoTV Project
-AppPublisherURL=https://github.com/isthaison/gotiengviet
-AppSupportURL=https://github.com/isthaison/gotiengviet
-AppUpdatesURL=https://github.com/isthaison/gotiengviet/releases
+AppPublisherURL=https://github.com/isthaison/gotv
+AppSupportURL=https://github.com/isthaison/gotv
+AppUpdatesURL=https://github.com/isthaison/gotv/releases
 DefaultDirName={localappdata}\Programs\GoTV
 ; Same AppId keeps the existing install root/stub on upgrades.
 UsePreviousAppDir=yes

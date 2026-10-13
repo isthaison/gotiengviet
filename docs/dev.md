@@ -142,4 +142,4 @@ Luồng bất đồng bộ cho UI: `gtv_suggest_combined_async()` / `gtv_suggest
 
 ---
 Xem thêm: [README](../README.md) · [Cấu hình](config.md) · [Bản Windows](windows.md) ·
-[Bản macOS](macos.md) · [Trang chủ](https://isthaison.github.io/gotiengviet/)
+[Bản macOS](macos.md) · [Trang chủ](https://isthaison.github.io/gotv/)

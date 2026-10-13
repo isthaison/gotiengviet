@@ -1,11 +1,11 @@
 # GoTV — Bộ gõ tiếng Việt Telex/VNI cho Linux, Windows & macOS
 
-[![Build Linux](https://github.com/isthaison/gotiengviet/actions/workflows/build-linux.yml/badge.svg)](https://github.com/isthaison/gotiengviet/actions/workflows/build-linux.yml)
-[![Build Windows](https://github.com/isthaison/gotiengviet/actions/workflows/build-windows.yml/badge.svg)](https://github.com/isthaison/gotiengviet/actions/workflows/build-windows.yml)
-[![Build macOS](https://github.com/isthaison/gotiengviet/actions/workflows/build-macos.yml/badge.svg)](https://github.com/isthaison/gotiengviet/actions/workflows/build-macos.yml)
-[![Release](https://img.shields.io/github/v/release/isthaison/gotiengviet)](https://github.com/isthaison/gotiengviet/releases/latest)
+[![Build Linux](https://github.com/isthaison/gotv/actions/workflows/build-linux.yml/badge.svg)](https://github.com/isthaison/gotv/actions/workflows/build-linux.yml)
+[![Build Windows](https://github.com/isthaison/gotv/actions/workflows/build-windows.yml/badge.svg)](https://github.com/isthaison/gotv/actions/workflows/build-windows.yml)
+[![Build macOS](https://github.com/isthaison/gotv/actions/workflows/build-macos.yml/badge.svg)](https://github.com/isthaison/gotv/actions/workflows/build-macos.yml)
+[![Release](https://img.shields.io/github/v/release/isthaison/gotv)](https://github.com/isthaison/gotv/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-🌐 Trang chủ: **<https://isthaison.github.io/gotiengviet/>**
+🌐 Trang chủ: **<https://isthaison.github.io/gotv/>**
 
 Từ phiên bản 0.9.0, dự án của **isthaison** đổi tên từ GoTiengViet thành **GoTV**
 để tránh nhầm với phần mềm GoTiengViet của Trần Kỳ Nam. Hai dự án độc lập.
@@ -39,8 +39,8 @@ $ build/gotv-demo --transform telex duocjwd
 
 | Nền tảng | Cách gõ | Trạng thái |
 |---|---|---|
-| Linux (Ubuntu/GNOME) | IBus engine + app khay (indicator) | ✅ Ổn định — `.deb` ở [Releases](https://github.com/isthaison/gotiengviet/releases/latest) |
-| Windows 10/11 | TSF Text Service + app khay | ✅ Ổn định — `gotv-*-x64-setup.exe` ở [Releases](https://github.com/isthaison/gotiengviet/releases/latest) |
+| Linux (Ubuntu/GNOME) | IBus engine + app khay (indicator) | ✅ Ổn định — `.deb` ở [Releases](https://github.com/isthaison/gotv/releases/latest) |
+| Windows 10/11 | TSF Text Service + app khay | ✅ Ổn định — `gotv-*-x64-setup.exe` ở [Releases](https://github.com/isthaison/gotv/releases/latest) |
 | macOS | InputMethodKit `.app` | 🧪 Preview (đang hoàn thiện) — xem [docs/macos.md](docs/macos.md) |
 
 ## Bắt đầu nhanh
@@ -59,7 +59,7 @@ Rồi vào **Settings → Keyboard → Input Sources** thêm **GoTV**
 chuyển bằng `Super+Space`. Chi tiết: [docs/dev.md](docs/dev.md).
 
 **Windows 10/11**: tải `gotv-<version>-x64-setup.exe` ở trang
-[Releases](https://github.com/isthaison/gotiengviet/releases/latest) và chạy
+[Releases](https://github.com/isthaison/gotv/releases/latest) và chạy
 (cài per-user, không cần admin) → đăng xuất/đăng nhập lại → chọn **GoTV** bằng `Win+Space`.
 Chi tiết: [docs/windows.md](docs/windows.md).
 
@@ -95,7 +95,7 @@ Ví dụ: `bawst` → `bắt`, `duocjwd` → `được`, `hoaf` → `hoà`/`hòa
 - [Cấu hình & macro/emoji/từ điển](docs/config.md) · [Bản Windows](docs/windows.md) ·
   [Bản macOS](docs/macos.md) · [Phát triển & đóng gói](docs/dev.md) ·
   [Đối chiếu tính năng theo nền tảng](docs/parity.md) ·
-  [Trang chủ](https://isthaison.github.io/gotiengviet/)
+  [Trang chủ](https://isthaison.github.io/gotv/)
 
 ## Lệnh thường dùng
 
@@ -133,15 +133,15 @@ Chuẩn code: `engine/` thuần C đa nền tảng, adapter riêng từng OS tro
 
 ## Star History & Stargazers
 
-<a href="https://star-history.com/#isthaison/gotiengviet&Date">
+<a href="https://star-history.com/#isthaison/gotv&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=isthaison/gotiengviet&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=isthaison/gotiengviet&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=isthaison/gotiengviet&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=isthaison/gotv&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=isthaison/gotv&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=isthaison/gotv&type=Date" />
  </picture>
 </a>
 
-Cảm ơn các bạn đã ủng hộ dự án! Xem danh sách chi tiết những người đã star tại **[GitHub Stargazers](https://github.com/isthaison/gotiengviet/stargazers)**.
+Cảm ơn các bạn đã ủng hộ dự án! Xem danh sách chi tiết những người đã star tại **[GitHub Stargazers](https://github.com/isthaison/gotv/stargazers)**.
 
 
 

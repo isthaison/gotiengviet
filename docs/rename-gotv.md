@@ -1,6 +1,6 @@
 # Chuyển sang GoTV 0.9.0
 
-Cảm ơn người góp ý ở [issue #1](https://github.com/isthaison/gotiengviet/issues/1).
+Cảm ơn người góp ý ở [issue #1](https://github.com/isthaison/gotv/issues/1).
 Dự án của isthaison đổi tên để phân biệt với GoTiengViet của Trần Kỳ Nam;
 đây là hai dự án độc lập, không phải bản kế nhiệm hay bản chính thức của nhau.
 
@@ -40,9 +40,10 @@ Cấu hình vẫn được nhập tự động như trên.
 
 ## Tương thích GitHub
 
-Repo và GitHub Pages hiện giữ URL `isthaison/gotiengviet` để PR, liên kết
-và trình cập nhật đã phát hành tiếp tục hoạt động. Việc đổi tên repo trên GitHub
-là thao tác riêng sau merge, cần đồng bộ URL website và trình cập nhật.
+Repo chính thức là `isthaison/gotv`, website là `https://isthaison.github.io/gotv/`.
+URL repo cũ được GitHub chuyển hướng; trình cập nhật dùng curl với `--location`
+nên bản đã phát hành vẫn truy cập được release. GitHub Pages không chuyển hướng
+đường dẫn website cũ; hãy cập nhật bookmark sang địa chỉ mới.
 CI phát hành thêm alias tên asset `gotiengviet-*` / `gotiengviet_*` từ cùng gói GoTV
 để trình cập nhật cũ tìm được bản mới; tên tải chính thức là `gotv-*` / `gotv_*`.
 
